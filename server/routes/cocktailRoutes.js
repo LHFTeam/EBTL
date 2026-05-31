@@ -212,14 +212,56 @@ cocktailRouter.delete('/cocktails/:id', requireArea('cocktails'), async (req, re
   res.json({ product: archived.data, deactivated_variants: variants.data || [], archived_recipes: recipes.data || [] });
 });
 
+const variantCreateSchema = z.object({
+  name: z.string().min(1),
+  serving_count: z.coerce.number().int().positive(),
+  price_ex_vat: z.coerce.number().nonnegative(),
+  vat_rate: vatRate.default(0.14),
+  is_active: z.boolean().optional()
+});
+
+const variantUpdateSchema = z.object({
+  name: z.string().min(1).optional(),
+  serving_count: z.coerce.number().int().positive().optional(),
+  price_ex_vat: z.coerce.number().nonnegative().optional(),
+  vat_rate: vatRate.optional(),
+  is_active: z.boolean().optional()
+});
+
+async function updateVariant({ variantId, productId, patch, res }) {
+  const currentQuery = supabase.from('product_variants').select('*').eq('id', variantId);
+  if (productId) currentQuery.eq('product_id', productId);
+
+  const current = await currentQuery.maybeSingle();
+  if (current.error) return res.status(400).json({ error: current.error.message });
+  if (!current.data) return res.status(404).json({ error: 'Variant not found.' });
+
+  const payload = clean(patch);
+  if (payload.price_ex_vat !== undefined || payload.vat_rate !== undefined) {
+    const nextPriceExVat = payload.price_ex_vat !== undefined ? payload.price_ex_vat : current.data.price_ex_vat;
+    const nextVatRate = payload.vat_rate !== undefined ? payload.vat_rate : current.data.vat_rate;
+    payload.price_inc_vat = priceIncVat(nextPriceExVat, nextVatRate);
+  }
+
+  if (!Object.keys(payload).length) return res.status(400).json({ error: 'No variant fields were provided to update.' });
+
+  const updateQuery = supabase.from('product_variants').update(payload).eq('id', variantId);
+  if (productId) updateQuery.eq('product_id', productId);
+
+  const data = await sb(updateQuery.select().single(), res);
+  if (data) return res.json(data);
+}
+
+async function deactivateVariant({ variantId, productId, res }) {
+  const updateQuery = supabase.from('product_variants').update({ is_active: false }).eq('id', variantId);
+  if (productId) updateQuery.eq('product_id', productId);
+
+  const data = await sb(updateQuery.select().single(), res);
+  if (data) return res.json(data);
+}
+
 cocktailRouter.post('/cocktails/:id/variants', requireArea('cocktails'), async (req, res) => {
-  const parsed = z.object({
-    name: z.string().min(1),
-    serving_count: z.coerce.number().int().positive(),
-    price_ex_vat: z.coerce.number().nonnegative(),
-    vat_rate: vatRate.default(0.14),
-    is_active: z.boolean().optional()
-  }).safeParse(req.body);
+  const parsed = variantCreateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid variant') });
 
   const payload = {
@@ -233,55 +275,27 @@ cocktailRouter.post('/cocktails/:id/variants', requireArea('cocktails'), async (
 });
 
 cocktailRouter.patch('/cocktails/:id/variants/:variantId', requireArea('cocktails'), async (req, res) => {
-  const parsed = z.object({
-    name: z.string().min(1).optional(),
-    serving_count: z.coerce.number().int().positive().optional(),
-    price_ex_vat: z.coerce.number().nonnegative().optional(),
-    vat_rate: vatRate.optional(),
-    is_active: z.boolean().optional()
-  }).safeParse(req.body);
+  const parsed = variantUpdateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid variant update') });
 
-  const current = await fetchVariantForProduct(req.params.id, req.params.variantId);
-  if (current.error) return res.status(400).json({ error: current.error });
-
-  const payload = clean(parsed.data);
-  if (payload.price_ex_vat !== undefined || payload.vat_rate !== undefined) {
-    const nextPriceExVat = payload.price_ex_vat !== undefined ? payload.price_ex_vat : current.data.price_ex_vat;
-    const nextVatRate = payload.vat_rate !== undefined ? payload.vat_rate : current.data.vat_rate;
-    payload.price_inc_vat = priceIncVat(nextPriceExVat, nextVatRate);
-  }
-
-  if (!Object.keys(payload).length) return res.status(400).json({ error: 'No variant fields were provided to update.' });
-
-  const data = await sb(
-    supabase
-      .from('product_variants')
-      .update(payload)
-      .eq('id', req.params.variantId)
-      .eq('product_id', req.params.id)
-      .select()
-      .single(),
-    res
-  );
-  if (data) res.json(data);
+  await updateVariant({ variantId: req.params.variantId, productId: req.params.id, patch: parsed.data, res });
 });
 
 cocktailRouter.delete('/cocktails/:id/variants/:variantId', requireArea('cocktails'), async (req, res) => {
-  const current = await fetchVariantForProduct(req.params.id, req.params.variantId);
-  if (current.error) return res.status(400).json({ error: current.error });
+  await deactivateVariant({ variantId: req.params.variantId, productId: req.params.id, res });
+});
 
-  const data = await sb(
-    supabase
-      .from('product_variants')
-      .update({ is_active: false })
-      .eq('id', req.params.variantId)
-      .eq('product_id', req.params.id)
-      .select()
-      .single(),
-    res
-  );
-  if (data) res.json(data);
+// Generic variant routes for screens/tools that know the variant id but not the cocktail id.
+// These are intentionally soft-delete routes because historical carts/orders can reference variants.
+cocktailRouter.patch('/product-variants/:variantId', requireArea('cocktails'), async (req, res) => {
+  const parsed = variantUpdateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid variant update') });
+
+  await updateVariant({ variantId: req.params.variantId, patch: parsed.data, res });
+});
+
+cocktailRouter.delete('/product-variants/:variantId', requireArea('cocktails'), async (req, res) => {
+  await deactivateVariant({ variantId: req.params.variantId, res });
 });
 
 cocktailRouter.post('/cocktails/:id/liquors', requireArea('cocktails'), async (req, res) => {
