@@ -249,16 +249,23 @@ export default function Cocktails() {
   async function saveVariant(variantId) {
     const variant = variantEdits[variantId];
     await runAction(async () => {
-      await api(`/api/cocktails/${editing}/variants/${variantId}`, { method: 'PATCH', body: JSON.stringify(variant) });
+      await api(`/api/product-variants/${variantId}`, { method: 'PATCH', body: JSON.stringify(variant) });
     }, 'Variant updated.');
   }
-
+  
   async function setVariantActive(variantId, isActive) {
+    const variant = variants.find((row) => row.id === variantId);
+    if (!isActive && !window.confirm(`Deactivate variant "${variant?.name || 'this variant'}"? It will no longer be available for new orders.`)) return;
+  
     await runAction(async () => {
-      await api(`/api/cocktails/${editing}/variants/${variantId}`, { method: 'PATCH', body: JSON.stringify({ is_active: isActive }) });
+      if (isActive) {
+        await api(`/api/product-variants/${variantId}`, { method: 'PATCH', body: JSON.stringify({ is_active: true }) });
+      } else {
+        await api(`/api/product-variants/${variantId}`, { method: 'DELETE' });
+      }
     }, isActive ? 'Variant activated.' : 'Variant deactivated.');
   }
-
+  
   async function addVariant(e) {
     e.preventDefault();
     await runAction(async () => {
@@ -407,11 +414,11 @@ export default function Cocktails() {
               <input type="number" min="1" value={numericInput(draft.serving_count)} onChange={(e) => setVariantEdits({ ...variantEdits, [variant.id]: { ...draft, serving_count: e.target.value } })} />
               <input type="number" min="0" step="0.01" value={numericInput(draft.price_ex_vat)} onChange={(e) => setVariantEdits({ ...variantEdits, [variant.id]: { ...draft, price_ex_vat: e.target.value } })} />
               <input type="number" min="0" max="1" step="0.0001" value={numericInput(draft.vat_rate)} onChange={(e) => setVariantEdits({ ...variantEdits, [variant.id]: { ...draft, vat_rate: e.target.value } })} />
-              <span className="muted smallText">Inc VAT: {money(variant.price_inc_vat)}</span>
+              <span className="muted smallText">Inc VAT preview: {money(priceIncVatPreview(draft.price_ex_vat, draft.vat_rate))}</span>
               <label><input type="checkbox" checked={toBool(draft.is_active)} onChange={(e) => setVariantEdits({ ...variantEdits, [variant.id]: { ...draft, is_active: e.target.checked } })} /> Active</label>
               <div className="inlineActions">
                 <button type="button" onClick={() => saveVariant(variant.id)}>Save</button>
-                <button type="button" onClick={() => setVariantActive(variant.id, !variant.is_active)}>{variant.is_active ? 'Deactivate' : 'Activate'}</button>
+                <button type="button" className={variant.is_active ? 'danger' : ''} onClick={() => setVariantActive(variant.id, !variant.is_active)}>{variant.is_active ? 'Deactivate' : 'Activate'}</button>
               </div>
             </div>;
           }) : <div className="empty">No variants yet. Add one below.</div>}
@@ -422,6 +429,7 @@ export default function Cocktails() {
             <input required type="number" min="0" step="0.01" placeholder="Price ex VAT" value={newVariant.price_ex_vat} onChange={(e) => setNewVariant({ ...newVariant, price_ex_vat: e.target.value })} />
             <input type="number" min="0" max="1" step="0.0001" placeholder="VAT rate" value={newVariant.vat_rate} onChange={(e) => setNewVariant({ ...newVariant, vat_rate: e.target.value })} />
             <label><input type="checkbox" checked={toBool(newVariant.is_active)} onChange={(e) => setNewVariant({ ...newVariant, is_active: e.target.checked })} /> Active</label>
+            <span className="muted smallText">Inc VAT preview: {money(priceIncVatPreview(newVariant.price_ex_vat, newVariant.vat_rate))}</span>
             <button className="primary">Add variant</button>
           </form>
         </div>
@@ -506,7 +514,12 @@ export default function Cocktails() {
           vat_rate: (value) => `${Number(value || 0) * 100}%`,
           is_active: (value) => value ? 'Active' : 'Inactive'
         }}
+        actions={(row) => (
+          <button type="button" onClick={() => startEdit({ id: row.product_id, name: row.product })}>
+            Edit in cocktail
+          </button>
+        )}
       />
-    </Section>
+    </Section>    
   </div>;
 }
