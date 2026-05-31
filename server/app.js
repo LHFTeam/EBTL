@@ -1,5 +1,6 @@
 import compression from 'compression';
 import express from 'express';
+import fs from 'fs';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import path from 'path';
@@ -20,6 +21,19 @@ import { transferRouter } from './routes/transferRoutes.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function sendNoCacheFile(res, filePath) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.sendFile(filePath);
+}
+
+function sendFirstExistingFile(res, filePaths) {
+  const found = filePaths.find((filePath) => fs.existsSync(filePath));
+  if (!found) return res.status(404).send('File not found');
+  return sendNoCacheFile(res, found);
+}
+
 export function createApp() {
   const app = express();
 
@@ -39,6 +53,12 @@ export function createApp() {
   app.use(auth);
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.get('/favicon.ico', (_req, res) => res.status(204).end());
+
+  app.post('/api/client-error', (req, res) => {
+    console.error('Browser client error:', JSON.stringify(req.body || {}));
+    res.json({ ok: true });
+  });
+
   app.use('/api', authRouter);
   app.use('/api', dashboardRouter);
   app.use('/api', locationRouter);
@@ -49,27 +69,31 @@ export function createApp() {
   app.use('/api', transferRouter);
   app.use('/api', orderRouter);
 
-  if (isProd) {
-    const distPath = path.join(__dirname, '..', 'dist');
-  
-    // Public landing page
+  const distPath = path.join(__dirname, '..', 'dist');
+  const publicPath = path.join(__dirname, '..', 'public');
+  const indexHtml = path.join(distPath, 'index.html');
+  const landingHtml = path.join(distPath, 'landing.html');
+  const sourceLandingHtml = path.join(publicPath, 'landing.html');
+  const hasBuiltClient = fs.existsSync(indexHtml);
+
+  // Serve the built frontend whenever it exists. This keeps Render resilient even
+  // if NODE_ENV is not set exactly as expected.
+  if (isProd || hasBuiltClient) {
     app.get('/', (_req, res) => {
-      res.sendFile(path.join(distPath, 'landing.html'));
+      sendFirstExistingFile(res, [landingHtml, sourceLandingHtml, indexHtml]);
     });
-  
-    // Serve built static assets, but do not automatically serve index.html at "/"
+
     app.use(express.static(distPath, { index: false }));
-  
-    // Admin app routes
-    app.get(['/login', '/dashboard', '/admin', '/admin/*'], (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    app.use(express.static(publicPath, { index: false }));
+
+    app.get(['/login', '/dashboard', '/dashboard/*', '/admin', '/admin/*'], (_req, res) => {
+      sendFirstExistingFile(res, [indexHtml]);
     });
-  
-    // Fallback: keep unknown frontend routes inside the admin app
+
     app.get('*', (_req, res) => {
       res.redirect('/');
     });
   }
-  
+
   return app;
 }
