@@ -51,6 +51,37 @@ function Login({ onLogin }) {
   </form></div>;
 }
 
+function PasswordChange({ onChanged, onLogout }) {
+  const [form, setForm] = useState({ current_password: '', new_password: '', confirm_password: '' });
+  const [error, setError] = useState('');
+  async function submit(e) {
+    e.preventDefault();
+    setError('');
+    if (form.new_password !== form.confirm_password) {
+      setError('New password and confirmation do not match.');
+      return;
+    }
+    try {
+      const result = await api('/api/me/password', {
+        method: 'POST',
+        body: JSON.stringify({ current_password: form.current_password, new_password: form.new_password })
+      });
+      onChanged(result);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+  return <div className="loginShell"><form className="loginCard" onSubmit={submit}>
+    <div className="brandMark">EBTL</div><h1>Change Password</h1><p>Your dashboard account was marked for password reset. Create a new password before continuing.</p>
+    <label>Current / temporary password<input required type="password" value={form.current_password} onChange={e => setForm({ ...form, current_password: e.target.value })} /></label>
+    <label>New password<input required minLength={8} type="password" value={form.new_password} onChange={e => setForm({ ...form, new_password: e.target.value })} /></label>
+    <label>Confirm new password<input required minLength={8} type="password" value={form.confirm_password} onChange={e => setForm({ ...form, confirm_password: e.target.value })} /></label>
+    {error && <div className="error">{error}</div>}
+    <button className="primary">Save New Password</button>
+    <button type="button" onClick={onLogout}>Logout</button>
+  </form></div>;
+}
+
 function Shell({ user, access, onLogout }) {
   const allowedTabs = tabs.filter(t => access.includes('*') || access.includes(t.key));
   const [active, setActive] = useState(allowedTabs[0]?.key || 'dashboard');
@@ -166,15 +197,170 @@ function Locations() {
 
 function Employees() {
   const { data, loading, error, reload } = useLoad(() => api('/api/employees'));
-  const blank = { full_name:'', username:'', password:'', role:'cart_operator', phone:'', default_location_id:'', is_active:true };
+  const blank = {
+    full_name: '',
+    username: '',
+    password: '',
+    role: 'cart_operator',
+    phone: '',
+    default_location_id: '',
+    auth_user_id: '',
+    is_active: true,
+    credential_is_active: true,
+    must_change_password: true
+  };
+  const resetBlank = { password: '', confirm_password: '', must_change_password: true, credential_is_active: true };
   const [form, setForm] = useState(blank);
   const [editing, setEditing] = useState(null);
+  const [resetting, setResetting] = useState(null);
+  const [resetForm, setResetForm] = useState(resetBlank);
   const [msg, setMsg] = useState('');
-  async function save(e) { e.preventDefault(); setMsg(''); if (editing) { const payload = { ...form }; if (!payload.password) delete payload.password; await api(`/api/employees/${editing}`, { method:'PATCH', body: JSON.stringify(payload) }); } else { await api('/api/employees', { method:'POST', body: JSON.stringify(form) }); } setForm(blank); setEditing(null); setMsg('Saved.'); reload(); }
-  function edit(row) { setEditing(row.id); setForm({ full_name: row.full_name || '', username: row.credential?.username || '', password: '', role: row.role, phone: row.phone || '', default_location_id: row.default_location_id || '', is_active: row.is_active }); window.scrollTo({top:0, behavior:'smooth'}); }
+  const [err, setErr] = useState('');
+
+  function cleanEmployeePayload(payload, isEdit = false) {
+    const out = {
+      ...payload,
+      phone: payload.phone || null,
+      default_location_id: payload.default_location_id || null,
+      auth_user_id: payload.auth_user_id || null,
+      is_active: toBool(payload.is_active),
+      credential_is_active: toBool(payload.credential_is_active),
+      must_change_password: toBool(payload.must_change_password)
+    };
+    if (isEdit) delete out.password;
+    return out;
+  }
+
+  async function save(e) {
+    e.preventDefault();
+    setMsg('');
+    setErr('');
+    try {
+      if (editing) {
+        await api(`/api/employees/${editing}`, { method:'PATCH', body: JSON.stringify(cleanEmployeePayload(form, true)) });
+      } else {
+        await api('/api/employees', { method:'POST', body: JSON.stringify(cleanEmployeePayload(form)) });
+      }
+      setForm(blank);
+      setEditing(null);
+      setMsg('Employee saved.');
+      reload();
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
+
+  function edit(row) {
+    setEditing(row.id);
+    setResetting(null);
+    setForm({
+      full_name: row.full_name || '',
+      username: row.credential?.username || '',
+      password: '',
+      role: row.role,
+      phone: row.phone || '',
+      default_location_id: row.default_location_id || '',
+      auth_user_id: row.auth_user_id || '',
+      is_active: row.is_active,
+      credential_is_active: row.credential?.is_active ?? false,
+      must_change_password: row.credential?.must_change_password ?? false
+    });
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+
+  function startReset(row) {
+    setResetting(row);
+    setEditing(null);
+    setResetForm(resetBlank);
+    setMsg('');
+    setErr('');
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+
+  async function resetPassword(e) {
+    e.preventDefault();
+    setMsg('');
+    setErr('');
+    if (resetForm.password !== resetForm.confirm_password) {
+      setErr('Password and confirmation do not match.');
+      return;
+    }
+    try {
+      await api(`/api/employees/${resetting.id}/reset-password`, {
+        method:'POST',
+        body: JSON.stringify({
+          password: resetForm.password,
+          must_change_password: toBool(resetForm.must_change_password),
+          credential_is_active: toBool(resetForm.credential_is_active),
+          username: resetting.credential?.username ? undefined : resetting.username
+        })
+      });
+      setResetting(null);
+      setResetForm(resetBlank);
+      setMsg('Password reset.');
+      reload();
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
+
+  async function softDelete(row) {
+    if (!confirm(`Soft-delete ${row.full_name}? This will deactivate the employee and disable their dashboard login.`)) return;
+    setMsg('');
+    setErr('');
+    try {
+      await api(`/api/employees/${row.id}`, { method:'DELETE' });
+      setMsg('Employee soft-deleted.');
+      reload();
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
+
   if (loading || error) return <Loading error={error} />;
-  const rows = data.employees.map(e => ({ ...e, username: e.credential?.username, location: e.locations?.name }));
-  return <div className="grid"><Section title={editing ? 'Edit Employee' : 'Add Employee'} action={editing && <button onClick={() => { setEditing(null); setForm(blank); }}>Cancel edit</button>}><form className="miniForm formGrid" onSubmit={save}><input required placeholder="Full name" value={form.full_name} onChange={e => setForm({...form, full_name:e.target.value})}/><input required placeholder="Username" value={form.username} onChange={e => setForm({...form, username:e.target.value})}/><input required={!editing} type="password" placeholder={editing ? 'New password (leave blank to keep)' : 'Password'} value={form.password} onChange={e => setForm({...form, password:e.target.value})}/><input placeholder="Phone" value={form.phone || ''} onChange={e => setForm({...form, phone:e.target.value})}/><select value={form.role} onChange={e => setForm({...form, role:e.target.value})}>{roles.map(r => <option key={r}>{r}</option>)}</select><select value={form.default_location_id || ''} onChange={e => setForm({...form, default_location_id:e.target.value})}><option value="">No default location</option>{data.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select><label><input type="checkbox" checked={toBool(form.is_active)} onChange={e => setForm({...form, is_active:e.target.checked})}/> Active</label><button className="primary">{editing ? 'Save Changes' : 'Create Employee'}</button></form><Message text={msg}/></Section><Section title="Employees"><SimpleTable rows={rows} columns={['full_name','username','phone','role','location','is_active']} actions={(r) => <button onClick={() => edit(r)}>Edit</button>} /></Section></div>;
+  const rows = data.employees.map(e => ({
+    ...e,
+    username: e.credential?.username,
+    location: e.locations?.name,
+    credential_active: e.credential?.is_active ?? false,
+    must_change_password: e.credential?.must_change_password ?? false,
+    auth_user_id: e.auth_user_id || '-'
+  }));
+
+  return <div className="grid">
+    <Section title={editing ? 'Edit Employee' : 'Add Employee'} action={editing && <button onClick={() => { setEditing(null); setForm(blank); }}>Cancel edit</button>}>
+      <form className="miniForm formGrid" onSubmit={save}>
+        <input required placeholder="Full name" value={form.full_name} onChange={e => setForm({...form, full_name:e.target.value})}/>
+        <input required placeholder="Dashboard username" value={form.username} onChange={e => setForm({...form, username:e.target.value})}/>
+        {!editing && <input required minLength={8} type="password" placeholder="Initial password" value={form.password} onChange={e => setForm({...form, password:e.target.value})}/>} 
+        <input placeholder="Phone" value={form.phone || ''} onChange={e => setForm({...form, phone:e.target.value})}/>
+        <select value={form.role} onChange={e => setForm({...form, role:e.target.value})}>{roles.map(r => <option key={r}>{r}</option>)}</select>
+        <select value={form.default_location_id || ''} onChange={e => setForm({...form, default_location_id:e.target.value})}><option value="">No default location</option>{data.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
+        <input placeholder="Optional Supabase Auth user UUID" value={form.auth_user_id || ''} onChange={e => setForm({...form, auth_user_id:e.target.value})}/>
+        <label><input type="checkbox" checked={toBool(form.is_active)} onChange={e => setForm({...form, is_active:e.target.checked})}/> Employee active</label>
+        <label><input type="checkbox" checked={toBool(form.credential_is_active)} onChange={e => setForm({...form, credential_is_active:e.target.checked})}/> Dashboard login active</label>
+        <label><input type="checkbox" checked={toBool(form.must_change_password)} onChange={e => setForm({...form, must_change_password:e.target.checked})}/> Must change password</label>
+        <button className="primary">{editing ? 'Save Changes' : 'Create Employee'}</button>
+      </form>
+      <p className="muted">Dashboard login uses employee_credentials. The Supabase Auth UUID is optional and is not required for this dashboard login flow.</p>
+      <Message text={msg}/><Message text={err} type="error"/>
+    </Section>
+
+    {resetting && <Section title={`Reset Password: ${resetting.full_name}`} action={<button onClick={() => setResetting(null)}>Cancel reset</button>}>
+      <form className="miniForm formGrid" onSubmit={resetPassword}>
+        <input required minLength={8} type="password" placeholder="New temporary password" value={resetForm.password} onChange={e => setResetForm({...resetForm, password:e.target.value})}/>
+        <input required minLength={8} type="password" placeholder="Confirm temporary password" value={resetForm.confirm_password} onChange={e => setResetForm({...resetForm, confirm_password:e.target.value})}/>
+        <label><input type="checkbox" checked={toBool(resetForm.must_change_password)} onChange={e => setResetForm({...resetForm, must_change_password:e.target.checked})}/> Require change on next login</label>
+        <label><input type="checkbox" checked={toBool(resetForm.credential_is_active)} onChange={e => setResetForm({...resetForm, credential_is_active:e.target.checked})}/> Keep dashboard login active</label>
+        <button className="primary">Reset Password</button>
+      </form>
+      <Message text={err} type="error"/>
+    </Section>}
+
+    <Section title="Employees">
+      <SimpleTable rows={rows} columns={['full_name','username','phone','role','location','is_active','credential_active','must_change_password','auth_user_id']} actions={(r) => <div className="inlineActions"><button onClick={() => edit(r)}>Edit</button><button onClick={() => startReset(r)}>Reset Password</button><button onClick={() => softDelete(r)}>Soft Delete</button></div>} />
+    </Section>
+  </div>;
 }
 
 function App() {
@@ -183,6 +369,7 @@ function App() {
   async function logout() { await api('/api/logout', { method:'POST' }); setAuth({ loading:false, user:null, access:[] }); }
   if (auth.loading) return <div className="loginShell"><div className="muted">Loading…</div></div>;
   if (!auth.user) return <Login onLogin={r => setAuth({ loading:false, user:r.user, access:r.access })} />;
+  if (auth.user.must_change_password) return <PasswordChange onChanged={r => setAuth({ loading:false, user:r.user, access:r.access })} onLogout={logout} />;
   return <Shell user={auth.user} access={auth.access} onLogout={logout} />;
 }
 
