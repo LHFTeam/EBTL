@@ -304,13 +304,13 @@ function Employees() {
     }
   }
 
-  async function softDelete(row) {
-    if (!confirm(`Soft-delete ${row.full_name}? This will deactivate the employee and disable their dashboard login.`)) return;
+  async function deactivateEmployee(row) {
+    if (!confirm(`Deactivate ${row.full_name}? This will mark the employee inactive and disable their dashboard login.`)) return;
     setMsg('');
     setErr('');
     try {
       await api(`/api/employees/${row.id}`, { method:'DELETE' });
-      setMsg('Employee soft-deleted.');
+      setMsg('Employee deactivated.');
       reload();
     } catch (e) {
       setErr(e.message);
@@ -358,7 +358,7 @@ function Employees() {
     </Section>}
 
     <Section title="Employees">
-      <SimpleTable rows={rows} columns={['full_name','username','phone','role','location','is_active','credential_active','must_change_password','auth_user_id']} actions={(r) => <div className="inlineActions"><button onClick={() => edit(r)}>Edit</button><button onClick={() => startReset(r)}>Reset Password</button><button onClick={() => softDelete(r)}>Soft Delete</button></div>} />
+      <SimpleTable rows={rows} columns={['full_name','username','phone','role','location','is_active','credential_active','must_change_password','auth_user_id']} actions={(r) => <div className="inlineActions"><button onClick={() => edit(r)}>Edit</button><button onClick={() => startReset(r)}>Reset Password</button><button onClick={() => deactivateEmployee(r)}>Deactivate</button></div>} />
     </Section>
   </div>;
 }
