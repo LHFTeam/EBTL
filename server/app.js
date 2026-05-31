@@ -38,6 +38,7 @@ export function createApp() {
 
   app.use(auth);
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
+  app.get('/favicon.ico', (_req, res) => res.status(204).end());
   app.use('/api', authRouter);
   app.use('/api', dashboardRouter);
   app.use('/api', locationRouter);
