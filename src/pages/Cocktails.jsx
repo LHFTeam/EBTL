@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { statuses } from '../config/constants.js';
 import { Loading, Message, Section, SimpleTable } from '../components/ui.jsx';
@@ -47,6 +47,24 @@ function priceIncVatPreview(priceExVat, vatRate) {
   return Number((Number(priceExVat || 0) * (1 + Number(vatRate || 0))).toFixed(2));
 }
 
+function vatPercentInput(value) {
+  if (value === '' || value === null || value === undefined) return '';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '';
+  return Number((number * 100).toFixed(4));
+}
+
+function vatPercentToDecimal(value) {
+  if (value === '' || value === null || value === undefined) return '';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '';
+  return Number((number / 100).toFixed(6));
+}
+
+function formatVatPercent(value) {
+  return `${Number((Number(value || 0) * 100).toFixed(2))}%`;
+}
+
 function fileSizeLabel(bytes) {
   if (!bytes) return '0 KB';
   if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`;
@@ -80,6 +98,8 @@ async function imageUploadPayload(file) {
 export default function Cocktails() {
   const { data, loading, error, reload } = useLoad(() => api('/api/cocktails'));
   const [form, setForm] = useState(blankProduct);
+  const [addOpen, setAddOpen] = useState(false);
+  const messageRef = useRef(null);
   const [editing, setEditing] = useState(null);
   const [productEdit, setProductEdit] = useState({});
   const [variantEdits, setVariantEdits] = useState({});
@@ -293,6 +313,15 @@ export default function Cocktails() {
     setMsgType(type);
   }
 
+  function scrollMessageToTop() {
+    window.requestAnimationFrame(() => {
+      messageRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    });
+  }
+
   function chooseCocktailImage(file, setter) {
     if (!file) {
       setter(null);
@@ -376,11 +405,12 @@ export default function Cocktails() {
   }
 
   function startEdit(row) {
+    setAddOpen(false);
     setEditing(row.id);
     showMessage(`Editing ${row.name}.`);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollMessageToTop();
   }
-
+  
   async function saveProduct(e) {
     e.preventDefault();
 
@@ -580,8 +610,15 @@ export default function Cocktails() {
   if (loading || error) return <Loading error={error} />;
 
   return <div className="grid">
-    <Section title="Add New Cocktail">
-      <form className="miniForm formGrid" onSubmit={add}>
+    <Section
+      title="Add New Cocktail"
+      action={
+        <button type="button" onClick={() => setAddOpen((current) => !current)}>
+          {addOpen ? 'Collapse' : 'Add cocktail'}
+        </button>
+      }
+    >
+      {addOpen && <form className="miniForm formGrid" onSubmit={add}>    
         <input
           required
           placeholder="Cocktail name"
@@ -619,13 +656,13 @@ export default function Cocktails() {
             </p>
           </div>
 
-          <label className="fileInputBlock">
-            <span>Choose WebP image</span>
+          <label className="fileButton">
             <input
               type="file"
               accept="image/webp,.webp"
               onChange={(e) => chooseCocktailImage(e.target.files?.[0], setCreateImageFile)}
             />
+            <span>{createImageFile ? 'Change WebP image' : 'Choose WebP image'}</span>
           </label>
 
           {createImageFile && (
@@ -678,11 +715,11 @@ export default function Cocktails() {
         <input
           type="number"
           min="0"
-          max="1"
-          step="0.0001"
+          max="100"
+          step="0.01"
           placeholder="VAT rate"
-          value={form.vat_rate}
-          onChange={(e) => setForm({ ...form, vat_rate: e.target.value })}
+          value={vatPercentInput(form.vat_rate)}
+          onChange={(e) => setForm({ ...form, vat_rate: vatPercentToDecimal(e.target.value) })}
         />
 
         <input
@@ -694,12 +731,13 @@ export default function Cocktails() {
           onChange={(e) => setForm({ ...form, yield_servings: e.target.value })}
         />
 
-        <label>
+        <label className="checkboxField">
           <input
             type="checkbox"
             checked={toBool(form.is_featured)}
             onChange={(e) => setForm({ ...form, is_featured: e.target.checked })}
-          /> Featured
+          />
+          <span>Featured</span>
         </label>
 
         <div className="full subPanel">
@@ -763,11 +801,13 @@ export default function Cocktails() {
         </div>
 
         <button className="primary">Save Cocktail</button>
-      </form>
+      </form>}
     </Section>
 
-    <Message text={msg} type={msgType} />
-
+    <div ref={messageRef} className="messageAnchor">
+      <Message text={msg} type={msgType} />
+    </div>
+    
     {selectedProduct && (
       <Section
         title={`Edit Cocktail: ${selectedProduct.name}`}
@@ -793,11 +833,14 @@ export default function Cocktails() {
               Upload a replacement 500px × 500px WebP image. It will be saved to Supabase Storage and linked to this cocktail.
             </p>
 
-            <input
-              type="file"
-              accept="image/webp,.webp"
-              onChange={(e) => chooseCocktailImage(e.target.files?.[0], setEditImageFile)}
-            />
+            <label className="fileButton">
+              <input
+                type="file"
+                accept="image/webp,.webp"
+                onChange={(e) => chooseCocktailImage(e.target.files?.[0], setEditImageFile)}
+              />
+              <span>{editImageFile ? 'Change WebP image' : 'Choose WebP image'}</span>
+            </label>
 
             {editImageFile && (
               <div className="selectedFile">
@@ -857,12 +900,13 @@ export default function Cocktails() {
             onChange={(e) => setProductEdit({ ...productEdit, tags: e.target.value })}
           />
 
-          <label>
+          <label className="checkboxField">
             <input
               type="checkbox"
               checked={toBool(productEdit.is_featured)}
               onChange={(e) => setProductEdit({ ...productEdit, is_featured: e.target.checked })}
-            /> Featured
+            /> 
+            <span>Featured</span>
           </label>
 
           <button className="primary">Save product details</button>
@@ -922,7 +966,7 @@ export default function Cocktails() {
                     Inc VAT preview: {money(priceIncVatPreview(draft.price_ex_vat, draft.vat_rate))}
                   </span>
 
-                  <label>
+                  <label className="checkboxField">
                     <input
                       type="checkbox"
                       checked={toBool(draft.is_active)}
@@ -930,7 +974,8 @@ export default function Cocktails() {
                         ...variantEdits,
                         [variant.id]: { ...draft, is_active: e.target.checked }
                       })}
-                    /> Active
+                    />
+                    <span>Active</span>
                   </label>
 
                   <div className="inlineActions">
@@ -979,19 +1024,20 @@ export default function Cocktails() {
               <input
                 type="number"
                 min="0"
-                max="1"
-                step="0.0001"
+                max="100"
+                step="0.01"
                 placeholder="VAT rate"
-                value={newVariant.vat_rate}
-                onChange={(e) => setNewVariant({ ...newVariant, vat_rate: e.target.value })}
+                value={vatPercentInput(newVariant.vat_rate)}
+                onChange={(e) => setNewVariant({ ...newVariant, vat_rate: vatPercentToDecimal(e.target.value) })}
               />
 
-              <label>
+              <label className="checkboxField">
                 <input
                   type="checkbox"
                   checked={toBool(newVariant.is_active)}
                   onChange={(e) => setNewVariant({ ...newVariant, is_active: e.target.checked })}
-                /> Active
+                />
+                <span>Active</span>
               </label>
 
               <span className="muted smallText">
@@ -1168,7 +1214,7 @@ export default function Cocktails() {
         format={{
           price_ex_vat: (value) => money(value),
           price_inc_vat: (value) => money(value),
-          vat_rate: (value) => `${Number(value || 0) * 100}%`,
+          vat_rate: (value) => formatVatPercent(value),          
           is_active: (value) => value ? 'Active' : 'Inactive'
         }}
         actions={(row) => (
