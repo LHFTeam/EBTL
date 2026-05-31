@@ -488,7 +488,7 @@ app.post('/api/employees/:id/reset-password', requireArea('employees'), async (r
 });
 
 app.delete('/api/employees/:id', requireArea('employees'), async (req, res) => {
-  if (req.user.employee_id === req.params.id) return res.status(400).json({ error: 'You cannot soft-delete your own employee account.' });
+  if (req.user.employee_id === req.params.id) return res.status(400).json({ error: 'You cannot deactivate your own employee account.' });
   const allowed = await canDeactivateEmployee(req.params.id);
   if (!allowed.ok) return res.status(400).json({ error: allowed.error });
 
