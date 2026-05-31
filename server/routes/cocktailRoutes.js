@@ -12,6 +12,40 @@ const uuid = z.string().uuid();
 const nullableUuid = uuid.nullable();
 const vatRate = z.coerce.number().min(0).max(1);
 
+const COCKTAIL_IMAGE_BUCKET = 'cocktails';
+const MAX_COCKTAIL_IMAGE_BYTES = 3 * 1024 * 1024;
+
+function isWebpBuffer(buffer) {
+  return buffer.length >= 12
+    && buffer.toString('ascii', 0, 4) === 'RIFF'
+    && buffer.toString('ascii', 8, 12) === 'WEBP';
+}
+
+function normalizeBase64Image(value) {
+  return String(value || '')
+    .replace(/^data:image\/webp;base64,/i, '')
+    .replace(/\s/g, '');
+}
+
+function cocktailImagePath(productId) {
+  return `products/${productId}/${Date.now()}.webp`;
+}
+
+function storagePathFromPublicUrl(publicUrl) {
+  if (!publicUrl) return null;
+  const marker = `/storage/v1/object/public/${COCKTAIL_IMAGE_BUCKET}/`;
+  const markerIndex = String(publicUrl).indexOf(marker);
+  if (markerIndex === -1) return null;
+  const pathWithQuery = String(publicUrl).slice(markerIndex + marker.length);
+  return decodeURIComponent(pathWithQuery.split('?')[0]);
+}
+
+async function removeStoredCocktailImage(publicUrl) {
+  const oldPath = storagePathFromPublicUrl(publicUrl);
+  if (!oldPath) return;
+  await supabase.storage.from(COCKTAIL_IMAGE_BUCKET).remove([oldPath]);
+}
+
 function priceIncVat(priceExVat, vatRateValue) {
   return Number((Number(priceExVat || 0) * (1 + Number(vatRateValue || 0))).toFixed(2));
 }
@@ -244,6 +278,87 @@ cocktailRouter.patch('/cocktails/:id', requireArea('cocktails'), async (req, res
 
   const data = await sb(supabase.from('products').update(payload).eq('id', req.params.id).select().single(), res);
   if (data) res.json(data);
+});
+
+cocktailRouter.post('/cocktails/:id/image', requireArea('cocktails'), async (req, res) => {
+  const parsed = z.object({
+    file_name: z.string().min(1),
+    content_type: z.string().optional(),
+    data_base64: z.string().min(1)
+  }).safeParse(req.body);
+
+  if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid cocktail image upload') });
+
+  const fileName = parsed.data.file_name.trim().toLowerCase();
+  const contentType = String(parsed.data.content_type || '').toLowerCase();
+  if (contentType !== 'image/webp' && !fileName.endsWith('.webp')) {
+    return res.status(400).json({ error: 'Cocktail images must be uploaded as .webp files.' });
+  }
+
+  const product = await supabase.from('products').select('id,image_url').eq('id', req.params.id).maybeSingle();
+  if (product.error) return res.status(400).json({ error: product.error.message });
+  if (!product.data) return res.status(404).json({ error: 'Cocktail not found.' });
+
+  const base64 = normalizeBase64Image(parsed.data.data_base64);
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) {
+    return res.status(400).json({ error: 'Image data is not valid base64.' });
+  }
+
+  const imageBuffer = Buffer.from(base64, 'base64');
+  if (!imageBuffer.length) return res.status(400).json({ error: 'Image file is empty.' });
+  if (imageBuffer.length > MAX_COCKTAIL_IMAGE_BYTES) {
+    return res.status(400).json({ error: 'Image file is too large. Maximum size is 3 MB.' });
+  }
+  if (!isWebpBuffer(imageBuffer)) {
+    return res.status(400).json({ error: 'The selected file is not a valid WebP image.' });
+  }
+
+  const storagePath = cocktailImagePath(req.params.id);
+  const uploaded = await supabase.storage
+    .from(COCKTAIL_IMAGE_BUCKET)
+    .upload(storagePath, imageBuffer, {
+      contentType: 'image/webp',
+      cacheControl: '31536000',
+      upsert: false
+    });
+
+  if (uploaded.error) return res.status(400).json({ error: uploaded.error.message });
+
+  const publicUrl = supabase.storage.from(COCKTAIL_IMAGE_BUCKET).getPublicUrl(storagePath).data.publicUrl;
+
+  const updated = await supabase
+    .from('products')
+    .update({ image_url: publicUrl })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (updated.error) {
+    await supabase.storage.from(COCKTAIL_IMAGE_BUCKET).remove([storagePath]);
+    return res.status(400).json({ error: updated.error.message });
+  }
+
+  await removeStoredCocktailImage(product.data.image_url);
+
+  res.json({ product: updated.data, image_url: publicUrl, storage_path: storagePath });
+});
+
+cocktailRouter.delete('/cocktails/:id/image', requireArea('cocktails'), async (req, res) => {
+  const product = await supabase.from('products').select('id,image_url').eq('id', req.params.id).maybeSingle();
+  if (product.error) return res.status(400).json({ error: product.error.message });
+  if (!product.data) return res.status(404).json({ error: 'Cocktail not found.' });
+
+  await removeStoredCocktailImage(product.data.image_url);
+
+  const updated = await supabase
+    .from('products')
+    .update({ image_url: null })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (updated.error) return res.status(400).json({ error: updated.error.message });
+  res.json({ product: updated.data });
 });
 
 cocktailRouter.delete('/cocktails/:id', requireArea('cocktails'), async (req, res) => {
