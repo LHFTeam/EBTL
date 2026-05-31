@@ -531,14 +531,6 @@ input[aria-invalid="true"] {
   font-weight: 700;
 }
 
-.fileInputBlock input,
-.imageUploadControls input[type="file"] {
-  border: 1px dashed var(--line);
-  border-radius: 12px;
-  padding: 12px;
-  background: #fffaf6;
-}
-
 .selectedFile {
   display: inline-flex;
   width: fit-content;
@@ -565,3 +557,66 @@ input[aria-invalid="true"] {
     grid-template-columns: 1fr;
   }
 }
+
+/* Cocktail dashboard polish */
+.messageAnchor {
+  scroll-margin-top: 18px;
+}
+
+.fileButton {
+  width: fit-content;
+  border: 1px solid var(--line);
+  background: white;
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.fileButton:hover {
+  border-color: #cdbda9;
+}
+
+.fileButton input[type="file"] {
+  display: none;
+}
+
+.miniForm label.checkboxField,
+.editLine label.checkboxField,
+label.checkboxField {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.checkboxField input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.editLine input,
+.editLine select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 11px 12px;
+  background: white;
+  min-height: 44px;
+}
+
+.editLine input:disabled,
+.editLine select:disabled {
+  background: #f3eee7;
+}
+
+
