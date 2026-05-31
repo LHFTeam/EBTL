@@ -41,6 +41,10 @@ function numericInput(value) {
   return value ?? '';
 }
 
+function priceIncVatPreview(priceExVat, vatRate) {
+  return Number((Number(priceExVat || 0) * (1 + Number(vatRate || 0))).toFixed(2));
+}
+
 export default function Cocktails() {
   const { data, loading, error, reload } = useLoad(() => api('/api/cocktails'));
   const [form, setForm] = useState(blankProduct);
