@@ -5,6 +5,9 @@ import PasswordChange from './features/auth/PasswordChange.jsx';
 
 const Shell = lazy(() => import('./layout/Shell.jsx'));
 
+window.__EBTL_APP_COMPONENT_LOADED__ = true;
+fetch('/api/health?client_boot=app', { cache: 'no-store' }).catch(() => {});
+
 function replacePath(path) {
   if (window.location.pathname !== path) {
     window.history.replaceState({}, '', path);
