@@ -238,3 +238,80 @@ footer { padding: 30px 0 42px; color: var(--muted); border-top: 1px solid rgba(2
   .store-btn { width: 100%; }
   .mobile-sticky-download { position: fixed; left: 14px; right: 14px; bottom: 14px; z-index: 30; display: flex; align-items: center; justify-content: center; min-height: 56px; border-radius: 999px; background: linear-gradient(135deg, var(--coral), #ff7b64); color: var(--white); font-weight: 900; box-shadow: 0 16px 38px rgba(243,95,75,.32); }
 }
+
+/* Explicit desktop layout overrides */
+@media (min-width: 901px) {
+  .shell {
+    width: min(var(--max-width), calc(100% - 80px));
+  }
+
+  .hero {
+    padding: 56px 0 48px;
+  }
+
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.02fr) minmax(360px, 0.98fr);
+    gap: clamp(40px, 6vw, 78px);
+    align-items: center;
+  }
+
+  .hero-actions {
+    align-items: center;
+  }
+
+  .primary-btn,
+  .secondary-btn {
+    width: auto;
+  }
+
+  .phone-stage {
+    min-height: 650px;
+    margin-top: 0;
+  }
+
+  .mock-phone {
+    width: min(100%, 385px);
+    transform: rotate(2deg);
+  }
+
+  .floating-chip {
+    display: inline-flex;
+  }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .location-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    border-radius: 42px;
+  }
+
+  .download-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+  }
+
+  .qr-placeholder {
+    justify-self: end;
+    width: min(100%, 300px);
+    max-height: none;
+  }
+
+  .footer-inner {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .mobile-sticky-download {
+    display: none !important;
+  }
+}
