@@ -127,9 +127,37 @@ function requireAuth(req, res, next) { if (!req.user) return res.status(401).jso
 function requireArea(area) {
   return (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: 'Not logged in' });
+    if (req.user.must_change_password) return res.status(403).json({ error: 'Password change required before continuing.' });
     if (!can(req.user.role, area)) return res.status(403).json({ error: 'Not allowed' });
     next();
   };
+}
+
+function requireEmployeeSession(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'Not logged in' });
+  if (req.user.source !== 'employee' || !req.user.employee_id) {
+    return res.status(403).json({ error: 'Password changes are only available for employee dashboard accounts.' });
+  }
+  next();
+}
+
+async function canDeactivateEmployee(employeeId) {
+  const current = await supabase.from('employees').select('id,role').eq('id', employeeId).single();
+  if (current.error) return { ok: false, error: current.error.message };
+
+  if (current.data.role !== 'admin') return { ok: true };
+
+  const admins = await supabase
+    .from('employees')
+    .select('id, employee_credentials!inner(is_active)')
+    .eq('role', 'admin')
+    .eq('is_active', true)
+    .eq('employee_credentials.is_active', true)
+    .neq('id', employeeId);
+
+  if (admins.error) return { ok: false, error: admins.error.message };
+  if (!admins.data.length) return { ok: false, error: 'Cannot deactivate the last active admin with active dashboard credentials.' };
+  return { ok: true };
 }
 
 async function sb(promise, res) {
@@ -169,7 +197,7 @@ app.post('/api/login', async (req, res) => {
 
   const { data, error } = await supabase
     .from('employee_credentials')
-    .select('username,password_hash,password_salt,is_active, employees(id,full_name,role,is_active,default_location_id)')
+    .select('username,password_hash,password_salt,must_change_password,is_active, employees(id,full_name,role,is_active,default_location_id)')
     .eq('username', username)
     .maybeSingle();
 
@@ -187,6 +215,7 @@ app.post('/api/login', async (req, res) => {
     role: data.employees.role,
     employee_id: data.employees.id,
     location_id: data.employees.default_location_id,
+    must_change_password: Boolean(data.must_change_password),
     source: 'employee'
   };
   setSessionCookie(res, user);
@@ -195,6 +224,38 @@ app.post('/api/login', async (req, res) => {
 
 app.post('/api/logout', requireAuth, (_req, res) => { clearSessionCookie(res); res.json({ ok: true }); });
 app.get('/api/me', requireAuth, (req, res) => res.json({ user: req.user, access: roleAccess[req.user.role] || [] }));
+
+app.post('/api/me/password', requireEmployeeSession, async (req, res) => {
+  const parsed = z.object({
+    current_password: z.string().min(1),
+    new_password: z.string().min(8)
+  }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Current password and a new password of at least 8 characters are required.' });
+
+  const { current_password, new_password } = parsed.data;
+  const current = await supabase
+    .from('employee_credentials')
+    .select('password_hash,password_salt,is_active, employees(id,full_name,role,is_active,default_location_id)')
+    .eq('employee_id', req.user.employee_id)
+    .maybeSingle();
+
+  if (current.error) return res.status(400).json({ error: current.error.message });
+  if (!current.data || !current.data.is_active || !current.data.employees?.is_active) return res.status(403).json({ error: 'This dashboard account is inactive.' });
+  if (!verifyPassword(current_password, current.data.password_salt, current.data.password_hash)) {
+    return res.status(401).json({ error: 'Current password is incorrect.' });
+  }
+
+  const { salt, hash } = hashPassword(new_password);
+  const updated = await supabase
+    .from('employee_credentials')
+    .update({ password_hash: hash, password_salt: salt, must_change_password: false })
+    .eq('employee_id', req.user.employee_id);
+  if (updated.error) return res.status(400).json({ error: updated.error.message });
+
+  const user = { ...req.user, must_change_password: false };
+  setSessionCookie(res, user);
+  res.json({ user, access: roleAccess[user.role] || [] });
+});
 
 app.get('/api/dashboard', requireArea('dashboard'), async (_req, res) => {
   const [orders, sales, lowStock, locations, transfers] = await Promise.all([
@@ -265,7 +326,7 @@ app.get('/api/employees', requireArea('employees'), async (_req, res) => {
   const [employees, locations, credentials] = await Promise.all([
     supabase.from('employees').select('*, locations(name,type,compound_name)').order('full_name'),
     supabase.from('locations').select('*').order('name'),
-    supabase.from('employee_credentials').select('employee_id,username,is_active')
+    supabase.from('employee_credentials').select('employee_id,username,is_active,must_change_password,updated_at')
   ]);
   for (const result of [employees, locations]) if (result.error) return res.status(400).json({ error: result.error.message });
   if (credentials.error) console.warn(credentials.error.message);
@@ -277,15 +338,25 @@ app.post('/api/employees', requireArea('employees'), async (req, res) => {
   const parsed = z.object({
     full_name: z.string().min(1),
     username: z.string().min(3).regex(/^[a-zA-Z0-9._-]+$/),
-    password: z.string().min(6),
-    phone: z.string().optional(),
+    password: z.string().min(8),
+    phone: z.string().nullable().optional(),
     role: z.enum(employeeRoles),
-    default_location_id: z.string().uuid().optional(),
-    is_active: z.boolean().optional()
+    default_location_id: z.string().uuid().nullable().optional(),
+    auth_user_id: z.string().uuid().nullable().optional(),
+    is_active: z.boolean().optional(),
+    credential_is_active: z.boolean().optional(),
+    must_change_password: z.boolean().optional()
   }).safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: 'Invalid employee. Username must be at least 3 characters; password at least 6 characters.' });
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid employee. Username must be at least 3 characters; password at least 8 characters.' });
 
-  const { username, password, ...employeePayload } = parsed.data;
+  const {
+    username,
+    password,
+    credential_is_active,
+    must_change_password,
+    ...employeePayload
+  } = parsed.data;
+
   const created = await supabase.from('employees').insert(clean(employeePayload)).select().single();
   if (created.error) return res.status(400).json({ error: created.error.message });
 
@@ -295,8 +366,9 @@ app.post('/api/employees', requireArea('employees'), async (req, res) => {
     username,
     password_hash: hash,
     password_salt: salt,
-    is_active: employeePayload.is_active ?? true
-  }).select('employee_id,username,is_active').single();
+    is_active: credential_is_active ?? employeePayload.is_active ?? true,
+    must_change_password: must_change_password ?? true
+  }).select('employee_id,username,is_active,must_change_password').single();
 
   if (cred.error) {
     await supabase.from('employees').delete().eq('id', created.data.id);
@@ -312,14 +384,22 @@ app.patch('/api/employees/:id', requireArea('employees'), async (req, res) => {
     phone: z.string().nullable().optional(),
     role: z.enum(employeeRoles).optional(),
     default_location_id: z.string().uuid().nullable().optional(),
+    auth_user_id: z.string().uuid().nullable().optional(),
     is_active: z.boolean().optional(),
     username: z.string().min(3).regex(/^[a-zA-Z0-9._-]+$/).optional(),
-    password: z.string().min(6).optional(),
-    credential_is_active: z.boolean().optional()
+    credential_is_active: z.boolean().optional(),
+    must_change_password: z.boolean().optional()
   }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid employee update' });
 
-  const { username, password, credential_is_active, ...employeePayload } = parsed.data;
+  const { username, credential_is_active, must_change_password, ...employeePayload } = parsed.data;
+
+  if (employeePayload.is_active === false) {
+    if (req.user.employee_id === req.params.id) return res.status(400).json({ error: 'You cannot deactivate your own employee record.' });
+    const allowed = await canDeactivateEmployee(req.params.id);
+    if (!allowed.ok) return res.status(400).json({ error: allowed.error });
+  }
+
   const updates = clean(employeePayload);
   let employee = null;
   if (Object.keys(updates).length) {
@@ -328,26 +408,29 @@ app.patch('/api/employees/:id', requireArea('employees'), async (req, res) => {
     employee = updated.data;
   }
 
-  if (username || password || credential_is_active !== undefined) {
+  if (username || credential_is_active !== undefined || must_change_password !== undefined) {
     const current = await supabase.from('employee_credentials').select('*').eq('employee_id', req.params.id).maybeSingle();
     if (current.error) return res.status(400).json({ error: current.error.message });
+    if (!current.data) return res.status(400).json({ error: 'This employee does not have dashboard credentials yet. Use reset password to create credentials.' });
+
+    if (credential_is_active === false) {
+      if (req.user.employee_id === req.params.id) return res.status(400).json({ error: 'You cannot deactivate your own dashboard credentials.' });
+      const allowed = await canDeactivateEmployee(req.params.id);
+      if (!allowed.ok) return res.status(400).json({ error: allowed.error });
+    }
+
     const credentialPayload = {};
     if (username) credentialPayload.username = username;
     if (credential_is_active !== undefined) credentialPayload.is_active = credential_is_active;
-    if (password) {
-      const { salt, hash } = hashPassword(password);
-      credentialPayload.password_salt = salt;
-      credentialPayload.password_hash = hash;
-    }
-    if (current.data) {
-      const cred = await supabase.from('employee_credentials').update(credentialPayload).eq('employee_id', req.params.id).select('employee_id,username,is_active').single();
-      if (cred.error) return res.status(400).json({ error: cred.error.message });
-    } else {
-      if (!username || !password) return res.status(400).json({ error: 'Username and password are required when creating credentials for an existing employee.' });
-      const { salt, hash } = hashPassword(password);
-      const cred = await supabase.from('employee_credentials').insert({ employee_id: req.params.id, username, password_hash: hash, password_salt: salt, is_active: credential_is_active ?? true }).select('employee_id,username,is_active').single();
-      if (cred.error) return res.status(400).json({ error: cred.error.message });
-    }
+    if (must_change_password !== undefined) credentialPayload.must_change_password = must_change_password;
+
+    const cred = await supabase
+      .from('employee_credentials')
+      .update(credentialPayload)
+      .eq('employee_id', req.params.id)
+      .select('employee_id,username,is_active,must_change_password')
+      .single();
+    if (cred.error) return res.status(400).json({ error: cred.error.message });
   }
 
   if (!employee) {
@@ -356,6 +439,76 @@ app.patch('/api/employees/:id', requireArea('employees'), async (req, res) => {
     employee = fetched.data;
   }
   res.json(employee);
+});
+
+app.post('/api/employees/:id/reset-password', requireArea('employees'), async (req, res) => {
+  const parsed = z.object({
+    password: z.string().min(8),
+    must_change_password: z.boolean().optional(),
+    credential_is_active: z.boolean().optional(),
+    username: z.string().min(3).regex(/^[a-zA-Z0-9._-]+$/).optional()
+  }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+
+  const existingEmployee = await supabase.from('employees').select('id,is_active').eq('id', req.params.id).single();
+  if (existingEmployee.error) return res.status(400).json({ error: existingEmployee.error.message });
+
+  const { password, must_change_password, credential_is_active, username } = parsed.data;
+  const { salt, hash } = hashPassword(password);
+  const current = await supabase.from('employee_credentials').select('*').eq('employee_id', req.params.id).maybeSingle();
+  if (current.error) return res.status(400).json({ error: current.error.message });
+
+  const credentialPayload = {
+    password_hash: hash,
+    password_salt: salt,
+    must_change_password: must_change_password ?? true,
+    is_active: credential_is_active ?? true
+  };
+  if (username) credentialPayload.username = username;
+
+  if (current.data) {
+    const updated = await supabase
+      .from('employee_credentials')
+      .update(credentialPayload)
+      .eq('employee_id', req.params.id)
+      .select('employee_id,username,is_active,must_change_password')
+      .single();
+    if (updated.error) return res.status(400).json({ error: updated.error.message });
+    return res.json({ credential: updated.data });
+  }
+
+  if (!username) return res.status(400).json({ error: 'Username is required when creating credentials for an employee who does not already have credentials.' });
+  const inserted = await supabase
+    .from('employee_credentials')
+    .insert({ employee_id: req.params.id, username, ...credentialPayload })
+    .select('employee_id,username,is_active,must_change_password')
+    .single();
+  if (inserted.error) return res.status(400).json({ error: inserted.error.message });
+  res.json({ credential: inserted.data });
+});
+
+app.delete('/api/employees/:id', requireArea('employees'), async (req, res) => {
+  if (req.user.employee_id === req.params.id) return res.status(400).json({ error: 'You cannot soft-delete your own employee account.' });
+  const allowed = await canDeactivateEmployee(req.params.id);
+  if (!allowed.ok) return res.status(400).json({ error: allowed.error });
+
+  const employee = await supabase
+    .from('employees')
+    .update({ is_active: false })
+    .eq('id', req.params.id)
+    .select('id,full_name,is_active')
+    .single();
+  if (employee.error) return res.status(400).json({ error: employee.error.message });
+
+  const credential = await supabase
+    .from('employee_credentials')
+    .update({ is_active: false })
+    .eq('employee_id', req.params.id)
+    .select('employee_id,username,is_active')
+    .maybeSingle();
+  if (credential.error) return res.status(400).json({ error: credential.error.message });
+
+  res.json({ employee: employee.data, credential: credential.data });
 });
 
 // INGREDIENTS
