@@ -55,7 +55,8 @@ export default function Cocktails() {
   const [recipeEdit, setRecipeEdit] = useState(blankRecipe);
   const [recipeItemEdits, setRecipeItemEdits] = useState({});
   const [newRecipeItem, setNewRecipeItem] = useState(blankRecipeItem);
-  const [compatEdit, setCompatEdit] = useState([]);
+  const [recipeReplaceRows, setRecipeReplaceRows] = useState([blankRecipeItem]);
+  const [compatEdit, setCompatEdit] = useState([]);  
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState('ok');
 
@@ -89,6 +90,21 @@ export default function Cocktails() {
     () => recipeItems.filter((item) => item.recipe_id === currentRecipe?.id),
     [recipeItems, currentRecipe]
   );
+
+  const recipeRows = useMemo(() => products.map((product) => {
+    const latestRecipe = recipes
+      .filter((recipe) => recipe.product_id === product.id)
+      .sort((a, b) => Number(b.version || 0) - Number(a.version || 0) || String(b.created_at || '').localeCompare(String(a.created_at || '')))[0] || null;
+  
+    return {
+      id: product.id,
+      cocktail: product.name,
+      recipe_status: latestRecipe?.status || 'none',
+      recipe_version: latestRecipe?.version || '-',
+      yield_servings: latestRecipe?.yield_servings || '-',
+      item_count: latestRecipe ? recipeItems.filter((item) => item.recipe_id === latestRecipe.id).length : 0
+    };
+  }), [products, recipes, recipeItems]);
 
   useEffect(() => {
     if (categories.length && !form.category_id) setForm((current) => ({ ...current, category_id: categories[0].id }));
@@ -130,6 +146,7 @@ export default function Cocktails() {
       notes: latestRecipe.notes || ''
     } : { ...blankRecipe, status: selectedProduct.status || 'draft' });
 
+
     setRecipeItemEdits(Object.fromEntries(latestRecipeItems.map((item) => [item.id, {
       ingredient_id: item.ingredient_id || '',
       quantity: item.quantity ?? '',
@@ -137,8 +154,19 @@ export default function Cocktails() {
       is_optional: !!item.is_optional,
       is_customer_supplied: !!item.is_customer_supplied
     }])));
-
+    
+    setRecipeReplaceRows(latestRecipeItems.length
+      ? latestRecipeItems.map((item) => ({
+          ingredient_id: item.ingredient_id || '',
+          quantity: item.quantity ?? '',
+          unit: item.unit || item.ingredients?.base_unit || '',
+          is_optional: !!item.is_optional,
+          is_customer_supplied: !!item.is_customer_supplied
+        }))
+      : [{ ...blankRecipeItem }]);
+    
     setNewRecipeItem(blankRecipeItem);
+    
     setCompatEdit(compatibility.filter((row) => row.product_id === selectedProduct.id).map((row) => row.liquor_type_id));
   }, [selectedProduct, variants, recipes, recipeItems, compatibility]);
 
@@ -157,10 +185,43 @@ export default function Cocktails() {
     setCreateRecipeLine(index, { ingredient_id: ingredientId, unit: ingredientUnit(ingredientId) });
   }
 
-  function removeCreateRecipeLine(index) {
-    setForm((current) => ({ ...current, recipe_items: current.recipe_items.filter((_, itemIndex) => itemIndex !== index) }));
+  function recipeItemsPayload(items) {
+    return items
+      .filter((item) => item.ingredient_id && item.quantity !== '')
+      .map((item) => ({
+        ingredient_id: item.ingredient_id,
+        quantity: item.quantity,
+        unit: ingredientUnit(item.ingredient_id) || item.unit,
+        is_optional: toBool(item.is_optional),
+        is_customer_supplied: toBool(item.is_customer_supplied)
+      }));
+  }
+  
+  function setRecipeReplaceLine(index, patch) {
+    setRecipeReplaceRows((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
+  }
+  
+  function setRecipeReplaceIngredient(index, ingredientId) {
+    setRecipeReplaceLine(index, { ingredient_id: ingredientId, unit: ingredientUnit(ingredientId) });
+  }
+  
+  function addRecipeReplaceLine() {
+    setRecipeReplaceRows((current) => [...current, { ...blankRecipeItem }]);
+  }
+  
+  function removeRecipeReplaceLine(index) {
+    setRecipeReplaceRows((current) => current.length === 1 ? [{ ...blankRecipeItem }] : current.filter((_, itemIndex) => itemIndex !== index));
   }
 
+  function removeCreateRecipeLine(index) {
+    setForm((current) => ({
+      ...current,
+      recipe_items: current.recipe_items.length === 1
+        ? [{ ingredient_id: '', quantity: '', unit: '' }]
+        : current.recipe_items.filter((_, itemIndex) => itemIndex !== index)
+    }));
+  }
+  
   function toggleCreateLiquor(id) {
     setForm((current) => ({
       ...current,
@@ -200,9 +261,7 @@ export default function Cocktails() {
       tags: splitTags(form.tags),
       is_featured: toBool(form.is_featured),
       liquor_type_ids: form.liquor_type_ids,
-      recipe_items: form.recipe_items
-        .filter((item) => item.ingredient_id && item.quantity !== '' && item.unit)
-        .map((item) => ({ ...item, is_optional: false, is_customer_supplied: false }))
+      recipe_items: recipeItemsPayload(form.recipe_items)
     };
 
     await runAction(async () => {
@@ -309,6 +368,24 @@ export default function Cocktails() {
     }, 'Recipe updated.');
   }
 
+  async function replaceRecipeItems(e) {
+    e.preventDefault();
+    await runAction(async () => {
+      await api(`/api/cocktails/${editing}/recipe-items`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          recipe_id: currentRecipe?.id,
+          recipe: {
+            status: recipeEdit.status,
+            yield_servings: recipeEdit.yield_servings,
+            notes: nullableText(recipeEdit.notes)
+          },
+          items: recipeItemsPayload(recipeReplaceRows)
+        })
+      });
+    }, 'Full recipe items replaced.');
+  }
+
   function setRecipeItemIngredient(itemId, ingredientId) {
     setRecipeItemEdits((current) => ({
       ...current,
@@ -369,13 +446,14 @@ export default function Cocktails() {
 
         <div className="full subPanel">
           <b>Recipe Items</b>
+          <p className="muted smallText noPad">Units are locked to each ingredient's base unit because inventory consumption depends on this match.</p>
           {form.recipe_items.map((item, index) => <div className="inlineRow recipeLine" key={index}>
             <select value={item.ingredient_id} onChange={(e) => setCreateRecipeIngredient(index, e.target.value)}>
               <option value="">Ingredient</option>
               {ingredients.map((ingredient) => <option key={ingredient.id} value={ingredient.id}>{ingredient.name}{ingredient.is_active ? '' : ' (inactive)'}</option>)}
             </select>
             <input type="number" min="0" step="0.001" placeholder="Qty" value={item.quantity} onChange={(e) => setCreateRecipeLine(index, { quantity: e.target.value })} />
-            <input placeholder="Unit" value={item.unit} onChange={(e) => setCreateRecipeLine(index, { unit: e.target.value })} />
+            <input disabled placeholder="Unit" value={item.unit || ingredientUnit(item.ingredient_id)} />
             <button type="button" onClick={() => removeCreateRecipeLine(index)}>Remove</button>
           </div>)}
           <button type="button" onClick={() => setForm({ ...form, recipe_items: [...form.recipe_items, { ingredient_id: '', quantity: '', unit: '' }] })}>Add recipe line</button>
@@ -461,34 +539,25 @@ export default function Cocktails() {
             </form>
 
             <h3>Recipe Items</h3>
-            {currentRecipeItems.length ? currentRecipeItems.map((item) => {
-              const draft = recipeItemEdits[item.id] || {};
-              return <div className="editLine recipeItemLine" key={item.id}>
-                <select value={draft.ingredient_id || ''} onChange={(e) => setRecipeItemIngredient(item.id, e.target.value)}>
+            <p className="muted smallText noPad">This editor replaces the full recipe item set for the cocktail. Remove a line here, then save, to delete it from the recipe.</p>
+            
+            <form onSubmit={replaceRecipeItems}>
+              {recipeReplaceRows.map((item, index) => <div className="editLine recipeItemLine" key={index}>
+                <select value={item.ingredient_id || ''} onChange={(e) => setRecipeReplaceIngredient(index, e.target.value)}>
                   <option value="">Ingredient</option>
                   {ingredients.map((ingredient) => <option key={ingredient.id} value={ingredient.id}>{ingredient.name}{ingredient.is_active ? '' : ' (inactive)'}</option>)}
                 </select>
-                <input type="number" min="0" step="0.001" value={numericInput(draft.quantity)} onChange={(e) => setRecipeItemEdits({ ...recipeItemEdits, [item.id]: { ...draft, quantity: e.target.value } })} />
-                <input value={draft.unit || ''} onChange={(e) => setRecipeItemEdits({ ...recipeItemEdits, [item.id]: { ...draft, unit: e.target.value } })} />
-                <label><input type="checkbox" checked={toBool(draft.is_optional)} onChange={(e) => setRecipeItemEdits({ ...recipeItemEdits, [item.id]: { ...draft, is_optional: e.target.checked } })} /> Optional</label>
-                <label><input type="checkbox" checked={toBool(draft.is_customer_supplied)} onChange={(e) => setRecipeItemEdits({ ...recipeItemEdits, [item.id]: { ...draft, is_customer_supplied: e.target.checked } })} /> Customer supplied</label>
-                <div className="inlineActions">
-                  <button type="button" onClick={() => saveRecipeItem(item.id)}>Save</button>
-                  <button type="button" className="danger" onClick={() => removeRecipeItem(item.id)}>Remove</button>
-                </div>
-              </div>;
-            }) : <div className="empty">No recipe items yet. Add a recipe line below.</div>}
-
-            <form className="editLine recipeItemLine" onSubmit={addRecipeItem}>
-              <select required value={newRecipeItem.ingredient_id} onChange={(e) => setNewRecipeItem({ ...newRecipeItem, ingredient_id: e.target.value, unit: ingredientUnit(e.target.value) })}>
-                <option value="">Ingredient</option>
-                {ingredients.map((ingredient) => <option key={ingredient.id} value={ingredient.id}>{ingredient.name}{ingredient.is_active ? '' : ' (inactive)'}</option>)}
-              </select>
-              <input required type="number" min="0" step="0.001" placeholder="Qty" value={newRecipeItem.quantity} onChange={(e) => setNewRecipeItem({ ...newRecipeItem, quantity: e.target.value })} />
-              <input required placeholder="Unit" value={newRecipeItem.unit} onChange={(e) => setNewRecipeItem({ ...newRecipeItem, unit: e.target.value })} />
-              <label><input type="checkbox" checked={toBool(newRecipeItem.is_optional)} onChange={(e) => setNewRecipeItem({ ...newRecipeItem, is_optional: e.target.checked })} /> Optional</label>
-              <label><input type="checkbox" checked={toBool(newRecipeItem.is_customer_supplied)} onChange={(e) => setNewRecipeItem({ ...newRecipeItem, is_customer_supplied: e.target.checked })} /> Customer supplied</label>
-              <button className="primary">Add recipe item</button>
+                <input type="number" min="0" step="0.001" placeholder="Qty" value={numericInput(item.quantity)} onChange={(e) => setRecipeReplaceLine(index, { quantity: e.target.value })} />
+                <input disabled placeholder="Unit" value={item.unit || ingredientUnit(item.ingredient_id)} />
+                <label><input type="checkbox" checked={toBool(item.is_optional)} onChange={(e) => setRecipeReplaceLine(index, { is_optional: e.target.checked })} /> Optional</label>
+                <label><input type="checkbox" checked={toBool(item.is_customer_supplied)} onChange={(e) => setRecipeReplaceLine(index, { is_customer_supplied: e.target.checked })} /> Customer supplied</label>
+                <button type="button" className="danger" onClick={() => removeRecipeReplaceLine(index)}>Remove</button>
+              </div>)}
+            
+              <div className="inlineActions">
+                <button type="button" onClick={addRecipeReplaceLine}>Add recipe line</button>
+                <button className="primary">Save full recipe items</button>
+              </div>
             </form>
           </>}
         </div>
@@ -501,6 +570,18 @@ export default function Cocktails() {
         columns={['name', 'slug', 'status', 'is_featured', 'prep_time_minutes']}
         format={{ is_featured: (value) => value ? 'Yes' : 'No' }}
         actions={(row) => <button onClick={() => startEdit(row)}>Edit</button>}
+      />
+    </Section>
+
+    <Section title="Recipes">
+      <SimpleTable
+        rows={recipeRows}
+        columns={['cocktail', 'recipe_status', 'recipe_version', 'yield_servings', 'item_count']}
+        actions={(row) => (
+          <button type="button" onClick={() => startEdit({ id: row.id, name: row.cocktail })}>
+            Edit recipe
+          </button>
+        )}
       />
     </Section>
 
