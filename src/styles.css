@@ -479,3 +479,89 @@ input[aria-invalid="true"] {
 .danger{background:#ffe9e6;color:var(--danger);border-color:#ffc7bf}.danger:hover{border-color:#e3998d}.subPanel{border:1px solid var(--line);border-radius:16px;background:#fff;padding:14px;margin-top:14px}.subPanel h3{margin:0 0 12px;font-size:15px}.editorStack{display:grid;gap:14px;margin-top:16px}.editLine{display:grid;gap:10px;align-items:center;padding:12px;border:1px solid #eee2d3;border-radius:14px;background:#fffaf6;margin:10px 0}.variantLine{grid-template-columns:minmax(160px,2fr) minmax(90px,1fr) minmax(110px,1fr) minmax(90px,1fr) minmax(130px,1fr) auto auto}.recipeLine{grid-template-columns:2fr 1fr 120px auto}.recipeItemLine{grid-template-columns:2fr 1fr 110px auto auto auto}.smallText{font-size:12px;padding:0}.compactButton{margin-top:12px}@media(max-width:1180px){.variantLine,.recipeItemLine{grid-template-columns:1fr 1fr}.recipeLine{grid-template-columns:1fr}}@media(max-width:720px){.variantLine,.recipeItemLine{grid-template-columns:1fr}.editLine{align-items:stretch}}
 
 .noPad{padding:0;margin:4px 0 10px}
+
+/* Cocktail image upload */
+.imageUploadPanel {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.editorImagePanel {
+  grid-template-columns: 140px 1fr;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.imagePreviewBox {
+  width: 120px;
+  height: 120px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fffaf6;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.cocktailImagePreview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.imagePlaceholder {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 10px;
+}
+
+.imageUploadControls {
+  display: grid;
+  gap: 10px;
+}
+
+.fileInputBlock {
+  display: grid;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.fileInputBlock input,
+.imageUploadControls input[type="file"] {
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  background: #fffaf6;
+}
+
+.selectedFile {
+  display: inline-flex;
+  width: fit-content;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fffaf6;
+  color: var(--muted);
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.tableImageThumb {
+  width: 46px;
+  height: 46px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fffaf6;
+  display: block;
+}
+
+@media (max-width: 720px) {
+  .editorImagePanel {
+    grid-template-columns: 1fr;
+  }
+}
