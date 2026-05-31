@@ -23,6 +23,65 @@ function zodErrorMessage(error, fallback) {
   return `${path}${first.message}`;
 }
 
+const recipePayloadSchema = z.object({
+  status: z.enum(productStatuses).optional(),
+  yield_servings: z.coerce.number().int().positive().optional(),
+  notes: z.string().nullable().optional()
+});
+
+const recipeItemPayloadSchema = z.object({
+  ingredient_id: uuid,
+  quantity: z.coerce.number().nonnegative(),
+  unit: z.string().min(1),
+  is_optional: z.boolean().optional(),
+  is_customer_supplied: z.boolean().optional()
+});
+
+const recipeItemPatchSchema = recipeItemPayloadSchema.partial();
+
+async function validateRecipeItemPayloads(items, res) {
+  if (!items.length) return true;
+
+  const ingredientIds = [...new Set(items.map((item) => item.ingredient_id).filter(Boolean))];
+  if (!ingredientIds.length) return true;
+
+  const ingredients = await supabase.from('ingredients').select('id,name,base_unit').in('id', ingredientIds);
+  if (ingredients.error) {
+    res.status(400).json({ error: ingredients.error.message });
+    return false;
+  }
+
+  const ingredientById = new Map((ingredients.data || []).map((ingredient) => [ingredient.id, ingredient]));
+
+  for (const item of items) {
+    if (!item.ingredient_id) continue;
+
+    const ingredient = ingredientById.get(item.ingredient_id);
+    if (!ingredient) {
+      res.status(400).json({ error: `Ingredient ${item.ingredient_id} does not exist.` });
+      return false;
+    }
+
+    if (item.unit && String(item.unit).toLowerCase() !== String(ingredient.base_unit).toLowerCase()) {
+      res.status(400).json({ error: `${ingredient.name} must use ${ingredient.base_unit} as its recipe unit.` });
+      return false;
+    }
+  }
+
+  return true;
+}
+
+async function findCurrentRecipeForProduct(productId) {
+  return supabase
+    .from('recipes')
+    .select('*')
+    .eq('product_id', productId)
+    .order('version', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+}
+
 async function loadCocktailAdminData({ activeIngredientsOnly = true } = {}) {
   const ingredientQuery = supabase.from('ingredients').select('*').order('name');
   if (activeIngredientsOnly) ingredientQuery.eq('is_active', true);
@@ -102,13 +161,7 @@ cocktailRouter.post('/cocktails', requireArea('cocktails'), async (req, res) => 
     recipe_version: z.coerce.number().int().positive().default(1),
     yield_servings: z.coerce.number().int().positive().default(1),
     liquor_type_ids: z.array(uuid).optional(),
-    recipe_items: z.array(z.object({
-      ingredient_id: uuid,
-      quantity: z.coerce.number().nonnegative(),
-      unit: z.string().min(1),
-      is_optional: z.boolean().optional(),
-      is_customer_supplied: z.boolean().optional()
-    })).optional()
+    recipe_items: z.array(recipeItemPayloadSchema).optional()
   }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid cocktail') });
 
@@ -150,13 +203,16 @@ cocktailRouter.post('/cocktails', requireArea('cocktails'), async (req, res) => 
   if (recipe.error) { await cleanup(); return res.status(400).json({ error: recipe.error.message }); }
 
   if (p.recipe_items?.length) {
+    const validItems = await validateRecipeItemPayloads(p.recipe_items, res);
+    if (!validItems) { await cleanup(); return; }
+  
     const recipeItems = await supabase
       .from('recipe_items')
       .insert(p.recipe_items.map((item) => ({ ...clean(item), recipe_id: recipe.data.id })))
       .select();
     if (recipeItems.error) { await cleanup(); return res.status(400).json({ error: recipeItems.error.message }); }
   }
-
+  
   if (p.liquor_type_ids?.length) {
     const compat = await supabase
       .from('product_liquor_compatibility')
@@ -317,6 +373,72 @@ cocktailRouter.post('/cocktails/:id/liquors', requireArea('cocktails'), async (r
   if (data) res.json(data);
 });
 
+cocktailRouter.put('/cocktails/:id/recipe-items', requireArea('cocktails'), async (req, res) => {
+  const parsed = z.object({
+    recipe_id: uuid.optional(),
+    recipe: recipePayloadSchema.optional(),
+    items: z.array(recipeItemPayloadSchema).default([])
+  }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid recipe replacement') });
+
+  const productId = req.params.id;
+  const product = await supabase.from('products').select('id,status').eq('id', productId).maybeSingle();
+  if (product.error) return res.status(400).json({ error: product.error.message });
+  if (!product.data) return res.status(404).json({ error: 'Cocktail not found.' });
+
+  const validItems = await validateRecipeItemPayloads(parsed.data.items, res);
+  if (!validItems) return;
+
+  let recipe;
+  if (parsed.data.recipe_id) {
+    recipe = await supabase.from('recipes').select('*').eq('id', parsed.data.recipe_id).eq('product_id', productId).maybeSingle();
+  } else {
+    recipe = await findCurrentRecipeForProduct(productId);
+  }
+
+  if (recipe.error) return res.status(400).json({ error: recipe.error.message });
+
+  if (!recipe.data) {
+    recipe = await supabase
+      .from('recipes')
+      .insert({
+        product_id: productId,
+        status: parsed.data.recipe?.status || product.data.status || 'draft',
+        yield_servings: parsed.data.recipe?.yield_servings || 1,
+        notes: parsed.data.recipe?.notes ?? null,
+        version: 1
+      })
+      .select()
+      .single();
+
+    if (recipe.error) return res.status(400).json({ error: recipe.error.message });
+  } else if (parsed.data.recipe && Object.keys(clean(parsed.data.recipe)).length) {
+    const updatedRecipe = await supabase
+      .from('recipes')
+      .update(clean(parsed.data.recipe))
+      .eq('id', recipe.data.id)
+      .select()
+      .single();
+
+    if (updatedRecipe.error) return res.status(400).json({ error: updatedRecipe.error.message });
+    recipe = updatedRecipe;
+  }
+
+  const deleted = await supabase.from('recipe_items').delete().eq('recipe_id', recipe.data.id);
+  if (deleted.error) return res.status(400).json({ error: deleted.error.message });
+
+  if (!parsed.data.items.length) return res.json({ recipe: recipe.data, items: [] });
+
+  const inserted = await supabase
+    .from('recipe_items')
+    .insert(parsed.data.items.map((item) => ({ ...clean(item), recipe_id: recipe.data.id })))
+    .select('*, ingredients(name,base_unit)');
+
+  if (inserted.error) return res.status(400).json({ error: inserted.error.message });
+
+  res.json({ recipe: recipe.data, items: inserted.data });
+});
+
 cocktailRouter.post('/recipes', requireArea('cocktails'), async (req, res) => {
   const parsed = z.object({
     product_id: uuid,
@@ -344,11 +466,7 @@ cocktailRouter.post('/recipes', requireArea('cocktails'), async (req, res) => {
 });
 
 cocktailRouter.patch('/recipes/:recipeId', requireArea('cocktails'), async (req, res) => {
-  const parsed = z.object({
-    status: z.enum(productStatuses).optional(),
-    yield_servings: z.coerce.number().int().positive().optional(),
-    notes: z.string().nullable().optional()
-  }).safeParse(req.body);
+  const parsed = recipePayloadSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid recipe update') });
 
   const payload = clean(parsed.data);
@@ -359,17 +477,14 @@ cocktailRouter.patch('/recipes/:recipeId', requireArea('cocktails'), async (req,
 });
 
 cocktailRouter.post('/recipes/:recipeId/items', requireArea('cocktails'), async (req, res) => {
-  const parsed = z.object({
-    ingredient_id: uuid,
-    quantity: z.coerce.number().nonnegative(),
-    unit: z.string().min(1),
-    is_optional: z.boolean().optional(),
-    is_customer_supplied: z.boolean().optional()
-  }).safeParse(req.body);
+  const parsed = recipeItemPayloadSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid recipe item') });
 
   const recipe = await fetchRecipe(req.params.recipeId);
   if (recipe.error) return res.status(400).json({ error: recipe.error });
+
+  const validItems = await validateRecipeItemPayloads([parsed.data], res);
+  if (!validItems) return;
 
   const data = await sb(
     supabase
@@ -384,32 +499,34 @@ cocktailRouter.post('/recipes/:recipeId/items', requireArea('cocktails'), async 
 
 // Backward-compatible old route name.
 cocktailRouter.post('/recipe-items', requireArea('cocktails'), async (req, res) => {
-  const parsed = z.object({
-    recipe_id: uuid,
-    ingredient_id: uuid,
-    quantity: z.coerce.number().nonnegative(),
-    unit: z.string().min(1),
-    is_optional: z.boolean().optional(),
-    is_customer_supplied: z.boolean().optional()
-  }).safeParse(req.body);
+  const parsed = recipeItemPayloadSchema.extend({ recipe_id: uuid }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid recipe item') });
+
+  const validItems = await validateRecipeItemPayloads([parsed.data], res);
+  if (!validItems) return;
 
   const data = await sb(supabase.from('recipe_items').insert(clean(parsed.data)).select('*, ingredients(name,base_unit)').single(), res);
   if (data) res.json(data);
 });
 
 cocktailRouter.patch('/recipe-items/:itemId', requireArea('cocktails'), async (req, res) => {
-  const parsed = z.object({
-    ingredient_id: uuid.optional(),
-    quantity: z.coerce.number().nonnegative().optional(),
-    unit: z.string().min(1).optional(),
-    is_optional: z.boolean().optional(),
-    is_customer_supplied: z.boolean().optional()
-  }).safeParse(req.body);
+  const parsed = recipeItemPatchSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid recipe item update') });
 
   const payload = clean(parsed.data);
   if (!Object.keys(payload).length) return res.status(400).json({ error: 'No recipe item fields were provided to update.' });
+
+  if (payload.ingredient_id || payload.unit) {
+    const current = await supabase.from('recipe_items').select('ingredient_id,unit').eq('id', req.params.itemId).maybeSingle();
+    if (current.error) return res.status(400).json({ error: current.error.message });
+    if (!current.data) return res.status(404).json({ error: 'Recipe item not found.' });
+
+    const validItems = await validateRecipeItemPayloads([{
+      ingredient_id: payload.ingredient_id || current.data.ingredient_id,
+      unit: payload.unit || current.data.unit
+    }], res);
+    if (!validItems) return;
+  }
 
   const data = await sb(
     supabase
