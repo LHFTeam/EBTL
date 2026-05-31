@@ -50,9 +50,25 @@ export function createApp() {
 
   if (isProd) {
     const distPath = path.join(__dirname, '..', 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
+  
+    // Public landing page
+    app.get('/', (_req, res) => {
+      res.sendFile(path.join(distPath, 'landing.html'));
+    });
+  
+    // Serve built static assets, but do not automatically serve index.html at "/"
+    app.use(express.static(distPath, { index: false }));
+  
+    // Admin app routes
+    app.get(['/login', '/dashboard', '/admin', '/admin/*'], (_req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  
+    // Fallback: keep unknown frontend routes inside the admin app
+    app.get('*', (_req, res) => {
+      res.redirect('/');
+    });
   }
-
+  
   return app;
 }
