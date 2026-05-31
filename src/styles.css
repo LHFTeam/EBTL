@@ -470,3 +470,8 @@ input[aria-invalid="true"] {
     grid-template-columns: 1fr;
   }
 }
+
+.filtersBar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.filtersBar input,.filtersBar select{border:1px solid var(--line);border-radius:12px;padding:11px 12px;background:white;min-width:220px}
+.warning{background:#fff4d8;color:#6f4710;border:1px solid #f0cf8a;padding:12px;border-radius:12px}
+.costHint{padding:0;margin:0;line-height:1.45}
