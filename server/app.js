@@ -41,7 +41,7 @@ export function createApp() {
   app.use(helmet({ contentSecurityPolicy: false }));
   app.use(compression());
   app.use(morgan('tiny'));
-  app.use(express.json({ limit: '2mb' }));
+  app.use(express.json({ limit: '8mb' }));
 
   app.use((req, _res, next) => {
     // Keep create payloads tidy, but do not mutate PATCH/PUT payloads.
