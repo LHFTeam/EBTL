@@ -547,7 +547,9 @@ async function loadCatalog({
 
   if (onlyFeatured) productQuery = productQuery.eq('is_featured', true);
   if (categoryId) productQuery = productQuery.eq('category_id', categoryId);
-  if (Array.isArray(productIds) && productIds.length) productQuery = productQuery.in('id', productIds);
+  if (Array.isArray(productIds) && productIds.length) {
+    productQuery = productQuery.in('id', productIds);
+  }
   
   const products = await productQuery;
   if (products.error) return {
@@ -576,9 +578,9 @@ async function loadCatalog({
     });
   }
 
-  const productIds = productRows.map((product) => product.id);
+  const catalogProductIds = productRows.map((product) => product.id);
 
-  if (!productIds.length) {
+  if (!catalogProductIds.length) {
     return {
       data: {
         cards: [],
@@ -598,25 +600,25 @@ async function loadCatalog({
     supabase
       .from('product_variants')
       .select('*')
-      .in('product_id', productIds)
+      .in('product_id', catalogProductIds)
       .eq('is_active', true)
       .order('price_inc_vat'),
 
     supabase
       .from('product_liquor_compatibility')
       .select('*, liquor_types(id,name)')
-      .in('product_id', productIds),
+      .in('product_id', catalogProductIds),
 
     supabase
       .from('recipes')
       .select('*')
-      .in('product_id', productIds)
+      .in('product_id', catalogProductIds)
       .eq('status', 'active')
       .order('version', {
         ascending: false
       })
-  ]);
-
+  ]);  
+  
   for (const result of [variants, compatibility, recipes]) {
     if (result.error) return {
       error: result.error
