@@ -12,6 +12,48 @@ const uuid = z.string().uuid();
 const nullableUuid = uuid.nullable();
 const vatRate = z.coerce.number().min(0).max(1);
 
+const shortDescription = z.string().max(40, 'Short description must be 40 characters or less.').nullable().optional();
+const markdownDescription = z.string().max(6000, 'Description is too long.').nullable().optional();
+const hexColor = z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Color must be a hex value like #F35F4B.');
+
+function normalizeTagName(value) {
+  return String(value || '').trim();
+}
+
+function normalizeTagNames(values = []) {
+  return [...new Set((values || []).map(normalizeTagName).filter(Boolean))];
+}
+
+async function validateProductTagNames(tagNames, res) {
+  const normalizedTags = normalizeTagNames(tagNames);
+  if (!normalizedTags.length) return { ok: true, tags: [] };
+
+  const result = await supabase
+    .from('product_tags')
+    .select('name,is_active')
+    .in('name', normalizedTags);
+
+  if (result.error) {
+    res.status(400).json({ error: result.error.message });
+    return { ok: false };
+  }
+
+  const activeNames = new Set(
+    (result.data || [])
+      .filter((tag) => tag.is_active)
+      .map((tag) => tag.name)
+  );
+
+  const invalid = normalizedTags.filter((tagName) => !activeNames.has(tagName));
+
+  if (invalid.length) {
+    res.status(400).json({ error: `Unknown or inactive product tag: ${invalid.join(', ')}` });
+    return { ok: false };
+  }
+
+  return { ok: true, tags: normalizedTags };
+}
+
 const COCKTAIL_IMAGE_BUCKET = 'cocktails';
 const MAX_COCKTAIL_IMAGE_BYTES = 3 * 1024 * 1024;
 
@@ -120,7 +162,7 @@ async function loadCocktailAdminData({ activeIngredientsOnly = true } = {}) {
   const ingredientQuery = supabase.from('ingredients').select('*').order('name');
   if (activeIngredientsOnly) ingredientQuery.eq('is_active', true);
 
-  const [products, categories, variants, liquorTypes, compatibility, ingredients, recipes, recipeItems] = await Promise.all([
+  const [products, categories, variants, liquorTypes, compatibility, ingredients, recipes, recipeItems, productTags] = await Promise.all([
     supabase.from('products').select('*, product_categories(name)').order('name'),
     supabase.from('product_categories').select('*').order('sort_order').order('name'),
     supabase.from('product_variants').select('*').order('name'),
@@ -128,10 +170,11 @@ async function loadCocktailAdminData({ activeIngredientsOnly = true } = {}) {
     supabase.from('product_liquor_compatibility').select('*'),
     ingredientQuery,
     supabase.from('recipes').select('*').order('version', { ascending: false }).order('created_at', { ascending: false }),
-    supabase.from('recipe_items').select('*, ingredients(name,base_unit)').order('id')
+    supabase.from('recipe_items').select('*, ingredients(name,base_unit)').order('id'),
+    supabase.from('product_tags').select('*').order('display_order').order('name')
   ]);
-
-  return { products, categories, variants, liquorTypes, compatibility, ingredients, recipes, recipeItems };
+  
+  return { products, categories, variants, liquorTypes, compatibility, ingredients, recipes, recipeItems, productTags };
 }
 
 function sendCocktailAdminData(resultMap, res) {
@@ -145,7 +188,8 @@ function sendCocktailAdminData(resultMap, res) {
     compatibility: resultMap.compatibility.data,
     ingredients: resultMap.ingredients.data,
     recipes: resultMap.recipes.data,
-    recipeItems: resultMap.recipeItems.data
+    recipeItems: resultMap.recipeItems.data,
+    productTags: resultMap.productTags.data
   });
 }
 
@@ -177,10 +221,74 @@ cocktailRouter.get('/products', requireArea('cocktails'), async (_req, res) => {
   sendCocktailAdminData(await loadCocktailAdminData({ activeIngredientsOnly: false }), res);
 });
 
+const productTagPayloadSchema = z.object({
+  name: z.string().trim().min(1).max(40),
+  color_hex: hexColor,
+  display_order: z.coerce.number().int().optional(),
+  is_active: z.boolean().optional()
+});
+
+const productTagPatchSchema = productTagPayloadSchema.partial();
+
+cocktailRouter.get('/product-tags', requireArea('cocktails'), async (req, res) => {
+  let query = supabase.from('product_tags').select('*').order('display_order').order('name');
+
+  if (String(req.query.include_inactive || '').toLowerCase() !== 'true') {
+    query = query.eq('is_active', true);
+  }
+
+  const data = await sb(query, res);
+  if (data) res.json(data);
+});
+
+cocktailRouter.post('/product-tags', requireArea('cocktails'), async (req, res) => {
+  const parsed = productTagPayloadSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid product tag') });
+  }
+
+  const data = await sb(
+    supabase.from('product_tags').insert(clean(parsed.data)).select().single(),
+    res
+  );
+
+  if (data) res.json(data);
+});
+
+cocktailRouter.patch('/product-tags/:id', requireArea('cocktails'), async (req, res) => {
+  const parsed = productTagPatchSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid product tag update') });
+  }
+
+  const payload = clean(parsed.data);
+  if (!Object.keys(payload).length) {
+    return res.status(400).json({ error: 'No product tag fields were provided to update.' });
+  }
+
+  const data = await sb(
+    supabase.from('product_tags').update(payload).eq('id', req.params.id).select().single(),
+    res
+  );
+
+  if (data) res.json(data);
+});
+
+cocktailRouter.delete('/product-tags/:id', requireArea('cocktails'), async (req, res) => {
+  const data = await sb(
+    supabase.from('product_tags').update({ is_active: false }).eq('id', req.params.id).select().single(),
+    res
+  );
+
+  if (data) res.json(data);
+});
+
 cocktailRouter.post('/cocktails', requireArea('cocktails'), async (req, res) => {
   const parsed = z.object({
     name: z.string().min(1),
     slug: z.string().min(1),
+    description: markdownDescription,
+    short_description: shortDescription,
     description: z.string().nullable().optional(),
     image_url: z.string().nullable().optional(),
     category_id: nullableUuid.optional(),
@@ -200,16 +308,21 @@ cocktailRouter.post('/cocktails', requireArea('cocktails'), async (req, res) => 
   if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid cocktail') });
 
   const p = parsed.data;
+
+  const validatedTags = await validateProductTagNames(p.tags || [], res);
+  if (!validatedTags.ok) return;
+  
   const productPayload = clean({
     category_id: p.category_id,
     name: p.name,
     slug: p.slug,
     description: p.description,
+    short_description: p.short_description,
     image_url: p.image_url,
     status: p.status,
     is_featured: p.is_featured,
     prep_time_minutes: p.prep_time_minutes,
-    tags: p.tags
+    tags: validatedTags.tags
   });
 
   const product = await supabase.from('products').insert(productPayload).select().single();
@@ -262,7 +375,8 @@ cocktailRouter.patch('/cocktails/:id', requireArea('cocktails'), async (req, res
   const parsed = z.object({
     name: z.string().min(1).optional(),
     slug: z.string().min(1).optional(),
-    description: z.string().nullable().optional(),
+    description: markdownDescription,
+    short_description: shortDescription,
     image_url: z.string().nullable().optional(),
     category_id: nullableUuid.optional(),
     status: z.enum(productStatuses).optional(),
@@ -273,7 +387,17 @@ cocktailRouter.patch('/cocktails/:id', requireArea('cocktails'), async (req, res
   }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid cocktail update') });
 
-  const payload = clean(parsed.data);
+  const validatedTags = parsed.data.tags === undefined
+    ? null
+    : await validateProductTagNames(parsed.data.tags || [], res);
+  
+  if (validatedTags && !validatedTags.ok) return;
+  
+  const payload = clean({
+    ...parsed.data,
+    ...(validatedTags ? { tags: validatedTags.tags } : {})
+  });
+  
   if (!Object.keys(payload).length) return res.status(400).json({ error: 'No cocktail fields were provided to update.' });
 
   const data = await sb(supabase.from('products').update(payload).eq('id', req.params.id).select().single(), res);
