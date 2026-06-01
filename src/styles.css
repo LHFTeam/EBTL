@@ -1254,3 +1254,136 @@ textarea:focus {
     justify-content: center;
   }
 }
+
+/* Product descriptions and predefined product tags */
+.fieldStack {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.fieldStack small,
+.tagPicker small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.miniForm textarea,
+.editLine textarea,
+textarea {
+  width: 100%;
+  border: 1px solid var(--brand-border, var(--line));
+  border-radius: 14px;
+  background: var(--brand-white, #fff);
+  color: var(--brand-ink, var(--ink));
+  padding: 11px 12px;
+  font: inherit;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.tagPicker {
+  display: grid;
+  gap: 8px;
+}
+
+.tagPicker > label {
+  margin: 0;
+  font-weight: 700;
+}
+
+.tagPickerControls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tagPickerControls select {
+  min-width: 240px;
+}
+
+.tagChipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.tagChip {
+  --tag-color: #1F6F68;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  border: 1px solid color-mix(in srgb, var(--tag-color) 52%, white);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tag-color) 13%, white);
+  color: var(--brand-navy, #0E2238);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tagChip::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--tag-color);
+  flex: 0 0 auto;
+}
+
+.tagChip button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  min-height: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.tagAdminForm {
+  grid-template-columns: minmax(180px, 2fr) 80px minmax(120px, 1fr) auto auto;
+  align-items: center;
+}
+
+.tagAdminList {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.tagAdminRow {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) 80px minmax(100px, 1fr) auto minmax(150px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--brand-border, var(--line));
+  border-radius: 16px;
+  background: #fffaf6;
+}
+
+.tagAdminForm input[type="color"],
+.tagAdminRow input[type="color"] {
+  min-height: 44px;
+  padding: 4px;
+}
+
+@media (max-width: 1180px) {
+  .tagAdminForm,
+  .tagAdminRow {
+    grid-template-columns: 1fr 90px;
+  }
+}
+
+@media (max-width: 720px) {
+  .tagAdminForm,
+  .tagAdminRow,
+  .tagPickerControls {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+}
