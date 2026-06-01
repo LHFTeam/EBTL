@@ -17,6 +17,7 @@ import { inventoryRouter } from './routes/inventoryRoutes.js';
 import { locationRouter } from './routes/locationRoutes.js';
 import { orderRouter } from './routes/orderRoutes.js';
 import { transferRouter } from './routes/transferRoutes.js';
+import { customerRouter } from './routes/customerRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -68,6 +69,7 @@ export function createApp() {
   app.use('/api', employeeRouter);
   app.use('/api', ingredientRouter);
   app.use('/api', cocktailRouter);
+  app.use('/api', customerRouter);
   app.use('/api', inventoryRouter);
   app.use('/api', transferRouter);
   app.use('/api', orderRouter);
