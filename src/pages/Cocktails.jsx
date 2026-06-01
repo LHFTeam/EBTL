@@ -3,18 +3,19 @@ import { api } from '../api/client.js';
 import { statuses } from '../config/constants.js';
 import { Loading, Message, Section, SimpleTable } from '../components/ui.jsx';
 import { useLoad } from '../hooks/useLoad.js';
-import { money, slugify, splitTags, toBool } from '../utils/format.js';
+import { money, slugify, toBool } from '../utils/format.js';
 
 const blankProduct = {
   name: '',
   slug: '',
   category_id: '',
+  short_description: '',
   description: '',
   image_url: '',
   status: 'active',
   is_featured: false,
   prep_time_minutes: 5,
-  tags: '',
+  tags: [],
   variant_name: 'Standard',
   serving_count: 1,
   price_ex_vat: '',
@@ -27,6 +28,7 @@ const blankProduct = {
 const blankVariant = { name: '', serving_count: 1, price_ex_vat: '', vat_rate: 0.14, is_active: true };
 const blankRecipe = { status: 'draft', yield_servings: 1, notes: '' };
 const blankRecipeItem = { ingredient_id: '', quantity: '', unit: '', is_optional: false, is_customer_supplied: false };
+const blankProductTag = { name: '', color_hex: '#1F6F68', display_order: 0, is_active: true };
 
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
@@ -95,6 +97,63 @@ async function imageUploadPayload(file) {
   };
 }
 
+function normalizeSelectedTags(values = []) {
+  return [...new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
+function colorForTag(productTags, tagName) {
+  return productTags.find((tag) => tag.name === tagName)?.color_hex || '#1F6F68';
+}
+
+function ProductTagChips({ tags = [], productTags = [], onRemove }) {
+  const selected = normalizeSelectedTags(tags);
+  if (!selected.length) return <span className="muted smallText">No tags selected.</span>;
+
+  return <div className="tagChipRow">
+    {selected.map((tagName) => (
+      <span
+        key={tagName}
+        className="tagChip"
+        style={{ '--tag-color': colorForTag(productTags, tagName) }}
+      >
+        {tagName}
+        {onRemove && (
+          <button type="button" onClick={() => onRemove(tagName)} aria-label={`Remove ${tagName}`}>
+            ×
+          </button>
+        )}
+      </span>
+    ))}
+  </div>;
+}
+
+function TagPicker({ label = 'Product tags', value = [], productTags = [], onChange }) {
+  const selected = normalizeSelectedTags(value);
+  const available = productTags.filter((tag) => tag.is_active && !selected.includes(tag.name));
+
+  function addTag(tagName) {
+    if (!tagName) return;
+    onChange(normalizeSelectedTags([...selected, tagName]));
+  }
+
+  function removeTag(tagName) {
+    onChange(selected.filter((name) => name !== tagName));
+  }
+
+  return <div className="tagPicker full">
+    <label>{label}</label>
+    <div className="tagPickerControls">
+      <select value="" onChange={(e) => addTag(e.target.value)}>
+        <option value="">Select a predefined tag</option>
+        {available.map((tag) => (
+          <option key={tag.id} value={tag.name}>{tag.name}</option>
+        ))}
+      </select>
+    </div>
+    <ProductTagChips tags={selected} productTags={productTags} onRemove={removeTag} />
+  </div>;
+}
+
 export default function Cocktails() {
   const { data, loading, error, reload } = useLoad(() => api('/api/cocktails'));
   const [form, setForm] = useState(blankProduct);
@@ -110,7 +169,10 @@ export default function Cocktails() {
   const [recipeReplaceRows, setRecipeReplaceRows] = useState([blankRecipeItem]);
   const [compatEdit, setCompatEdit] = useState([]);
   const [createImageFile, setCreateImageFile] = useState(null);
+
   const [editImageFile, setEditImageFile] = useState(null);
+  const [newTag, setNewTag] = useState(blankProductTag);
+  const [tagEdits, setTagEdits] = useState({});
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState('ok');
 
@@ -122,7 +184,9 @@ export default function Cocktails() {
   const liquorTypes = data?.liquorTypes || [];
   const ingredients = data?.ingredients || [];
   const compatibility = data?.compatibility || [];
-  const firstCategory = categories[0]?.id || '';
+  const productTags = data?.productTags || [];
+  const activeProductTags = productTags.filter((tag) => tag.is_active);
+  const firstCategory = categories[0]?.id || '';  
   const selectedProduct = products.find((product) => product.id === editing) || null;
 
   const variantRows = useMemo(
@@ -185,12 +249,13 @@ export default function Cocktails() {
       name: selectedProduct.name || '',
       slug: selectedProduct.slug || '',
       category_id: selectedProduct.category_id || '',
+      short_description: selectedProduct.short_description || '',
       description: selectedProduct.description || '',
       image_url: selectedProduct.image_url || '',
       status: selectedProduct.status || 'draft',
       is_featured: !!selectedProduct.is_featured,
       prep_time_minutes: selectedProduct.prep_time_minutes ?? 5,
-      tags: (selectedProduct.tags || []).join(', ')
+      tags: normalizeSelectedTags(selectedProduct.tags || [])
     });
 
     setVariantEdits(Object.fromEntries(productVariants.map((variant) => [variant.id, {
@@ -236,6 +301,15 @@ export default function Cocktails() {
       .map((row) => row.liquor_type_id)
     );
   }, [selectedProduct, variants, recipes, recipeItems, compatibility]);
+
+  useEffect(() => {
+    setTagEdits(Object.fromEntries(productTags.map((tag) => [tag.id, {
+      name: tag.name || '',
+      color_hex: tag.color_hex || '#1F6F68',
+      display_order: tag.display_order ?? 0,
+      is_active: !!tag.is_active
+    }])));
+  }, [productTags]);
 
   function ingredientUnit(ingredientId) {
     return ingredients.find((ingredient) => ingredient.id === ingredientId)?.base_unit || '';
@@ -369,9 +443,10 @@ export default function Cocktails() {
     const payload = {
       ...form,
       category_id: nullableUuid(form.category_id),
+      short_description: nullableText(form.short_description),
       description: nullableText(form.description),
       image_url: nullableText(form.image_url),
-      tags: splitTags(form.tags),
+      tags: normalizeSelectedTags(form.tags),
       is_featured: toBool(form.is_featured),
       liquor_type_ids: form.liquor_type_ids,
       recipe_items: recipeItemsPayload(form.recipe_items)
@@ -410,6 +485,45 @@ export default function Cocktails() {
     showMessage(`Editing ${row.name}.`);
     scrollMessageToTop();
   }
+
+  async function addProductTag(e) {
+    e.preventDefault();
+
+    await runAction(async () => {
+      await api('/api/product-tags', {
+        method: 'POST',
+        body: JSON.stringify(newTag)
+      });
+
+      setNewTag(blankProductTag);
+    }, 'Product tag added.');
+  }
+
+  async function saveProductTag(tagId) {
+    await runAction(async () => {
+      await api(`/api/product-tags/${tagId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(tagEdits[tagId])
+      });
+    }, 'Product tag updated.');
+  }
+
+  async function setProductTagActive(tagId, isActive) {
+    const tag = productTags.find((row) => row.id === tagId);
+
+    if (!isActive && !window.confirm(`Deactivate tag "${tag?.name || 'this tag'}"? Existing cocktails that use it will keep the text value, but it will not be selectable for new edits.`)) return;
+
+    await runAction(async () => {
+      if (isActive) {
+        await api(`/api/product-tags/${tagId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ is_active: true })
+        });
+      } else {
+        await api(`/api/product-tags/${tagId}`, { method: 'DELETE' });
+      }
+    }, isActive ? 'Product tag activated.' : 'Product tag deactivated.');
+  }
   
   async function saveProduct(e) {
     e.preventDefault();
@@ -421,12 +535,13 @@ export default function Cocktails() {
           name: productEdit.name,
           slug: productEdit.slug,
           category_id: nullableUuid(productEdit.category_id),
+          short_description: nullableText(productEdit.short_description),
           description: nullableText(productEdit.description),
           image_url: nullableText(productEdit.image_url),
           status: productEdit.status,
           is_featured: toBool(productEdit.is_featured),
           prep_time_minutes: productEdit.prep_time_minutes,
-          tags: splitTags(productEdit.tags)
+          tags: normalizeSelectedTags(productEdit.tags)
         })
       });
     }, 'Cocktail details updated.');
@@ -610,8 +725,105 @@ export default function Cocktails() {
   if (loading || error) return <Loading error={error} />;
 
   return <div className="grid">
+    <Section title="Product Tags">
+      <form className="miniForm tagAdminForm" onSubmit={addProductTag}>
+        <input
+          required
+          maxLength="40"
+          placeholder="Tag name, e.g. Best Seller"
+          value={newTag.name}
+          onChange={(e) => setNewTag({ ...newTag, name: e.target.value })}
+        />
+
+        <input
+          required
+          type="color"
+          value={newTag.color_hex}
+          onChange={(e) => setNewTag({ ...newTag, color_hex: e.target.value })}
+        />
+
+        <input
+          type="number"
+          placeholder="Display order"
+          value={newTag.display_order}
+          onChange={(e) => setNewTag({ ...newTag, display_order: e.target.value })}
+        />
+
+        <label className="checkboxField">
+          <input
+            type="checkbox"
+            checked={toBool(newTag.is_active)}
+            onChange={(e) => setNewTag({ ...newTag, is_active: e.target.checked })}
+          />
+          <span>Active</span>
+        </label>
+
+        <button className="primary">Add tag</button>
+      </form>
+
+      <div className="tagAdminList">
+        {productTags.length ? productTags.map((tag) => {
+          const draft = tagEdits[tag.id] || {};
+
+          return <div className="tagAdminRow" key={tag.id}>
+            <input
+              value={draft.name || ''}
+              maxLength="40"
+              onChange={(e) => setTagEdits({
+                ...tagEdits,
+                [tag.id]: { ...draft, name: e.target.value }
+              })}
+            />
+
+            <input
+              type="color"
+              value={draft.color_hex || '#1F6F68'}
+              onChange={(e) => setTagEdits({
+                ...tagEdits,
+                [tag.id]: { ...draft, color_hex: e.target.value }
+              })}
+            />
+
+            <input
+              type="number"
+              value={draft.display_order ?? 0}
+              onChange={(e) => setTagEdits({
+                ...tagEdits,
+                [tag.id]: { ...draft, display_order: e.target.value }
+              })}
+            />
+
+            <label className="checkboxField">
+              <input
+                type="checkbox"
+                checked={toBool(draft.is_active)}
+                onChange={(e) => setTagEdits({
+                  ...tagEdits,
+                  [tag.id]: { ...draft, is_active: e.target.checked }
+                })}
+              />
+              <span>Active</span>
+            </label>
+
+            <ProductTagChips tags={[draft.name || tag.name]} productTags={[{ ...tag, ...draft }]} />
+
+            <div className="inlineActions">
+              <button type="button" onClick={() => saveProductTag(tag.id)}>Save</button>
+              <button
+                type="button"
+                className={tag.is_active ? 'danger' : ''}
+                onClick={() => setProductTagActive(tag.id, !tag.is_active)}
+              >
+                {tag.is_active ? 'Deactivate' : 'Activate'}
+              </button>
+            </div>
+          </div>;
+        }) : <div className="empty">No product tags yet. Create your first tag above.</div>}
+      </div>
+    </Section>
+
     <Section
-      title="Add New Cocktail"
+      title="Add New Cocktail"  
       action={
         <button type="button" onClick={() => setAddOpen((current) => !current)}>
           {addOpen ? 'Collapse' : 'Add cocktail'}
@@ -642,12 +854,28 @@ export default function Cocktails() {
           {statuses.map((status) => <option key={status}>{status}</option>)}
         </select>
 
-        <input
-          placeholder="Description"
-          value={form.description}
-          onChange={(e) => setForm({ ...form, description: e.target.value })}
-        />
+        <label className="fieldStack">
+          <span>Short description</span>
+          <input
+            maxLength="40"
+            placeholder="Up to 40 characters"
+            value={form.short_description}
+            onChange={(e) => setForm({ ...form, short_description: e.target.value })}
+          />
+          <small>{String(form.short_description || '').length}/40</small>
+        </label>
 
+        <label className="fieldStack full">
+          <span>Full description</span>
+          <textarea
+            rows="5"
+            placeholder="Markdown supported. Example: **Bold**, _italic_, bullet lists."
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+          />
+          <small>Use Markdown. Do not paste raw HTML.</small>
+        </label>
+        
         <div className="full imageUploadPanel">
           <div>
             <b>Cocktail image</b>
@@ -680,12 +908,12 @@ export default function Cocktails() {
           onChange={(e) => setForm({ ...form, prep_time_minutes: e.target.value })}
         />
 
-        <input
-          placeholder="Tags, comma separated"
+        <TagPicker
           value={form.tags}
-          onChange={(e) => setForm({ ...form, tags: e.target.value })}
+          productTags={activeProductTags}
+          onChange={(tags) => setForm({ ...form, tags })}
         />
-
+        
         <input
           required
           placeholder="Variant name"
@@ -881,12 +1109,28 @@ export default function Cocktails() {
             {statuses.map((status) => <option key={status}>{status}</option>)}
           </select>
 
-          <input
-            placeholder="Description"
-            value={productEdit.description || ''}
-            onChange={(e) => setProductEdit({ ...productEdit, description: e.target.value })}
-          />
+          <label className="fieldStack">
+            <span>Short description</span>
+            <input
+              maxLength="40"
+              placeholder="Up to 40 characters"
+              value={productEdit.short_description || ''}
+              onChange={(e) => setProductEdit({ ...productEdit, short_description: e.target.value })}
+            />
+            <small>{String(productEdit.short_description || '').length}/40</small>
+          </label>
 
+          <label className="fieldStack full">
+            <span>Full description</span>
+            <textarea
+              rows="5"
+              placeholder="Markdown supported. Example: **Bold**, _italic_, bullet lists."
+              value={productEdit.description || ''}
+              onChange={(e) => setProductEdit({ ...productEdit, description: e.target.value })}
+            />
+            <small>Stored as Markdown in products.description.</small>
+          </label>
+          
           <input
             type="number"
             min="0"
@@ -894,12 +1138,12 @@ export default function Cocktails() {
             onChange={(e) => setProductEdit({ ...productEdit, prep_time_minutes: e.target.value })}
           />
 
-          <input
-            placeholder="Tags, comma separated"
-            value={productEdit.tags || ''}
-            onChange={(e) => setProductEdit({ ...productEdit, tags: e.target.value })}
+          <TagPicker
+            value={productEdit.tags || []}
+            productTags={activeProductTags}
+            onChange={(tags) => setProductEdit({ ...productEdit, tags })}
           />
-
+          
           <label className="checkboxField">
             <input
               type="checkbox"
@@ -1184,11 +1428,13 @@ export default function Cocktails() {
     )}
 
     <Section title="Cocktails">
+
       <SimpleTable
         rows={products}
-        columns={['image_url', 'name', 'slug', 'status', 'is_featured', 'prep_time_minutes']}
+        columns={['image_url', 'name', 'short_description', 'tags', 'status', 'is_featured', 'prep_time_minutes']}
         format={{
           image_url: (value, row) => value ? <img className="tableImageThumb" src={value} alt={row.name} /> : '-',
+          tags: (value) => <ProductTagChips tags={value || []} productTags={productTags} />,
           is_featured: (value) => value ? 'Yes' : 'No'
         }}
         actions={(row) => <button onClick={() => startEdit(row)}>Edit</button>}
