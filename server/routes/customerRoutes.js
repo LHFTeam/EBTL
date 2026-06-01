@@ -292,6 +292,24 @@ function compatibilityPayload(rows = []) {
   }));
 }
 
+function publicProductTag(tag) {
+  if (!tag) return null;
+
+  return {
+    id: tag.id,
+    name: tag.name,
+    color_hex: tag.color_hex,
+    display_order: tag.display_order || 0
+  };
+}
+
+function productTagDetails(tagNames = [], productTagsByName = new Map()) {
+  return (tagNames || [])
+    .map((tagName) => productTagsByName.get(String(tagName).toLowerCase()))
+    .filter(Boolean)
+    .map(publicProductTag);
+}
+
 function productCardPayload({
   product,
   category,
@@ -300,7 +318,8 @@ function productCardPayload({
   recipe,
   recipeItems,
   balancesByIngredientId,
-  locationId
+  locationId,
+  productTagsByName = new Map()
 }) {
   const activeVariants = variants.filter((variant) => variant.is_active);
 
@@ -330,10 +349,13 @@ function productCardPayload({
     id: product.id,
     slug: product.slug,
     name: product.name,
+    short_description: product.short_description || null,
     description: product.description,
+    description_format: 'markdown',
     image_url: product.image_url,
-    tags: product.tags || [],
-    prep_time_minutes: product.prep_time_minutes,
+    tags: productTagDetails(product.tags || [], productTagsByName).map((tag) => tag.name),
+    tag_details: productTagDetails(product.tags || [], productTagsByName),
+    prep_time_minutes: product.prep_time_minutes,    
     is_featured: product.is_featured,
     display_order: product.display_order,
     category: publicCategory(category),
@@ -564,7 +586,7 @@ async function loadCatalog({
 
   if (search) {
     productRows = productRows.filter((product) => {
-      const haystack = [product.name, product.description, ...(product.tags || [])]
+      const haystack = [product.name, product.short_description, product.description, ...(product.tags || [])]
         .map(normalizeString)
         .join(' ');
 
@@ -593,13 +615,14 @@ async function loadCatalog({
           compatibility: [],
           recipes: [],
           recipeItems: [],
-          balances: []
+          balances: [],
+          productTags: []
         }
       }
     };
   }
 
-  const [variants, compatibility, recipes] = await Promise.all([
+  const [variants, compatibility, recipes, productTags] = await Promise.all([
     supabase
       .from('product_variants')
       .select('*')
@@ -619,10 +642,17 @@ async function loadCatalog({
       .eq('status', 'active')
       .order('version', {
         ascending: false
-      })
+      }),
+
+    supabase
+      .from('product_tags')
+      .select('*')
+      .eq('is_active', true)
+      .order('display_order')
+      .order('name')
   ]);  
-  
-  for (const result of [variants, compatibility, recipes]) {
+    
+  for (const result of [variants, compatibility, recipes, productTags]) {
     if (result.error) return {
       error: result.error
     };
@@ -690,6 +720,10 @@ async function loadCatalog({
     (balances.data || []).map((balance) => [balance.ingredient_id, balance])
   );
 
+  const productTagsByName = new Map(
+    (productTags.data || []).map((tag) => [String(tag.name).toLowerCase(), tag])
+  );
+
   const cards = productRows.map((product) => {
     const productVariants = (variants.data || []).filter((variant) => variant.product_id === product.id);
     const productCompatibility = (compatibility.data || []).filter((row) => row.product_id === product.id);
@@ -704,7 +738,8 @@ async function loadCatalog({
       recipe,
       recipeItems: items,
       balancesByIngredientId,
-      locationId
+      locationId,
+      productTagsByName
     });
   });
 
@@ -717,7 +752,8 @@ async function loadCatalog({
         compatibility: compatibility.data || [],
         recipes: recipes.data || [],
         recipeItems: recipeItems.data || [],
-        balances: balances.data || []
+        balances: balances.data || [],
+        productTags: productTags.data || []
       }
     }
   };
@@ -1211,8 +1247,9 @@ customerRouter.get('/customer/home', async (req, res) => {
   });
 });
 
+
 customerRouter.get('/customer/cocktail-finder/options', async (_req, res) => {
-  const [liquorTypes, categories, products] = await Promise.all([
+  const [liquorTypes, categories, productTags] = await Promise.all([
     supabase
       .from('liquor_types')
       .select('*')
@@ -1228,23 +1265,26 @@ customerRouter.get('/customer/cocktail-finder/options', async (_req, res) => {
       .order('name'),
 
     supabase
-      .from('products')
-      .select('tags')
-      .eq('status', 'active')
+      .from('product_tags')
+      .select('*')
+      .eq('is_active', true)
+      .order('display_order')
+      .order('name')
   ]);
 
-  for (const result of [liquorTypes, categories, products]) {
+  for (const result of [liquorTypes, categories, productTags]) {
     if (result.error) return res.status(400).json({
       error: result.error.message
     });
   }
 
-  const tags = [...new Set((products.data || []).flatMap((product) => product.tags || []))].sort();
+  const productTagOptions = (productTags.data || []).map(publicProductTag);
 
   res.json({
     liquorTypes: (liquorTypes.data || []).map(publicLiquorType),
     categories: (categories.data || []).map(publicCategory),
-    tags,
+    tags: productTagOptions.map((tag) => tag.name),
+    productTags: productTagOptions,
     sortOptions: [
       {
         value: 'featured',
@@ -1261,6 +1301,7 @@ customerRouter.get('/customer/cocktail-finder/options', async (_req, res) => {
     ]
   });
 });
+
 
 customerRouter.get('/customer/cocktails', async (req, res) => {
   const parsed = z.object({
