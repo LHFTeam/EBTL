@@ -529,6 +529,7 @@ async function loadCatalog({
   locationId = null,
   onlyFeatured = false,
   categoryId = null,
+  productIds = [],
   q = '',
   liquorTypeIds = [],
   tags = []
@@ -546,7 +547,8 @@ async function loadCatalog({
 
   if (onlyFeatured) productQuery = productQuery.eq('is_featured', true);
   if (categoryId) productQuery = productQuery.eq('category_id', categoryId);
-
+  if (Array.isArray(productIds) && productIds.length) productQuery = productQuery.in('id', productIds);
+  
   const products = await productQuery;
   if (products.error) return {
     error: products.error
@@ -970,9 +972,10 @@ async function buildCheckoutQuote({
   const productIds = [...new Set(cartItems.data.map((item) => item.product_id))];
 
   const productCatalog = await loadCatalog({
-    locationId
+    locationId,
+    productIds
   });
-
+  
   if (productCatalog.error) return {
     error: productCatalog.error
   };
@@ -1893,6 +1896,17 @@ customerRouter.post('/customer/orders', async (req, res) => {
     error: quote.badRequest
   });
 
+  const itemsMissingRecipe = quote.data.quote.items.filter((item) => !item.recipe_id);
+
+  if (itemsMissingRecipe.length) {
+    return res.status(400).json({
+      error: 'Cannot place order. Some cart items do not have an active recipe.',
+      blocking_reasons: itemsMissingRecipe.map((item) => {
+        return `${item.product_name || 'Item'} does not have an active recipe, so inventory cannot be consumed safely.`;
+      })
+    });
+  }
+
   if (!quote.data.quote.validation.can_place_order) {
     return res.status(400).json({
       error: 'Cannot place order.',
@@ -1901,7 +1915,7 @@ customerRouter.post('/customer/orders', async (req, res) => {
   }
 
   const orderInsert = await supabase
-    .from('orders')
+    .from('orders')  
     .insert({
       customer_id: ensured.customer.id,
       location_id: parsed.data.location_id,
