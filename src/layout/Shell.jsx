@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { BarChart3 } from 'lucide-react';
 import { tabs } from '../config/navigation.jsx';
 import Cocktails from '../pages/Cocktails.jsx';
+import Liquors from '../pages/Liquors.jsx';
 import Dashboard from '../pages/Dashboard.jsx';
 import Employees from '../pages/Employees.jsx';
 import Ingredients from '../pages/Ingredients.jsx';
@@ -20,6 +21,14 @@ export default function Shell({ user, access, onLogout }) {
     <div className="userBox"><b>{user.name}</b><span>{user.role}</span><button onClick={onLogout}>Logout</button></div>
   </aside><main>
     <header><div><h1><ActiveIcon size={24} /> {tabs.find(t => t.key === active)?.label}</h1><p>Central warehouse + compound beach carts</p></div></header>
-    {active === 'dashboard' && <Dashboard />}{active === 'orders' && <Orders />}{active === 'inventory' && <Inventory />}{active === 'transfers' && <Transfers />}{active === 'ingredients' && <Ingredients />}{active === 'cocktails' && <Cocktails />}{active === 'locations' && <Locations />}{active === 'employees' && <Employees />}
+    {active === 'dashboard' && <Dashboard />}
+    {active === 'orders' && <Orders />}
+    {active === 'inventory' && <Inventory />}
+    {active === 'transfers' && <Transfers />}
+    {active === 'ingredients' && <Ingredients />}
+    {active === 'cocktails' && <Cocktails />}
+    {active === 'liquors' && <Liquors />}
+    {active === 'locations' && <Locations />}
+    {active === 'employees' && <Employees />}
   </main></div>;
 }
