@@ -188,7 +188,9 @@ function publicLiquorType(liquorType) {
 
   return {
     id: liquorType.id,
-    name: liquorType.name
+    name: liquorType.name,
+    image_url: liquorType.image_url || null,
+    display_order: liquorType.display_order || 0
   };
 }
 
@@ -284,7 +286,8 @@ function compatibilityPayload(rows = []) {
   return rows.map((row) => ({
     liquor_type_id: row.liquor_type_id,
     liquor_type_name: row.liquor_types?.name || null,
-    required_ml_per_serving: row.required_ml_per_serving,
+    liquor_type_image_url: row.liquor_types?.image_url || null,
+    required_ml_per_serving: row.required_ml_per_serving,    
     display_instruction: row.display_instruction
   }));
 }
@@ -606,7 +609,7 @@ async function loadCatalog({
 
     supabase
       .from('product_liquor_compatibility')
-      .select('*, liquor_types(id,name)')
+      .select('*, liquor_types(id,name,image_url,display_order)')
       .in('product_id', catalogProductIds),
 
     supabase
@@ -1159,6 +1162,7 @@ customerRouter.get('/customer/home', async (req, res) => {
       .from('liquor_types')
       .select('*')
       .eq('is_active', true)
+      .order('display_order')
       .order('name'),
 
     loadCatalog({
@@ -1213,6 +1217,7 @@ customerRouter.get('/customer/cocktail-finder/options', async (_req, res) => {
       .from('liquor_types')
       .select('*')
       .eq('is_active', true)
+      .order('display_order')
       .order('name'),
 
     supabase
