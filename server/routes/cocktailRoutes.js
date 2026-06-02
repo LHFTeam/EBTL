@@ -170,7 +170,7 @@ async function loadCocktailAdminData({ activeIngredientsOnly = true } = {}) {
     supabase.from('product_liquor_compatibility').select('*'),
     ingredientQuery,
     supabase.from('recipes').select('*').order('version', { ascending: false }).order('created_at', { ascending: false }),
-    supabase.from('recipe_items').select('*, ingredients(name,base_unit)').order('id'),
+    supabase.from('recipe_items').select('*, ingredients(name,base_unit,icon_key)').order('id'),
     supabase.from('product_tags').select('*').order('display_order').order('name')
   ]);
   
@@ -671,7 +671,7 @@ cocktailRouter.put('/cocktails/:id/recipe-items', requireArea('cocktails'), asyn
   const inserted = await supabase
     .from('recipe_items')
     .insert(parsed.data.items.map((item) => ({ ...clean(item), recipe_id: recipe.data.id })))
-    .select('*, ingredients(name,base_unit)');
+    .select('*, ingredients(name,base_unit,icon_key)');
 
   if (inserted.error) return res.status(400).json({ error: inserted.error.message });
 
@@ -729,7 +729,7 @@ cocktailRouter.post('/recipes/:recipeId/items', requireArea('cocktails'), async 
     supabase
       .from('recipe_items')
       .insert({ ...clean(parsed.data), recipe_id: req.params.recipeId })
-      .select('*, ingredients(name,base_unit)')
+      .select('*, ingredients(name,base_unit,icon_key)')
       .single(),
     res
   );
@@ -744,7 +744,7 @@ cocktailRouter.post('/recipe-items', requireArea('cocktails'), async (req, res) 
   const validItems = await validateRecipeItemPayloads([parsed.data], res);
   if (!validItems) return;
 
-  const data = await sb(supabase.from('recipe_items').insert(clean(parsed.data)).select('*, ingredients(name,base_unit)').single(), res);
+  const data = await sb(supabase.from('recipe_items').insert(clean(parsed.data)).select('*, ingredients(name,base_unit,icon_key)').single(), res);
   if (data) res.json(data);
 });
 
@@ -772,7 +772,7 @@ cocktailRouter.patch('/recipe-items/:itemId', requireArea('cocktails'), async (r
       .from('recipe_items')
       .update(payload)
       .eq('id', req.params.itemId)
-      .select('*, ingredients(name,base_unit)')
+      .select('*, ingredients(name,base_unit,icon_key)')
       .single(),
     res
   );
