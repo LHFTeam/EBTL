@@ -1068,11 +1068,19 @@ async function buildCartResponse(customerId, {
   const productIds = [...new Set((items.data || []).map((item) => item.product_id))];
   const catalog = productIds.length
     ? await loadCatalog({
-        locationId
+        locationId,
+        productIds
       })
     : {
         data: {
-          cards: []
+          cards: [],
+          raw: {
+            products: [],
+            variants: [],
+            recipes: [],
+            recipeItems: [],
+            balances: []
+          }
         }
       };
 
@@ -1081,12 +1089,45 @@ async function buildCartResponse(customerId, {
   };
 
   const cardByProductId = new Map((catalog.data.cards || []).map((card) => [card.id, card]));
+  const raw = catalog.data.raw || {};
+  const variantById = new Map((raw.variants || []).map((variant) => [variant.id, variant]));
+  const recipeByProductId = new Map();
+
+  for (const productId of productIds) {
+    recipeByProductId.set(
+      productId,
+      pickCurrentRecipe((raw.recipes || []).filter((recipe) => recipe.product_id === productId))
+    );
+  }
+
+  const recipeItemsByRecipeId = new Map();
+
+  for (const recipeItem of raw.recipeItems || []) {
+    if (!recipeItemsByRecipeId.has(recipeItem.recipe_id)) {
+      recipeItemsByRecipeId.set(recipeItem.recipe_id, []);
+    }
+
+    recipeItemsByRecipeId.get(recipeItem.recipe_id).push(recipeItem);
+  }
+
+  const balancesByIngredientId = new Map(
+    (raw.balances || []).map((balance) => [balance.ingredient_id, balance])
+  );
 
   const responseItems = (items.data || []).map((item) => {
     const card = cardByProductId.get(item.product_id);
-    const variantAvailability = card?.variants?.find((variant) => variant.id === item.variant_id)?.availability;
+    const variant = variantById.get(item.variant_id);
+    const recipe = recipeByProductId.get(item.product_id);
+    const recipeItems = recipeItemsByRecipeId.get(recipe?.id) || [];
+    const variantAvailability = buildAvailability({
+      locationId,
+      recipe,
+      recipeItems,
+      balancesByIngredientId,
+      variant,
+      cartQuantity: item.quantity
+    });
     const lineTotal = money(Number(item.unit_price_inc_vat_snapshot || 0) * Number(item.quantity || 0));
-
     return {
       id: item.id,
       product_id: item.product_id,
@@ -1756,15 +1797,101 @@ customerRouter.get('/customer/cart', async (req, res) => {
 
 customerRouter.post('/customer/cart/items', async (req, res) => {
   const parsed = z.object({
-    product_id: uuid,
-    variant_id: uuid,
-    quantity: z.coerce.number().int().positive().max(MAX_CART_ITEM_QTY).default(1),
-    location_id: optionalUuid
-  }).safeParse(req.body);
+    // Customer-app preferred names.
+    cocktail_id: uuid.optional(),
+    selected_quantity: z.coerce.number().int().positive().max(MAX_CART_ITEM_QTY).optional(),
+    location_id: uuid.optional(),
+    selected_liquor_type_id: uuid.nullable().optional(),
+
+    // Backwards-compatible aliases used by the current API and by camelCase Flutter code.
+    product_id: uuid.optional(),
+    cocktailId: uuid.optional(),
+    productId: uuid.optional(),
+    variant_id: uuid.optional(),
+    variantId: uuid.optional(),
+    quantity: z.coerce.number().int().positive().max(MAX_CART_ITEM_QTY).optional(),
+    selectedQuantity: z.coerce.number().int().positive().max(MAX_CART_ITEM_QTY).optional(),
+    locationId: uuid.optional(),
+    selectedLiquorTypeId: uuid.nullable().optional()
+  }).superRefine((data, ctx) => {
+    const productId = data.cocktail_id || data.cocktailId || data.product_id || data.productId;
+    const variantId = data.variant_id || data.variantId;
+    const selectedQuantity = data.selected_quantity ?? data.selectedQuantity ?? data.quantity ?? 1;
+    const locationId = data.location_id || data.locationId;
+
+    if (!productId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['cocktail_id'],
+        message: 'cocktail_id is required.'
+      });
+    }
+
+    if (!variantId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['variant_id'],
+        message: 'variant_id is required.'
+      });
+    }
+
+    if (!selectedQuantity) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['selected_quantity'],
+        message: 'selected_quantity is required.'
+      });
+    }
+
+    if (!locationId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['location_id'],
+        message: 'location_id is required.'
+      });
+    }
+
+    if (data.quantity !== undefined && data.selected_quantity !== undefined && data.quantity !== data.selected_quantity) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['selected_quantity'],
+        message: 'Send either quantity or selected_quantity, not conflicting values.'
+      });
+    }
+
+    if (data.selectedQuantity !== undefined && data.selected_quantity !== undefined && data.selectedQuantity !== data.selected_quantity) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['selectedQuantity'],
+        message: 'Send either selectedQuantity or selected_quantity, not conflicting values.'
+      });
+    }
+
+    if (data.quantity !== undefined && data.selectedQuantity !== undefined && data.quantity !== data.selectedQuantity) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['selectedQuantity'],
+        message: 'Send either quantity or selectedQuantity, not conflicting values.'
+      });
+    }
+  }).transform((data) => ({
+    productId: data.cocktail_id || data.cocktailId || data.product_id || data.productId,
+    variantId: data.variant_id || data.variantId,
+    selectedQuantity: data.selected_quantity ?? data.selectedQuantity ?? data.quantity ?? 1,
+    locationId: data.location_id || data.locationId,
+    selectedLiquorTypeId: data.selected_liquor_type_id || data.selectedLiquorTypeId || null
+  })).safeParse(req.body);
 
   if (!parsed.success) return res.status(400).json({
-    error: 'Invalid cart item.'
+    error: 'Invalid cart item.',
+    details: parsed.error.issues.map((issue) => ({
+      path: issue.path.join('.'),
+      message: issue.message
+    }))
   });
+
+  const location = await validateBeachCart(parsed.data.locationId, res);
+  if (!location) return;
 
   const ensured = await ensureCustomer(req, res);
   if (!ensured) return;
@@ -1777,48 +1904,11 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
     error: cart.error.message
   });
 
-  const variant = await supabase
-    .from('product_variants')
-    .select('*, products(id,name,slug,image_url,status)')
-    .eq('id', parsed.data.variant_id)
-    .eq('product_id', parsed.data.product_id)
-    .eq('is_active', true)
-    .maybeSingle();
-
-  if (variant.error) return res.status(400).json({
-    error: variant.error.message
-  });
-
-  if (!variant.data || variant.data.products?.status !== 'active') {
-    return res.status(400).json({
-      error: 'This item is not available.'
-    });
-  }
-
-  if (parsed.data.location_id) {
-    const catalog = await loadCatalog({
-      locationId: parsed.data.location_id
-    });
-
-    if (catalog.error) return res.status(400).json({
-      error: catalog.error.message
-    });
-
-    const productCard = catalog.data.cards.find((card) => card.id === parsed.data.product_id);
-    const availability = productCard?.variants?.find((item) => item.id === parsed.data.variant_id)?.availability;
-
-    if (!availability?.is_orderable) {
-      return res.status(400).json({
-        error: availability?.reason || 'Item is not available at this beach cart.'
-      });
-    }
-  }
-
   const existingItem = await supabase
     .from('cart_items')
     .select('*')
     .eq('cart_id', cart.data.id)
-    .eq('variant_id', parsed.data.variant_id)
+    .eq('variant_id', parsed.data.variantId)
     .maybeSingle();
 
   if (existingItem.error) return res.status(400).json({
@@ -1826,11 +1916,97 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
   });
 
   const nextQuantity = existingItem.data
-    ? Math.min(MAX_CART_ITEM_QTY, Number(existingItem.data.quantity || 0) + parsed.data.quantity)
-    : parsed.data.quantity;
+    ? Number(existingItem.data.quantity || 0) + parsed.data.selectedQuantity
+    : parsed.data.selectedQuantity;
 
-  const unitPrice = variantPriceIncVat(variant.data);
-  const vatRate = Number(variant.data.vat_rate || 0);
+  if (nextQuantity > MAX_CART_ITEM_QTY) {
+    return res.status(400).json({
+      error: `You can add up to ${MAX_CART_ITEM_QTY} of the same item.`
+    });
+  }
+
+  const catalog = await loadCatalog({
+    locationId: parsed.data.locationId,
+    productIds: [parsed.data.productId]
+  });
+
+  if (catalog.error) return res.status(400).json({
+    error: catalog.error.message
+  });
+
+  const raw = catalog.data.raw || {};
+  const product = (raw.products || []).find((entry) => entry.id === parsed.data.productId);
+  const variant = (raw.variants || []).find((entry) => entry.id === parsed.data.variantId);
+  const recipe = pickCurrentRecipe((raw.recipes || []).filter((entry) => entry.product_id === parsed.data.productId));
+  const recipeItems = (raw.recipeItems || []).filter((entry) => entry.recipe_id === recipe?.id);
+  const balancesByIngredientId = new Map(
+    (raw.balances || []).map((balance) => [balance.ingredient_id, balance])
+  );
+
+  if (!product || product.status !== 'active' || product.product_type !== 'cocktail') {
+    return res.status(400).json({
+      error: 'This cocktail is not available.'
+    });
+  }
+
+  if (!variant || variant.product_id !== parsed.data.productId || !variant.is_active) {
+    return res.status(400).json({
+      error: 'This cocktail serving size is not available.'
+    });
+  }
+
+  if (parsed.data.selectedLiquorTypeId) {
+    const selectedLiquorCompatibility = (raw.compatibility || []).find((entry) => {
+      return entry.product_id === parsed.data.productId
+        && entry.liquor_type_id === parsed.data.selectedLiquorTypeId
+        && entry.liquor_types?.is_active !== false;
+    });
+
+    if (!selectedLiquorCompatibility) {
+      return res.status(400).json({
+        error: 'Selected liquor is not compatible with this cocktail.'
+      });
+    }
+  }
+
+  const availability = buildAvailability({
+    locationId: parsed.data.locationId,
+    recipe,
+    recipeItems,
+    balancesByIngredientId,
+    variant,
+    cartQuantity: nextQuantity
+  });
+
+  if (!availability.is_orderable) {
+    return res.status(400).json({
+      error: availability.reason || 'Item is not available at this beach cart.'
+    });
+  }
+
+  if (parsed.data.selectedLiquorTypeId) {
+    const selectedLiquorTypeIds = Array.isArray(cart.data.selected_liquor_type_ids)
+      ? cart.data.selected_liquor_type_ids
+      : [];
+
+    if (!selectedLiquorTypeIds.includes(parsed.data.selectedLiquorTypeId)) {
+      const updatedCart = await supabase
+        .from('carts')
+        .update({
+          selected_liquor_type_ids: [...selectedLiquorTypeIds, parsed.data.selectedLiquorTypeId]
+        })
+        .eq('id', cart.data.id)
+        .select()
+        .single();
+
+      if (updatedCart.error) return res.status(400).json({
+        error: updatedCart.error.message
+      });
+    }
+  }
+
+  const unitPrice = variantPriceIncVat(variant);
+  const vatRate = Number(variant.vat_rate || 0);
 
   const saved = existingItem.data
     ? await supabase
@@ -1839,15 +2015,16 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
           quantity: nextQuantity
         })
         .eq('id', existingItem.data.id)
+        .eq('cart_id', cart.data.id)
         .select('*, products(name,slug,image_url), product_variants(name,serving_count)')
         .single()
     : await supabase
         .from('cart_items')
         .insert({
           cart_id: cart.data.id,
-          product_id: parsed.data.product_id,
-          variant_id: parsed.data.variant_id,
-          quantity: parsed.data.quantity,
+          product_id: parsed.data.productId,
+          variant_id: parsed.data.variantId,
+          quantity: parsed.data.selectedQuantity,
           unit_price_inc_vat_snapshot: unitPrice,
           vat_rate_snapshot: vatRate
         })
@@ -1858,14 +2035,27 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
     error: saved.error.message
   });
 
-  const summary = await cartSummary(cart.data.id);
+  const refreshedCart = await buildCartResponse(ensured.customer.id, {
+    createIfMissing: false,
+    locationId: parsed.data.locationId
+  });
+
+  if (refreshedCart.error) return res.status(400).json({
+    error: refreshedCart.error.message
+  });
 
   res.json({
     session: sessionPayload(ensured.customer.id, ensured.token),
-    cart: summary,
+    action: {
+      type: existingItem.data ? 'quantity_incremented' : 'item_added',
+      added_quantity: parsed.data.selectedQuantity,
+      final_quantity: saved.data.quantity,
+      location: publicLocation(location)
+    },
     addedItem: {
       id: saved.data.id,
       product_id: saved.data.product_id,
+      cocktail_id: saved.data.product_id,
       variant_id: saved.data.variant_id,
       quantity: saved.data.quantity,
       unit_price_inc_vat_snapshot: money(saved.data.unit_price_inc_vat_snapshot),
@@ -1879,7 +2069,8 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
         name: saved.data.product_variants?.name,
         serving_count: saved.data.product_variants?.serving_count
       }
-    }
+    },
+    ...refreshedCart.data
   });
 });
 
