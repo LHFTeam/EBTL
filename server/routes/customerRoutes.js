@@ -883,7 +883,13 @@ async function cartItemsForCart(cartId) {
     .order('created_at');
 }
 
-function cartTotals(items = [], { fulfillmentType = 'pickup_at_cart' } = {}) {
+function cartTotals(items = []) {
+  const itemCount = items.length;
+
+  const totalQuantity = items.reduce((sum, item) => {
+    return sum + Number(item.quantity || 0);
+  }, 0);
+
   const subtotalIncVat = money(items.reduce((sum, item) => {
     return sum + Number(item.unit_price_inc_vat_snapshot || 0) * Number(item.quantity || 0);
   }, 0));
@@ -896,15 +902,14 @@ function cartTotals(items = [], { fulfillmentType = 'pickup_at_cart' } = {}) {
     return sum + (lineIncVat - lineExVat);
   }, 0));
 
-  const discountAmount = 0;
-  const deliveryFee = items.length && fulfillmentType === 'delivery_to_unit' ? money(DEFAULT_DELIVERY_FEE) : 0;
-
   return {
+    item_count: itemCount,
+    total_quantity: totalQuantity,
     subtotal_inc_vat: subtotalIncVat,
     estimated_vat_amount: estimatedVatAmount,
-    discount_amount: discountAmount,
-    delivery_fee: deliveryFee,
-    total_amount: money(subtotalIncVat - discountAmount + deliveryFee),
+    discount_amount: 0,
+    delivery_fee: 0,
+    total_amount: subtotalIncVat,
     currency: CURRENCY
   };
 }
