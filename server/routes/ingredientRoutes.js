@@ -52,9 +52,16 @@ function sendIngredientError(error, res) {
   return res.status(400).json({ error: error?.message || 'Ingredient request failed' });
 }
 
+const iconKey = z.string()
+  .trim()
+  .regex(/^[a-z0-9]+([_-][a-z0-9]+)*$/, 'Icon key must use lowercase letters, numbers, underscores, or hyphens.')
+  .nullable()
+  .optional();
+
 const ingredientCreateSchema = z.object({
   name: z.string().min(1),
   category: z.string().nullable().optional(),
+  icon_key: iconKey,
   base_unit: z.string().min(1),
   purchase_unit_name: z.string().nullable().optional(),
   purchase_unit_size: z.coerce.number().positive().nullable().optional(),
