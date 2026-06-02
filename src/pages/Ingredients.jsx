@@ -21,11 +21,53 @@ const blank = {
   is_active: true
 };
 
+const ingredientIconSuggestions = [
+  'agave',
+  'basil',
+  'berry',
+  'bitters',
+  'cherry',
+  'citrus',
+  'cola',
+  'cranberry',
+  'cream',
+  'cucumber',
+  'fruit',
+  'garnish',
+  'ginger',
+  'grapefruit',
+  'grenadine',
+  'ice',
+  'lemon',
+  'lime',
+  'mango',
+  'mint',
+  'mixer',
+  'orange',
+  'passionfruit',
+  'peach',
+  'pineapple',
+  'salt',
+  'soda',
+  'sugar',
+  'syrup',
+  'tonic',
+  'watermelon'
+];
+
 function optionalText(value) {
   const text = String(value ?? '').trim();
   return text ? text : null;
 }
 
+function optionalIconKey(value) {
+  const text = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+
+  return text ? text : null;
+}
 function optionalNumber(value) {
   if (value === '' || value === null || value === undefined) return null;
   return Number(value);
@@ -67,7 +109,7 @@ export default function Ingredients() {
   const rows = useMemo(() => {
     const searchText = search.trim().toLowerCase();
     return (data || []).filter(row => {
-      const matchesSearch = !searchText || [row.name, row.category, row.base_unit]
+      const matchesSearch = !searchText || [row.name, row.category, row.icon_key, row.base_unit]
         .some(value => String(value || '').toLowerCase().includes(searchText));
       const matchesCategory = !categoryFilter || row.category === categoryFilter;
       return matchesSearch && matchesCategory;
@@ -88,6 +130,7 @@ export default function Ingredients() {
     const payload = {
       name: form.name.trim(),
       category: optionalText(form.category),
+      icon_key: optionalIconKey(form.icon_key),
       base_unit: form.base_unit,
       purchase_unit_name: optionalText(form.purchase_unit_name),
       purchase_unit_size: optionalNumber(form.purchase_unit_size),
@@ -148,7 +191,8 @@ export default function Ingredients() {
       ...blank,
       ...row,
       category: row.category || '',
-      purchase_unit_name: row.purchase_unit_name || '',
+      icon_key: row.icon_key || '',
+      purchase_unit_name: row.purchase_unit_name || '',    
       purchase_unit_size: row.purchase_unit_size ?? '',
       purchase_unit_cost: row.purchase_unit_cost ?? '',
       cost_per_base_unit: row.cost_per_base_unit ?? '',
@@ -189,6 +233,16 @@ export default function Ingredients() {
       <form className="miniForm formGrid" onSubmit={save}>
         <input required placeholder="Name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/>
         <input placeholder="Category" value={form.category || ''} onChange={e => setForm({ ...form, category: e.target.value })}/>
+        <input
+          list="ingredient-icon-key-options"
+          placeholder="Icon key e.g. lime, syrup, salt"
+          value={form.icon_key || ''}
+          onChange={e => setForm({ ...form, icon_key: e.target.value })}
+          title="Use lowercase keys. The customer app maps these keys to local SVG icons."
+        />
+        <datalist id="ingredient-icon-key-options">
+          {ingredientIconSuggestions.map(iconKey => <option key={iconKey} value={iconKey} />)}
+        </datalist>
         <select value={form.base_unit} onChange={e => setForm({ ...form, base_unit: e.target.value })}>
           {baseUnits.map(unit => <option key={unit}>{unit}</option>)}
         </select>
@@ -236,7 +290,7 @@ export default function Ingredients() {
       </div>
       <SimpleTable
         rows={rows}
-        columns={['name', 'category', 'base_unit', 'purchase_unit_cost', 'purchase_unit_size', 'cost_per_base_unit', 'is_perishable', 'is_customer_supplied', 'is_active']}
+        columns={['name', 'category', 'icon_key', 'base_unit', 'purchase_unit_cost', 'purchase_unit_size', 'cost_per_base_unit', 'is_perishable', 'is_customer_supplied', 'is_active']}
         format={{
           purchase_unit_cost: value => displayNumber(value, 2),
           purchase_unit_size: value => displayNumber(value, 3),
