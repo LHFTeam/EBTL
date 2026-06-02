@@ -9,6 +9,8 @@ import { supabase } from '../lib/supabase.js';
 export const locationRouter = Router();
 
 const PROTECTED_CENTRAL_WAREHOUSE_NAME = 'central warehouse';
+const LOCATION_BANNER_BUCKET = 'locations';
+const MAX_LOCATION_BANNER_BYTES = 3 * 1024 * 1024;
 
 function trimText(value) {
   return typeof value === 'string' ? value.trim() : value;
@@ -47,6 +49,97 @@ function firstZodMessage(error, fallback) {
   return error?.issues?.[0]?.message || fallback;
 }
 
+function zodErrorMessage(error, fallback) {
+  const first = error?.issues?.[0];
+  if (!first) return fallback;
+  const path = first.path?.length ? `${first.path.join('.')}: ` : '';
+  return `${path}${first.message}`;
+}
+
+function isWebpBuffer(buffer) {
+  return buffer.length >= 12
+    && buffer.toString('ascii', 0, 4) === 'RIFF'
+    && buffer.toString('ascii', 8, 12) === 'WEBP';
+}
+
+function normalizeBase64Image(value) {
+  return String(value || '')
+    .replace(/^data:image\/webp;base64,/i, '')
+    .replace(/\s/g, '');
+}
+
+function locationBannerPath(locationId) {
+  return `location-banners/${locationId}/${Date.now()}.webp`;
+}
+
+function storagePathFromPublicUrl(publicUrl) {
+  if (!publicUrl) return null;
+  const marker = `/storage/v1/object/public/${LOCATION_BANNER_BUCKET}/`;
+  const markerIndex = String(publicUrl).indexOf(marker);
+  if (markerIndex === -1) return null;
+  const pathWithQuery = String(publicUrl).slice(markerIndex + marker.length);
+  return decodeURIComponent(pathWithQuery.split('?')[0]);
+}
+
+async function removeStoredLocationBanner(publicUrl) {
+  const oldPath = storagePathFromPublicUrl(publicUrl);
+  if (!oldPath) return;
+  await supabase.storage.from(LOCATION_BANNER_BUCKET).remove([oldPath]);
+}
+
+function normalizeTime(value) {
+  if (!value) return null;
+  const parts = String(value).split(':');
+  if (parts.length < 2) return value;
+  return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}:00`;
+}
+
+const timeString = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, 'Use HH:MM or HH:MM:SS time.');
+
+const locationOpeningHourSchema = z.object({
+  day_of_week: z.coerce.number().int().min(0).max(6),
+  is_closed: z.boolean().optional().default(false),
+  opens_at: timeString.nullable().optional(),
+  closes_at: timeString.nullable().optional()
+}).superRefine((row, ctx) => {
+  if (row.is_closed) return;
+
+  if (!row.opens_at) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['opens_at'],
+      message: 'Open time is required unless the day is closed.'
+    });
+  }
+
+  if (!row.closes_at) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['closes_at'],
+      message: 'Close time is required unless the day is closed.'
+    });
+  }
+});
+
+const openingHoursPayloadSchema = z.object({
+  hours: z.array(locationOpeningHourSchema).min(1).max(7)
+}).superRefine((data, ctx) => {
+  const seen = new Set();
+
+  for (const row of data.hours) {
+    if (seen.has(row.day_of_week)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['hours'],
+        message: 'Each day_of_week can only be sent once.'
+      });
+      return;
+    }
+
+    seen.add(row.day_of_week);
+  }
+});
+
 function validateBeachCartCompound(location) {
   if (location.type === 'beach_cart' && !hasText(location.compound_name)) {
     return 'Beach cart locations require a compound name.';
@@ -76,6 +169,7 @@ const createLocationSchema = z.object({
   compound_name: z.preprocess(optionalText, z.string().optional()),
   beach_name: z.preprocess(optionalText, z.string().optional()),
   address: z.preprocess(optionalText, z.string().optional()),
+  banner_image_url: z.preprocess(optionalText, z.string().optional()),
   latitude: z.preprocess(optionalNumber, z.coerce.number().optional()),
   longitude: z.preprocess(optionalNumber, z.coerce.number().optional()),
   is_active: z.boolean().optional()
@@ -95,6 +189,7 @@ const updateLocationSchema = z.object({
   compound_name: z.preprocess(nullableText, z.string().nullable().optional()),
   beach_name: z.preprocess(nullableText, z.string().nullable().optional()),
   address: z.preprocess(nullableText, z.string().nullable().optional()),
+  banner_image_url: z.preprocess(nullableText, z.string().nullable().optional()),
   latitude: z.preprocess(nullableNumber, z.coerce.number().nullable().optional()),
   longitude: z.preprocess(nullableNumber, z.coerce.number().nullable().optional()),
   is_active: z.boolean().optional()
@@ -124,6 +219,143 @@ locationRouter.post('/locations', requireArea('locations'), async (req, res) => 
   );
 
   if (data) res.json(data);
+});
+
+locationRouter.get('/locations/:id/opening-hours', requireArea('locations'), async (req, res) => {
+  const current = await loadLocation(req.params.id, res);
+  if (!current) return;
+
+  const data = await sb(
+    supabase
+      .from('location_opening_hours')
+      .select('*')
+      .eq('location_id', req.params.id)
+      .order('day_of_week', { ascending: true }),
+    res
+  );
+
+  if (data) res.json({ location_id: req.params.id, hours: data });
+});
+
+locationRouter.put('/locations/:id/opening-hours', requireArea('locations'), async (req, res) => {
+  const parsed = openingHoursPayloadSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: firstZodMessage(parsed.error, 'Invalid opening hours.')
+    });
+  }
+
+  const current = await loadLocation(req.params.id, res);
+  if (!current) return;
+
+  const deleted = await supabase
+    .from('location_opening_hours')
+    .delete()
+    .eq('location_id', req.params.id);
+
+  if (deleted.error) return res.status(400).json({ error: deleted.error.message });
+
+  const payload = parsed.data.hours.map((row) => ({
+    location_id: req.params.id,
+    day_of_week: row.day_of_week,
+    is_closed: Boolean(row.is_closed),
+    opens_at: row.is_closed ? null : normalizeTime(row.opens_at),
+    closes_at: row.is_closed ? null : normalizeTime(row.closes_at)
+  }));
+
+  const saved = await sb(
+    supabase
+      .from('location_opening_hours')
+      .insert(payload)
+      .select()
+      .order('day_of_week', { ascending: true }),
+    res
+  );
+
+  if (saved) res.json({ location_id: req.params.id, hours: saved });
+});
+
+locationRouter.post('/locations/:id/banner', requireArea('locations'), async (req, res) => {
+  const parsed = z.object({
+    file_name: z.string().min(1),
+    content_type: z.string().optional(),
+    data_base64: z.string().min(1)
+  }).safeParse(req.body);
+
+  if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid location banner upload') });
+
+  const fileName = parsed.data.file_name.trim().toLowerCase();
+  const contentType = String(parsed.data.content_type || '').toLowerCase();
+
+  if (contentType !== 'image/webp' && !fileName.endsWith('.webp')) {
+    return res.status(400).json({ error: 'Location banners must be uploaded as .webp files.' });
+  }
+
+  const location = await loadLocation(req.params.id, res);
+  if (!location) return;
+
+  const base64 = normalizeBase64Image(parsed.data.data_base64);
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) {
+    return res.status(400).json({ error: 'Image data is not valid base64.' });
+  }
+
+  const imageBuffer = Buffer.from(base64, 'base64');
+  if (!imageBuffer.length) return res.status(400).json({ error: 'Image file is empty.' });
+
+  if (imageBuffer.length > MAX_LOCATION_BANNER_BYTES) {
+    return res.status(400).json({ error: 'Image file is too large. Maximum size is 3 MB.' });
+  }
+
+  if (!isWebpBuffer(imageBuffer)) {
+    return res.status(400).json({ error: 'The selected file is not a valid WebP image.' });
+  }
+
+  const storagePath = locationBannerPath(req.params.id);
+  const uploaded = await supabase.storage
+    .from(LOCATION_BANNER_BUCKET)
+    .upload(storagePath, imageBuffer, {
+      contentType: 'image/webp',
+      cacheControl: '31536000',
+      upsert: false
+    });
+
+  if (uploaded.error) return res.status(400).json({ error: uploaded.error.message });
+
+  const publicUrl = supabase.storage.from(LOCATION_BANNER_BUCKET).getPublicUrl(storagePath).data.publicUrl;
+
+  const updated = await supabase
+    .from('locations')
+    .update({ banner_image_url: publicUrl })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (updated.error) {
+    await supabase.storage.from(LOCATION_BANNER_BUCKET).remove([storagePath]);
+    return res.status(400).json({ error: updated.error.message });
+  }
+
+  await removeStoredLocationBanner(location.banner_image_url);
+
+  res.json({ location: updated.data, banner_image_url: publicUrl, storage_path: storagePath });
+});
+
+locationRouter.delete('/locations/:id/banner', requireArea('locations'), async (req, res) => {
+  const location = await loadLocation(req.params.id, res);
+  if (!location) return;
+
+  await removeStoredLocationBanner(location.banner_image_url);
+
+  const updated = await supabase
+    .from('locations')
+    .update({ banner_image_url: null })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (updated.error) return res.status(400).json({ error: updated.error.message });
+  res.json({ location: updated.data });
 });
 
 locationRouter.patch('/locations/:id/deactivate', requireArea('locations'), async (req, res) => {

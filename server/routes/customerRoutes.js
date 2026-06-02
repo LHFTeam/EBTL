@@ -16,6 +16,7 @@ const PAYMENT_PROVIDER = process.env.PAYMENT_PROVIDER || 'payment_gateway';
 const PAYMENT_GATEWAY_CHECKOUT_URL = process.env.PAYMENT_GATEWAY_CHECKOUT_URL || '';
 const DEFAULT_DELIVERY_FEE = Number(process.env.CUSTOMER_APP_DELIVERY_FEE || 0);
 const MAX_CART_ITEM_QTY = 99;
+const FULFILLMENT_TYPES = ['pickup_at_cart', 'delivery_to_unit'];
 
 const uuid = z.string().uuid();
 const optionalUuid = uuid.optional();
@@ -169,7 +170,201 @@ function publicLocation(location) {
     beach_name: location.beach_name,
     latitude: location.latitude,
     longitude: location.longitude,
+    banner_image_url: location.banner_image_url || null,
     is_active: location.is_active
+  };
+}
+
+function normalizeFulfillmentType(value) {
+  return FULFILLMENT_TYPES.includes(value) ? value : 'pickup_at_cart';
+}
+
+function parseTimeToMinutes(value) {
+  if (!value) return null;
+
+  const [hours, minutes] = String(value).split(':').map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+
+  return hours * 60 + minutes;
+}
+
+function minutesToTimeString(minutes) {
+  const normalized = ((Number(minutes) % 1440) + 1440) % 1440;
+  const hours = Math.floor(normalized / 60);
+  const mins = normalized % 60;
+
+  return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00`;
+}
+
+function displayClock(minutes) {
+  const normalized = ((Number(minutes) % 1440) + 1440) % 1440;
+  const hours24 = Math.floor(normalized / 60);
+  const mins = normalized % 60;
+  const period = hours24 >= 12 ? 'PM' : 'AM';
+  const hours12 = hours24 % 12 || 12;
+
+  return `${hours12}:${String(mins).padStart(2, '0')} ${period}`;
+}
+
+function cairoTimeContext(date = new Date()) {
+  const parts = cairoParts(date);
+  const weekday = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
+
+  return {
+    ...parts,
+    weekday,
+    minutes_since_midnight: parts.hour * 60 + parts.minute
+  };
+}
+
+function publicOpeningHour(row) {
+  return {
+    day_of_week: Number(row.day_of_week),
+    is_closed: Boolean(row.is_closed),
+    opens_at: row.opens_at || null,
+    closes_at: row.closes_at || null
+  };
+}
+
+function buildLocationStatus(openingHours = [], now = new Date()) {
+  const context = cairoTimeContext(now);
+  const rows = (openingHours || [])
+    .map(publicOpeningHour)
+    .filter((row) => Number.isInteger(row.day_of_week) && row.day_of_week >= 0 && row.day_of_week <= 6);
+
+  const rowsByDay = new Map(rows.map((row) => [row.day_of_week, row]));
+  const nowMinutes = context.minutes_since_midnight;
+
+  for (const row of rows) {
+    if (row.is_closed) continue;
+
+    const opensAt = parseTimeToMinutes(row.opens_at);
+    const closesAt = parseTimeToMinutes(row.closes_at);
+
+    if (opensAt === null || closesAt === null || opensAt === closesAt) continue;
+
+    const closesNextDay = closesAt <= opensAt;
+    const isTodayWindow = row.day_of_week === context.weekday && nowMinutes >= opensAt;
+    const isYesterdayOvernightWindow = closesNextDay
+      && ((row.day_of_week + 1) % 7) === context.weekday
+      && nowMinutes < closesAt;
+
+    if ((isTodayWindow && (!closesNextDay ? nowMinutes < closesAt : true)) || isYesterdayOvernightWindow) {
+      const closesAtDisplay = displayClock(closesAt);
+
+      return {
+        timezone: BUSINESS_TIME_ZONE,
+        is_open: true,
+        label: `Open now · Closes at ${closesAtDisplay}`,
+        current_day_of_week: context.weekday,
+        closes_at: minutesToTimeString(closesAt),
+        closes_at_display: closesAtDisplay,
+        opens_at: null,
+        opens_at_display: null,
+        next_opening: null
+      };
+    }
+  }
+
+  const today = rowsByDay.get(context.weekday);
+  const todayOpensAt = today && !today.is_closed ? parseTimeToMinutes(today.opens_at) : null;
+
+  if (todayOpensAt !== null && nowMinutes < todayOpensAt) {
+    const opensAtDisplay = displayClock(todayOpensAt);
+
+    return {
+      timezone: BUSINESS_TIME_ZONE,
+      is_open: false,
+      label: `Closed now · Opens at ${opensAtDisplay}`,
+      current_day_of_week: context.weekday,
+      closes_at: null,
+      closes_at_display: null,
+      opens_at: minutesToTimeString(todayOpensAt),
+      opens_at_display: opensAtDisplay,
+      next_opening: {
+        day_of_week: context.weekday,
+        opens_at: minutesToTimeString(todayOpensAt),
+        opens_at_display: opensAtDisplay
+      }
+    };
+  }
+
+  for (let offset = 1; offset <= 7; offset += 1) {
+    const day = (context.weekday + offset) % 7;
+    const row = rowsByDay.get(day);
+    if (!row || row.is_closed) continue;
+
+    const opensAt = parseTimeToMinutes(row.opens_at);
+    if (opensAt === null) continue;
+
+    return {
+      timezone: BUSINESS_TIME_ZONE,
+      is_open: false,
+      label: 'Closed now',
+      current_day_of_week: context.weekday,
+      closes_at: null,
+      closes_at_display: null,
+      opens_at: null,
+      opens_at_display: null,
+      next_opening: {
+        day_of_week: day,
+        opens_at: minutesToTimeString(opensAt),
+        opens_at_display: displayClock(opensAt)
+      }
+    };
+  }
+
+  return {
+    timezone: BUSINESS_TIME_ZONE,
+    is_open: false,
+    label: rows.length ? 'Closed now' : 'Hours unavailable',
+    current_day_of_week: context.weekday,
+    closes_at: null,
+    closes_at_display: null,
+    opens_at: null,
+    opens_at_display: null,
+    next_opening: null
+  };
+}
+
+async function loadLocationOpeningHours(locationId) {
+  if (!locationId) return { data: [] };
+
+  return supabase
+    .from('location_opening_hours')
+    .select('*')
+    .eq('location_id', locationId)
+    .order('day_of_week', { ascending: true });
+}
+
+async function loadCartLocation(locationId) {
+  if (!locationId) return { data: null };
+
+  const location = await supabase
+    .from('locations')
+    .select('*')
+    .eq('id', locationId)
+    .eq('type', 'beach_cart')
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (location.error) return { error: location.error };
+
+  if (!location.data) {
+    return {
+      error: new Error('Selected beach cart is not available.')
+    };
+  }
+
+  const hours = await loadLocationOpeningHours(locationId);
+  if (hours.error) return { error: hours.error };
+
+  return {
+    data: {
+      ...publicLocation(location.data),
+      current_status: buildLocationStatus(hours.data || []),
+      opening_hours: (hours.data || []).map(publicOpeningHour)
+    }
   };
 }
 
@@ -688,7 +883,7 @@ async function cartItemsForCart(cartId) {
     .order('created_at');
 }
 
-function cartTotals(items = []) {
+function cartTotals(items = [], { fulfillmentType = 'pickup_at_cart' } = {}) {
   const subtotalIncVat = money(items.reduce((sum, item) => {
     return sum + Number(item.unit_price_inc_vat_snapshot || 0) * Number(item.quantity || 0);
   }, 0));
@@ -701,24 +896,26 @@ function cartTotals(items = []) {
     return sum + (lineIncVat - lineExVat);
   }, 0));
 
+  const discountAmount = 0;
+  const deliveryFee = items.length && fulfillmentType === 'delivery_to_unit' ? money(DEFAULT_DELIVERY_FEE) : 0;
+
   return {
     subtotal_inc_vat: subtotalIncVat,
     estimated_vat_amount: estimatedVatAmount,
-    discount_amount: 0,
-    delivery_fee: 0,
-    total_amount: subtotalIncVat,
+    discount_amount: discountAmount,
+    delivery_fee: deliveryFee,
+    total_amount: money(subtotalIncVat - discountAmount + deliveryFee),
     currency: CURRENCY
   };
 }
 
-async function cartSummary(cartId) {
+async function cartSummary(cartId, { fulfillmentType = 'pickup_at_cart' } = {}) {
   if (!cartId) {
     return {
       cart_id: null,
       item_count: 0,
       total_quantity: 0,
-      subtotal_inc_vat: 0,
-      currency: CURRENCY
+      ...cartTotals([], { fulfillmentType })
     };
   }
 
@@ -740,8 +937,7 @@ async function cartSummary(cartId) {
     cart_id: cartId,
     item_count: itemCount,
     total_quantity: totalQuantity,
-    subtotal_inc_vat: money(subtotal),
-    currency: CURRENCY
+    ...cartTotals(items.data || [], { fulfillmentType })
   };
 }
 
@@ -1036,8 +1232,15 @@ async function loadProductDetail({ slug, locationId = null, liquorTypeId = null 
 
 async function buildCartResponse(customerId, {
   createIfMissing = true,
-  locationId = null
+  locationId = null,
+  fulfillmentType = 'pickup_at_cart'
 } = {}) {
+  const normalizedFulfillmentType = normalizeFulfillmentType(fulfillmentType);
+  const selectedLocation = await loadCartLocation(locationId);
+
+  if (selectedLocation.error) return {
+    error: selectedLocation.error
+  };
   const cart = await getActiveCart(customerId, {
     createIfMissing
   });
@@ -1050,8 +1253,9 @@ async function buildCartResponse(customerId, {
     return {
       data: {
         cart: null,
+        selected_location: selectedLocation.data,
         items: [],
-        totals: cartTotals([]),
+        totals: cartTotals([], { fulfillmentType: normalizedFulfillmentType }),
         checkoutReadiness: {
           can_checkout: false,
           blocking_reasons: ['Cart is empty.']
@@ -1157,7 +1361,7 @@ async function buildCartResponse(customerId, {
     };
   });
 
-  const totals = cartTotals(items.data || []);
+  const totals = cartTotals(items.data || [], { fulfillmentType: normalizedFulfillmentType });
   const blockingReasons = [];
 
   if (!responseItems.length) blockingReasons.push('Cart is empty.');
@@ -1176,8 +1380,10 @@ async function buildCartResponse(customerId, {
         status: cart.data.status,
         expires_at: cart.data.expires_at || cartExpiresAtIso(),
         created_at: cart.data.created_at,
-        updated_at: cart.data.updated_at
+        updated_at: cart.data.updated_at,
+        fulfillment_type: normalizedFulfillmentType
       },
+      selected_location: selectedLocation.data,
       items: responseItems,
       totals,
       checkoutReadiness: {
@@ -1770,7 +1976,10 @@ customerRouter.get('/customer/cocktails/:slug', async (req, res) => {
 
 customerRouter.get('/customer/cart', async (req, res) => {
   const parsed = z.object({
-    location_id: optionalUuid
+    location_id: optionalUuid,
+    locationId: optionalUuid,
+    fulfillment_type: z.enum(FULFILLMENT_TYPES).optional(),
+    fulfillmentType: z.enum(FULFILLMENT_TYPES).optional()
   }).safeParse(req.query);
 
   if (!parsed.success) return res.status(400).json({
@@ -1782,7 +1991,8 @@ customerRouter.get('/customer/cart', async (req, res) => {
 
   const cart = await buildCartResponse(ensured.customer.id, {
     createIfMissing: true,
-    locationId: parsed.data.location_id || null
+    locationId: parsed.data.location_id || parsed.data.locationId || null,
+    fulfillmentType: parsed.data.fulfillment_type || parsed.data.fulfillmentType || 'pickup_at_cart'
   });
 
   if (cart.error) return res.status(400).json({
@@ -2432,7 +2642,7 @@ customerRouter.post('/customer/orders', async (req, res) => {
       total_amount: quote.data.quote.totals.total_amount,
       customer_notes: parsed.data.customer_notes || null
     })
-    .select('*, locations(id,name,type,compound_name,beach_name), customer_addresses(*)')
+    .select('*, locations(id,name,type,compound_name,beach_name,banner_image_url), customer_addresses(*)')
     .single();
 
   if (orderInsert.error) return res.status(400).json({
@@ -2537,7 +2747,7 @@ customerRouter.get('/customer/orders/:orderId', async (req, res) => {
 
   const order = await supabase
     .from('orders')
-    .select('*, locations(id,name,type,compound_name,beach_name), customer_addresses(*)')
+    .select('*, locations(id,name,type,compound_name,beach_name,banner_image_url), customer_addresses(*)')
     .eq('id', req.params.orderId)
     .eq('customer_id', ensured.customer.id)
     .maybeSingle();
