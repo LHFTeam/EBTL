@@ -8,6 +8,7 @@ import { splitTags, toBool } from '../utils/format.js';
 const blank = {
   name: '',
   category: '',
+  icon_key: '',
   base_unit: 'ml',
   purchase_unit_name: '',
   purchase_unit_size: '',
