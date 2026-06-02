@@ -283,13 +283,16 @@ function pickCurrentRecipe(recipes) {
 }
 
 function compatibilityPayload(rows = []) {
-  return rows.map((row) => ({
-    liquor_type_id: row.liquor_type_id,
-    liquor_type_name: row.liquor_types?.name || null,
-    liquor_type_image_url: row.liquor_types?.image_url || null,
-    required_ml_per_serving: row.required_ml_per_serving,    
-    display_instruction: row.display_instruction
-  }));
+  return rows
+    .filter((row) => row.liquor_types?.is_active !== false)
+    .map((row) => ({
+      liquor_type_id: row.liquor_type_id,
+      liquor_type_name: row.liquor_types?.name || null,
+      liquor_type_image_url: row.liquor_types?.image_url || null,
+      liquor_type_display_order: row.liquor_types?.display_order || 0,
+      required_ml_per_serving: row.required_ml_per_serving,
+      display_instruction: row.display_instruction
+    }));
 }
 
 function publicProductTag(tag) {
@@ -308,6 +311,210 @@ function productTagDetails(tagNames = [], productTagsByName = new Map()) {
     .map((tagName) => productTagsByName.get(String(tagName).toLowerCase()))
     .filter(Boolean)
     .map(publicProductTag);
+}
+
+function pickLatestSingleServingVariant(variants = []) {
+  return [...variants]
+    .filter((variant) => variant.is_active && Number(variant.serving_count) === 1)
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0] || null;
+}
+
+function publicSelectedLiquor(compatibilityRow) {
+  if (!compatibilityRow?.liquor_types) return null;
+
+  return {
+    ...publicLiquorType(compatibilityRow.liquor_types),
+    required_ml_per_serving: compatibilityRow.required_ml_per_serving,
+    display_instruction: compatibilityRow.display_instruction || null
+  };
+}
+
+function publicCocktailIngredient(recipeItem) {
+  const ingredient = recipeItem?.ingredients || recipeItem?.ingredient || null;
+  if (!ingredient) return null;
+
+  return {
+    id: ingredient.id,
+    name: ingredient.name,
+    category: ingredient.category || null,
+    icon_key: ingredient.icon_key || null,
+    is_optional: Boolean(recipeItem.is_optional),
+    is_customer_supplied: Boolean(recipeItem.is_customer_supplied || ingredient.is_customer_supplied)
+  };
+}
+
+function cocktailIngredientsPayload(recipeItems = []) {
+  const seen = new Set();
+
+  return (recipeItems || [])
+    .map(publicCocktailIngredient)
+    .filter(Boolean)
+    .filter((ingredient) => {
+      if (seen.has(ingredient.id)) return false;
+      seen.add(ingredient.id);
+      return true;
+    })
+    .sort((a, b) => Number(a.is_customer_supplied) - Number(b.is_customer_supplied) || a.name.localeCompare(b.name));
+}
+
+function selectedVariantPayload({
+  variant,
+  recipe,
+  recipeItems,
+  balancesByIngredientId,
+  locationId
+}) {
+  if (!variant) return null;
+
+  const availability = buildAvailability({
+    locationId,
+    recipe,
+    recipeItems,
+    balancesByIngredientId,
+    variant
+  });
+
+  return {
+    id: variant.id,
+    name: variant.name,
+    serving_count: variant.serving_count,
+    price_inc_vat: variantPriceIncVat(variant),
+    vat_rate: Number(variant.vat_rate || 0),
+    currency: CURRENCY,
+    availability
+  };
+}
+
+function singleServingAvailability({ variantPayload, recipe, locationId }) {
+  if (variantPayload?.availability) return variantPayload.availability;
+
+  if (!variantPayload) {
+    return {
+      is_orderable: false,
+      reason: 'Single-serving cocktail is currently unavailable.'
+    };
+  }
+
+  if (!locationId) {
+    return {
+      is_orderable: false,
+      reason: 'Choose a beach cart to check availability.'
+    };
+  }
+
+  if (!recipe) {
+    return {
+      is_orderable: false,
+      reason: 'This cocktail is not ready for ordering yet.'
+    };
+  }
+
+  return {
+    is_orderable: false,
+    reason: 'Currently unavailable.'
+  };
+}
+
+const STATIC_HOW_TO_MAKE_STEPS = [
+  {
+    step: 1,
+    title: 'Add your liquor over ice'
+  },
+  {
+    step: 2,
+    title: 'Pour in your EBTL cocktail mix'
+  },
+  {
+    step: 3,
+    title: 'Garnish, sip & enjoy'
+  }
+];
+
+function cocktailDetailPayload({
+  card,
+  selectedVariant,
+  selectedLiquor,
+  recipe,
+  recipeItems,
+  balancesByIngredientId,
+  locationId
+}) {
+  const variant = selectedVariantPayload({
+    variant: selectedVariant,
+    recipe,
+    recipeItems,
+    balancesByIngredientId,
+    locationId
+  });
+
+  const availability = singleServingAvailability({
+    variantPayload: variant,
+    recipe,
+    locationId
+  });
+
+  const ingredients = cocktailIngredientsPayload(recipeItems);
+
+  return {
+    id: card.id,
+    slug: card.slug,
+    name: card.name,
+    short_description: card.short_description,
+    description: card.description,
+    description_format: card.description_format,
+    image_url: card.image_url,
+    tags: card.tags,
+    tag_details: card.tag_details,
+    is_featured: card.is_featured,
+    display_order: card.display_order,
+    category: card.category,
+
+    selected_liquor: selectedLiquor,
+    compatible_liquors: card.compatibility,
+
+    variant,
+    availability,
+
+    ingredients,
+    included_ingredients: ingredients.filter((ingredient) => !ingredient.is_customer_supplied),
+    customer_supplied_ingredients: ingredients.filter((ingredient) => ingredient.is_customer_supplied),
+
+    customer_supplies_liquor: true,
+    liquor_not_included: true,
+
+    how_to_make: STATIC_HOW_TO_MAKE_STEPS,
+
+    recipe: recipe
+      ? {
+          id: recipe.id,
+          version: recipe.version,
+          yield_servings: recipe.yield_servings
+        }
+      : null,
+
+    copy: {
+      bring_your_bottle_title: selectedLiquor ? 'Bring your bottle' : null,
+      bring_your_bottle_name: selectedLiquor?.name || null,
+      bottle_note: 'Bottle not included.',
+      related_title: selectedLiquor ? `More with ${selectedLiquor.name}` : null
+    }
+  };
+}
+
+function relatedCocktailPayload(card) {
+  const singleServingVariant = card.variants?.find((variant) => Number(variant.serving_count) === 1) || null;
+
+  return {
+    id: card.id,
+    slug: card.slug,
+    name: card.name,
+    short_description: card.short_description || null,
+    image_url: card.image_url,
+    tag_details: card.tag_details || [],
+    variant: singleServingVariant,
+    starting_price_inc_vat: singleServingVariant?.price_inc_vat ?? card.price.starting_price_inc_vat,
+    currency: CURRENCY
+  };
 }
 
 function productCardPayload({
@@ -632,7 +839,7 @@ async function loadCatalog({
 
     supabase
       .from('product_liquor_compatibility')
-      .select('*, liquor_types(id,name,image_url,display_order)')
+      .select('*, liquor_types(id,name,image_url,display_order,is_active)')
       .in('product_id', catalogProductIds),
 
     supabase
@@ -684,7 +891,7 @@ async function loadCatalog({
   const recipeItems = recipeIds.length
     ? await supabase
         .from('recipe_items')
-        .select('*, ingredients(id,name,base_unit,is_customer_supplied)')
+        .select('*, ingredients(id,name,category,base_unit,is_customer_supplied,icon_key)')
         .in('recipe_id', recipeIds)
     : {
         data: [],
@@ -759,7 +966,7 @@ async function loadCatalog({
   };
 }
 
-async function loadProductDetail(slug, locationId) {
+async function loadProductDetail({ slug, locationId = null, liquorTypeId = null }) {
   const product = await supabase
     .from('products')
     .select('*, product_categories(id,name,sort_order)')
@@ -776,7 +983,8 @@ async function loadProductDetail(slug, locationId) {
   };
 
   const catalog = await loadCatalog({
-    locationId
+    locationId,
+    productIds: [product.data.id]
   });
 
   if (catalog.error) return {
@@ -788,10 +996,40 @@ async function loadProductDetail(slug, locationId) {
     notFound: true
   };
 
+  const raw = catalog.data.raw || {};
+  const recipe = pickCurrentRecipe((raw.recipes || []).filter((entry) => entry.product_id === product.data.id));
+  const recipeItems = (raw.recipeItems || []).filter((item) => item.recipe_id === recipe?.id);
+  const balancesByIngredientId = new Map(
+    (raw.balances || []).map((balance) => [balance.ingredient_id, balance])
+  );
+
+  const selectedVariant = pickLatestSingleServingVariant(
+    (raw.variants || []).filter((variant) => variant.product_id === product.data.id)
+  );
+
+  let selectedCompatibility = null;
+
+  if (liquorTypeId) {
+    selectedCompatibility = (raw.compatibility || []).find((row) => {
+      return row.product_id === product.data.id
+        && row.liquor_type_id === liquorTypeId
+        && row.liquor_types?.is_active !== false;
+    });
+
+    if (!selectedCompatibility) return {
+      badRequest: 'Selected liquor is not compatible with this cocktail.'
+    };
+  }
+
   return {
     data: {
       product: product.data,
-      card
+      card,
+      selectedVariant,
+      selectedLiquor: publicSelectedLiquor(selectedCompatibility),
+      recipe,
+      recipeItems,
+      balancesByIngredientId
     }
   };
 }
@@ -1381,17 +1619,29 @@ customerRouter.get('/customer/cocktails', async (req, res) => {
 
 customerRouter.get('/customer/cocktails/:slug', async (req, res) => {
   const parsed = z.object({
-    location_id: optionalUuid
+    location_id: optionalUuid,
+    liquor_type_id: optionalUuid
   }).safeParse(req.query);
 
   if (!parsed.success) return res.status(400).json({
     error: 'Invalid cocktail detail request.'
   });
 
-  const detail = await loadProductDetail(req.params.slug, parsed.data.location_id || null);
+  const locationId = parsed.data.location_id || null;
+  const liquorTypeId = parsed.data.liquor_type_id || null;
+
+  const detail = await loadProductDetail({
+    slug: req.params.slug,
+    locationId,
+    liquorTypeId
+  });
 
   if (detail.error) return res.status(400).json({
     error: detail.error.message
+  });
+
+  if (detail.badRequest) return res.status(400).json({
+    error: detail.badRequest
   });
 
   if (detail.notFound) return res.status(404).json({
@@ -1402,6 +1652,8 @@ customerRouter.get('/customer/cocktails/:slug', async (req, res) => {
 
   let cartContext = {
     cart_id: null,
+    selected_variant_id: detail.data.selectedVariant?.id || null,
+    quantity_for_selected_variant: 0,
     quantities_by_variant: {},
     total_quantity: 0
   };
@@ -1426,43 +1678,52 @@ customerRouter.get('/customer/cocktails/:slug', async (req, res) => {
         error: items.error.message
       });
 
+      const quantitiesByVariant = Object.fromEntries(
+        (items.data || []).map((item) => [item.variant_id, item.quantity])
+      );
+
       cartContext = {
         cart_id: cart.data.id,
-        quantities_by_variant: Object.fromEntries((items.data || []).map((item) => [item.variant_id, item.quantity])),
+        selected_variant_id: detail.data.selectedVariant?.id || null,
+        quantity_for_selected_variant: detail.data.selectedVariant?.id
+          ? Number(quantitiesByVariant[detail.data.selectedVariant.id] || 0)
+          : 0,
+        quantities_by_variant: quantitiesByVariant,
         total_quantity: (items.data || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0)
       };
     }
   }
 
-  const relatedCatalog = await loadCatalog({
-    locationId: parsed.data.location_id || null,
-    categoryId: detail.data.product.category_id || null
-  });
+  const relatedCatalog = liquorTypeId
+    ? await loadCatalog({
+        locationId,
+        liquorTypeIds: [liquorTypeId]
+      })
+    : {
+        data: {
+          cards: []
+        }
+      };
 
   if (relatedCatalog.error) return res.status(400).json({
     error: relatedCatalog.error.message
   });
 
   res.json({
-    cocktail: {
-      ...detail.data.card,
-      servingGuidance: {
-        default_serving_count: detail.data.card.variants?.[0]?.serving_count || 1,
-        customer_supplies_liquor: true,
-        note: 'You bring the bottle. We bring the magic.'
-      }
-    },
+    cocktail: cocktailDetailPayload({
+      card: detail.data.card,
+      selectedVariant: detail.data.selectedVariant,
+      selectedLiquor: detail.data.selectedLiquor,
+      recipe: detail.data.recipe,
+      recipeItems: detail.data.recipeItems,
+      balancesByIngredientId: detail.data.balancesByIngredientId,
+      locationId
+    }),
     cartContext,
     relatedCocktails: (relatedCatalog.data.cards || [])
       .filter((card) => card.id !== detail.data.product.id)
       .slice(0, 6)
-      .map((card) => ({
-        id: card.id,
-        slug: card.slug,
-        name: card.name,
-        image_url: card.image_url,
-        starting_price_inc_vat: card.price.starting_price_inc_vat
-      }))
+      .map(relatedCocktailPayload)
   });
 });
 
