@@ -10,6 +10,7 @@ const blank = {
   compound_name: '',
   beach_name: '',
   address: '',
+  delivery_fee: '0',
   latitude: '',
   longitude: '',
   is_active: true
@@ -38,6 +39,8 @@ function buildPayload(form, isEditing) {
   for (const key of ['compound_name', 'beach_name', 'address', 'latitude', 'longitude']) {
     payload[key] = emptyToNull(payload[key]);
   }
+
+  payload.delivery_fee = payload.delivery_fee === '' ? 0 : payload.delivery_fee;
 
   return payload;
 }
@@ -123,6 +126,7 @@ export default function Locations() {
       compound_name: row.compound_name ?? '',
       beach_name: row.beach_name ?? '',
       address: row.address ?? '',
+      delivery_fee: row.delivery_fee ?? '0',
       latitude: row.latitude ?? '',
       longitude: row.longitude ?? ''
     });
@@ -242,6 +246,15 @@ export default function Locations() {
 
           <input
             type="number"
+            step="0.01"
+            min="0"
+            placeholder="Delivery fee"
+            value={form.delivery_fee ?? ''}
+            onChange={(e) => setForm({ ...form, delivery_fee: e.target.value })}
+          />
+
+          <input
+            type="number"
             step="0.0000001"
             placeholder="Latitude"
             value={form.latitude ?? ''}
@@ -275,7 +288,7 @@ export default function Locations() {
       <Section title="Locations">
         <SimpleTable
           rows={data}
-          columns={['name', 'type', 'compound_name', 'beach_name', 'address', 'is_active']}
+          columns={['name', 'type', 'compound_name', 'beach_name', 'address', 'delivery_fee', 'is_active']}
           actions={(row) => {
             const protectedCentralWarehouse = isProtectedCentralWarehouse(row);
 

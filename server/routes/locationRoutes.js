@@ -170,6 +170,7 @@ const createLocationSchema = z.object({
   beach_name: z.preprocess(optionalText, z.string().optional()),
   address: z.preprocess(optionalText, z.string().optional()),
   banner_image_url: z.preprocess(optionalText, z.string().optional()),
+  delivery_fee: z.preprocess(optionalNumber, z.coerce.number().min(0).optional()),
   latitude: z.preprocess(optionalNumber, z.coerce.number().optional()),
   longitude: z.preprocess(optionalNumber, z.coerce.number().optional()),
   is_active: z.boolean().optional()
@@ -190,6 +191,7 @@ const updateLocationSchema = z.object({
   beach_name: z.preprocess(nullableText, z.string().nullable().optional()),
   address: z.preprocess(nullableText, z.string().nullable().optional()),
   banner_image_url: z.preprocess(nullableText, z.string().nullable().optional()),
+  delivery_fee: z.preprocess(optionalNumber, z.coerce.number().min(0).optional()),
   latitude: z.preprocess(nullableNumber, z.coerce.number().nullable().optional()),
   longitude: z.preprocess(nullableNumber, z.coerce.number().nullable().optional()),
   is_active: z.boolean().optional()

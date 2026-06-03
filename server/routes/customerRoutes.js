@@ -4,6 +4,15 @@ import { z } from 'zod';
 import { isProd, SESSION_SECRET } from '../config/appConfig.js';
 import { clean } from '../lib/objectUtils.js';
 import { getCookie } from '../lib/session.js';
+import {
+  createGeideaSession,
+  extractGeideaCallbackFields,
+  formatGeideaAmount,
+  geideaCallbackIsSuccess,
+  geideaCheckoutConfig,
+  geideaIsConfigured,
+  verifyGeideaCallbackSignature
+} from '../lib/geidea.js';
 import { supabase } from '../lib/supabase.js';
 
 export const customerRouter = Router();
@@ -12,9 +21,8 @@ const CUSTOMER_COOKIE = 'ebtl_customer';
 const CUSTOMER_TOKEN_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
 const BUSINESS_TIME_ZONE = 'Africa/Cairo';
 const CURRENCY = 'EGP';
-const PAYMENT_PROVIDER = process.env.PAYMENT_PROVIDER || 'payment_gateway';
-const PAYMENT_GATEWAY_CHECKOUT_URL = process.env.PAYMENT_GATEWAY_CHECKOUT_URL || '';
-const DEFAULT_DELIVERY_FEE = Number(process.env.CUSTOMER_APP_DELIVERY_FEE || 0);
+const PAYMENT_PROVIDER = 'geidea';
+const EGYPT_MOBILE_SIMPLE_RE = /^0\d{10}$/;
 const MAX_CART_ITEM_QTY = 99;
 const FULFILLMENT_TYPES = ['pickup_at_cart', 'delivery_to_unit'];
 
@@ -171,6 +179,7 @@ function publicLocation(location) {
     latitude: location.latitude,
     longitude: location.longitude,
     banner_image_url: location.banner_image_url || null,
+    delivery_fee: money(location.delivery_fee || 0),
     is_active: location.is_active
   };
 }
@@ -883,7 +892,11 @@ async function cartItemsForCart(cartId) {
     .order('created_at');
 }
 
-function cartTotals(items = []) {
+function cartTotals(items = [], {
+  fulfillmentType = 'pickup_at_cart',
+  deliveryFee = 0,
+  discountAmount = 0
+} = {}) {
   const itemCount = items.length;
 
   const totalQuantity = items.reduce((sum, item) => {
@@ -902,14 +915,17 @@ function cartTotals(items = []) {
     return sum + (lineIncVat - lineExVat);
   }, 0));
 
+  const appliedDeliveryFee = fulfillmentType === 'delivery_to_unit' ? money(deliveryFee) : 0;
+  const appliedDiscountAmount = money(Math.min(Math.max(Number(discountAmount || 0), 0), subtotalIncVat + appliedDeliveryFee));
+
   return {
     item_count: itemCount,
     total_quantity: totalQuantity,
     subtotal_inc_vat: subtotalIncVat,
     estimated_vat_amount: estimatedVatAmount,
-    discount_amount: 0,
-    delivery_fee: 0,
-    total_amount: subtotalIncVat,
+    discount_amount: appliedDiscountAmount,
+    delivery_fee: appliedDeliveryFee,
+    total_amount: money(Math.max(subtotalIncVat + appliedDeliveryFee - appliedDiscountAmount, 0)),
     currency: CURRENCY
   };
 }
@@ -1260,7 +1276,10 @@ async function buildCartResponse(customerId, {
         cart: null,
         selected_location: selectedLocation.data,
         items: [],
-        totals: cartTotals([], { fulfillmentType: normalizedFulfillmentType }),
+        totals: cartTotals([], {
+          fulfillmentType: normalizedFulfillmentType,
+          deliveryFee: selectedLocation.data?.delivery_fee || 0
+        }),
         checkoutReadiness: {
           can_checkout: false,
           blocking_reasons: ['Cart is empty.']
@@ -1366,7 +1385,10 @@ async function buildCartResponse(customerId, {
     };
   });
 
-  const totals = cartTotals(items.data || [], { fulfillmentType: normalizedFulfillmentType });
+  const totals = cartTotals(items.data || [], {
+    fulfillmentType: normalizedFulfillmentType,
+    deliveryFee: selectedLocation.data?.delivery_fee || 0
+  });
   const blockingReasons = [];
 
   if (!responseItems.length) blockingReasons.push('Cart is empty.');
@@ -1425,13 +1447,145 @@ async function validateBeachCart(locationId, res) {
   return location.data;
 }
 
+
+function normalizePromoCode(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function isSimpleEgyptianMobile(value) {
+  return EGYPT_MOBILE_SIMPLE_RE.test(String(value || '').trim());
+}
+
+function publicPromotion(promotion, discountAmount = 0) {
+  if (!promotion) return null;
+
+  return {
+    id: promotion.id,
+    code: promotion.code,
+    name: promotion.name,
+    discount_type: promotion.discount_type,
+    discount_value: money(promotion.discount_value),
+    discount_amount: money(discountAmount),
+    currency: CURRENCY
+  };
+}
+
+function promotionDateIsActive(promotion, now = new Date()) {
+  const nowMs = now.getTime();
+
+  if (promotion.starts_at && new Date(promotion.starts_at).getTime() > nowMs) return false;
+  if (promotion.ends_at && new Date(promotion.ends_at).getTime() < nowMs) return false;
+
+  return true;
+}
+
+function calculatePromotionDiscount(promotion, { subtotalIncVat, deliveryFee }) {
+  if (!promotion) return 0;
+
+  const discountValue = Number(promotion.discount_value || 0);
+
+  if (promotion.discount_type === 'percentage') {
+    return money(Math.min(subtotalIncVat, subtotalIncVat * (discountValue / 100)));
+  }
+
+  if (promotion.discount_type === 'fixed_amount') {
+    return money(Math.min(subtotalIncVat, discountValue));
+  }
+
+  if (promotion.discount_type === 'free_delivery') {
+    return money(deliveryFee);
+  }
+
+  return 0;
+}
+
+async function resolvePromotion({ promoCode, customerId, subtotalIncVat, deliveryFee }) {
+  const code = normalizePromoCode(promoCode);
+  if (!code) return { data: { promotion: null, discountAmount: 0 } };
+
+  const promotion = await supabase
+    .from('promotions')
+    .select('*')
+    .ilike('code', code)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (promotion.error) return { error: promotion.error };
+
+  if (!promotion.data) return { badRequest: 'Promotion code was not found or is no longer active.' };
+
+  if (!promotionDateIsActive(promotion.data)) {
+    return { badRequest: 'Promotion code is not active right now.' };
+  }
+
+  if (money(subtotalIncVat) < money(promotion.data.min_order_value || 0)) {
+    return { badRequest: `Promotion requires a minimum order value of EGP ${money(promotion.data.min_order_value)}.` };
+  }
+
+  if (promotion.data.usage_limit) {
+    const redemptions = await supabase
+      .from('promotion_redemptions')
+      .select('id', { count: 'exact', head: true })
+      .eq('promotion_id', promotion.data.id);
+
+    if (redemptions.error) return { error: redemptions.error };
+
+    if (Number(redemptions.count || 0) >= Number(promotion.data.usage_limit)) {
+      return { badRequest: 'Promotion code usage limit has been reached.' };
+    }
+  }
+
+  const discountAmount = calculatePromotionDiscount(promotion.data, {
+    subtotalIncVat,
+    deliveryFee
+  });
+
+  if (discountAmount <= 0) {
+    return { badRequest: 'Promotion code does not apply to this checkout.' };
+  }
+
+  return {
+    data: {
+      promotion: publicPromotion(promotion.data, discountAmount),
+      rawPromotion: promotion.data,
+      discountAmount
+    }
+  };
+}
+
+function checkoutPaymentMethods() {
+  const config = geideaCheckoutConfig();
+
+  return [
+    {
+      key: 'geidea_card',
+      label: 'Credit / Debit Card',
+      provider: 'geidea',
+      enabled: config.configured,
+      setup_required: !config.configured,
+      sdk: config
+    },
+    {
+      key: 'geidea_apple_pay',
+      label: 'Apple Pay',
+      provider: 'geidea',
+      enabled: config.configured && Boolean(config.apple_pay_merchant_id),
+      setup_required: !config.configured || !config.apple_pay_merchant_id,
+      sdk: config
+    }
+  ];
+}
+
 async function buildCheckoutQuote({
   customerId,
   cartId,
   locationId,
   fulfillmentType,
   customerAddressId = null,
-  customerNotes = null
+  addressText = null,
+  customerNotes = null,
+  promoCode = null,
+  requireCustomerDetails = false
 }) {
   const location = await supabase
     .from('locations')
@@ -1463,9 +1617,9 @@ async function buildCheckoutQuote({
     };
   }
 
-  if (fulfillmentType === 'delivery_to_unit' && !customerAddressId) {
+  if (requireCustomerDetails && fulfillmentType === 'delivery_to_unit' && !String(addressText || '').trim() && !customerAddressId) {
     return {
-      badRequest: 'Delivery orders require a customer address.'
+      badRequest: 'Delivery orders require an address.'
     };
   }
 
@@ -1589,9 +1743,21 @@ async function buildCheckoutQuote({
 
   const subtotalExVat = money(quoteItems.reduce((sum, item) => sum + item.line_subtotal_ex_vat, 0));
   const vatAmount = money(quoteItems.reduce((sum, item) => sum + item.line_vat_amount, 0));
-  const discountAmount = 0;
-  const deliveryFee = fulfillmentType === 'delivery_to_unit' ? money(DEFAULT_DELIVERY_FEE) : 0;
-  const totalAmount = money(subtotalExVat + vatAmount - discountAmount + deliveryFee);
+  const subtotalIncVat = money(subtotalExVat + vatAmount);
+  const deliveryFee = fulfillmentType === 'delivery_to_unit' ? money(location.data.delivery_fee || 0) : 0;
+
+  const promotionResult = await resolvePromotion({
+    promoCode,
+    customerId,
+    subtotalIncVat,
+    deliveryFee
+  });
+
+  if (promotionResult.error) return { error: promotionResult.error };
+  if (promotionResult.badRequest) return { badRequest: promotionResult.badRequest };
+
+  const discountAmount = money(promotionResult.data?.discountAmount || 0);
+  const totalAmount = money(Math.max(subtotalIncVat + deliveryFee - discountAmount, 0));
 
   return {
     data: {
@@ -1600,15 +1766,21 @@ async function buildCheckoutQuote({
         location_id: locationId,
         fulfillment_type: fulfillmentType,
         customer_address_id: customerAddressId,
+        address_text: addressText ? String(addressText).trim() : null,
         customer_notes: customerNotes,
+        promo_code: normalizePromoCode(promoCode) || null,
+        promotion: promotionResult.data?.promotion || null,
+        raw_promotion: promotionResult.data?.rawPromotion || null,
         items: quoteItems,
         totals: {
           subtotal_ex_vat: subtotalExVat,
           vat_amount: vatAmount,
+          subtotal_inc_vat: subtotalIncVat,
           discount_amount: discountAmount,
           delivery_fee: deliveryFee,
           total_amount: totalAmount,
-          currency: CURRENCY
+          currency: CURRENCY,
+          vat_included: true
         },
         validation: {
           can_place_order: blockingReasons.length === 0,
@@ -1621,38 +1793,58 @@ async function buildCheckoutQuote({
   };
 }
 
-function createPaymentGatewayPayload({
+function createGeideaPaymentPayload({
   order,
-  payment
+  payment,
+  sessionId = null,
+  paymentMethod = null
 }) {
-  if (!PAYMENT_GATEWAY_CHECKOUT_URL) {
-    return {
-      required: true,
-      provider: PAYMENT_PROVIDER,
-      payment_id: payment.id,
-      payment_url: null,
-      status: payment.status,
-      gateway_configured: false,
-      message: 'Payment gateway checkout URL is not configured yet.'
-    };
-  }
-
-  const url = new URL(PAYMENT_GATEWAY_CHECKOUT_URL);
-
-  url.searchParams.set('order_id', order.id);
-  url.searchParams.set('order_number', order.order_number || '');
-  url.searchParams.set('payment_id', payment.id);
-  url.searchParams.set('amount', String(order.total_amount));
-  url.searchParams.set('currency', CURRENCY);
+  const config = geideaCheckoutConfig();
 
   return {
     required: true,
-    provider: PAYMENT_PROVIDER,
+    provider: 'geidea',
     payment_id: payment.id,
-    payment_url: url.toString(),
+    payment_method: paymentMethod || payment.raw_payload?.payment_method || null,
     status: payment.status,
-    gateway_configured: true
+    amount: money(payment.amount),
+    currency: payment.currency || CURRENCY,
+    geidea: {
+      configured: config.configured,
+      is_sandbox: config.is_sandbox,
+      region: config.region,
+      language: config.language,
+      session_id: sessionId || payment.raw_payload?.geidea_session_id || null,
+      apple_pay_merchant_id: config.apple_pay_merchant_id
+    },
+    order_reference: order.order_number || order.id
   };
+}
+
+async function recordPromotionRedemptionIfNeeded({ order, payment }) {
+  const promotion = payment?.raw_payload?.promotion;
+
+  if (!promotion?.id || !Number(payment?.raw_payload?.promotion?.discount_amount || order.discount_amount || 0)) {
+    return;
+  }
+
+  const existing = await supabase
+    .from('promotion_redemptions')
+    .select('id')
+    .eq('promotion_id', promotion.id)
+    .eq('order_id', order.id)
+    .maybeSingle();
+
+  if (existing.error || existing.data) return;
+
+  await supabase
+    .from('promotion_redemptions')
+    .insert({
+      promotion_id: promotion.id,
+      customer_id: order.customer_id || null,
+      order_id: order.id,
+      discount_amount: money(payment.raw_payload.promotion.discount_amount || order.discount_amount || 0)
+    });
 }
 
 customerRouter.post('/customer/session', async (req, res) => {
@@ -2438,6 +2630,122 @@ customerRouter.delete('/customer/cart', async (req, res) => {
   });
 });
 
+
+customerRouter.get('/customer/checkout', async (req, res) => {
+  const parsed = z.object({
+    location_id: uuid.optional(),
+    locationId: uuid.optional(),
+    fulfillment_type: z.enum(['pickup_at_cart', 'delivery_to_unit']).optional(),
+    fulfillmentType: z.enum(['pickup_at_cart', 'delivery_to_unit']).optional(),
+    promo_code: z.string().nullable().optional(),
+    promoCode: z.string().nullable().optional()
+  }).safeParse(req.query);
+
+  if (!parsed.success) return res.status(400).json({
+    error: 'Invalid checkout request.'
+  });
+
+  const locationId = parsed.data.location_id || parsed.data.locationId;
+
+  if (!locationId) return res.status(400).json({
+    error: 'location_id is required.'
+  });
+
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const cart = await getActiveCart(ensured.customer.id, {
+    createIfMissing: false
+  });
+
+  if (cart.error) return res.status(400).json({
+    error: cart.error.message
+  });
+
+  if (!cart.data) return res.status(400).json({
+    error: 'Cart is empty.'
+  });
+
+  const fulfillmentType = parsed.data.fulfillment_type || parsed.data.fulfillmentType || 'delivery_to_unit';
+
+  const quote = await buildCheckoutQuote({
+    customerId: ensured.customer.id,
+    cartId: cart.data.id,
+    locationId,
+    fulfillmentType,
+    promoCode: parsed.data.promo_code || parsed.data.promoCode || null,
+    requireCustomerDetails: false
+  });
+
+  if (quote.error) return res.status(400).json({
+    error: quote.error.message
+  });
+
+  if (quote.badRequest) return res.status(400).json({
+    error: quote.badRequest
+  });
+
+  const location = await loadCartLocation(locationId);
+
+  if (location.error) return res.status(400).json({
+    error: location.error.message
+  });
+
+  const itemWarnings = quote.data.quote.items
+    .filter((item) => !item.is_available)
+    .map((item) => ({
+      cart_item_id: item.cart_item_id,
+      product_id: item.product_id,
+      product_name: item.product_name,
+      reason: item.blocking_reason || 'Currently unavailable at this beach cart.'
+    }));
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    checkout: {
+      cart_id: cart.data.id,
+      cart_expires_at: cart.data.expires_at || cartExpiresAtIso(),
+      location: location.data,
+      fulfillment: {
+        type: fulfillmentType,
+        delivery_fee: quote.data.quote.totals.delivery_fee,
+        currency: CURRENCY
+      },
+      customer: {
+        id: ensured.customer.id,
+        phone: ensured.customer.phone || null
+      },
+      requirements: {
+        customer_phone: {
+          required: true,
+          validation: '^0[0-9]{10}$',
+          helper_text: 'Egyptian mobile number, 11 digits, starting with 0.'
+        },
+        address: {
+          required: fulfillmentType === 'delivery_to_unit',
+          max_length: 500
+        },
+        promo_code: {
+          required: false,
+          max_count: 1
+        }
+      },
+      items: quote.data.quote.items,
+      item_warnings: itemWarnings,
+      summary: quote.data.quote.totals,
+      promotion: quote.data.quote.promotion,
+      payment_methods: checkoutPaymentMethods(),
+      validation: {
+        can_place_order: quote.data.quote.validation.can_place_order && geideaIsConfigured(),
+        blocking_reasons: [
+          ...quote.data.quote.validation.blocking_reasons,
+          ...(geideaIsConfigured() ? [] : ['Geidea payment gateway is not configured yet.'])
+        ]
+      }
+    }
+  });
+});
+
 customerRouter.get('/customer/checkout/options', async (req, res) => {
   const ensured = await ensureCustomer(req, res);
   if (!ensured) return;
@@ -2486,12 +2794,7 @@ customerRouter.get('/customer/checkout/options', async (req, res) => {
         label: 'Delivery to unit'
       }
     ],
-    paymentMethods: [
-      {
-        value: 'payment_gateway',
-        label: 'Card payment'
-      }
-    ]
+    paymentMethods: checkoutPaymentMethods()
   });
 });
 
@@ -2501,6 +2804,7 @@ customerRouter.post('/customer/checkout/quote', async (req, res) => {
     location_id: uuid,
     fulfillment_type: z.enum(['pickup_at_cart', 'delivery_to_unit']),
     customer_address_id: uuid.nullable().optional(),
+    address: z.string().trim().min(1).max(500).nullable().optional(),
     requested_fulfillment_at: z.string().nullable().optional(),
     promo_code: z.string().nullable().optional(),
     customer_notes: z.string().nullable().optional()
@@ -2519,7 +2823,9 @@ customerRouter.post('/customer/checkout/quote', async (req, res) => {
     locationId: parsed.data.location_id,
     fulfillmentType: parsed.data.fulfillment_type,
     customerAddressId: parsed.data.customer_address_id || null,
-    customerNotes: parsed.data.customer_notes || null
+    addressText: parsed.data.address || null,
+    customerNotes: parsed.data.customer_notes || null,
+    promoCode: parsed.data.promo_code || null
   });
 
   if (quote.error) return res.status(400).json({
@@ -2536,21 +2842,55 @@ customerRouter.post('/customer/checkout/quote', async (req, res) => {
   });
 });
 
-customerRouter.post('/customer/orders', async (req, res) => {
+
+async function handleCustomerPlaceOrder(req, res) {
   const parsed = z.object({
     cart_id: uuid,
     location_id: uuid,
     fulfillment_type: z.enum(['pickup_at_cart', 'delivery_to_unit']),
+    address: z.string().trim().min(1).max(500).nullable().optional(),
     customer_address_id: uuid.nullable().optional(),
+    customer_phone: z.string().trim().optional(),
+    mobile_phone: z.string().trim().optional(),
+    phone: z.string().trim().optional(),
     requested_fulfillment_at: z.string().nullable().optional(),
+    promo_code: z.string().nullable().optional(),
     customer_notes: z.string().nullable().optional(),
-    payment_method: z.literal('payment_gateway').default('payment_gateway'),
+    payment_method: z.enum(['geidea_card', 'geidea_apple_pay', 'payment_gateway']),
     idempotency_key: z.string().min(8).max(120)
-  }).safeParse(req.body);
+  }).transform((data) => ({
+    ...data,
+    customer_phone: data.customer_phone || data.mobile_phone || data.phone || '',
+    payment_method: data.payment_method === 'payment_gateway' ? 'geidea_card' : data.payment_method
+  })).safeParse(req.body);
 
   if (!parsed.success) return res.status(400).json({
-    error: 'Invalid order request.'
+    error: 'Invalid order request.',
+    details: parsed.error.issues.map((issue) => ({
+      path: issue.path.join('.'),
+      message: issue.message
+    }))
   });
+
+  if (!isSimpleEgyptianMobile(parsed.data.customer_phone)) {
+    return res.status(400).json({
+      error: 'Invalid mobile number. Use an Egyptian mobile number that starts with 0 and has 11 digits.'
+    });
+  }
+
+  if (!geideaIsConfigured()) {
+    return res.status(503).json({
+      error: 'Geidea payment gateway is not configured yet.'
+    });
+  }
+
+  const method = checkoutPaymentMethods().find((entry) => entry.key === parsed.data.payment_method);
+
+  if (!method?.enabled) {
+    return res.status(400).json({
+      error: `${method?.label || 'Selected payment method'} is not available yet.`
+    });
+  }
 
   const ensured = await ensureCustomer(req, res);
   if (!ensured) return;
@@ -2586,11 +2926,11 @@ customerRouter.post('/customer/orders', async (req, res) => {
       session: sessionPayload(ensured.customer.id, ensured.token),
       order: existingPayment.data.orders,
       items: existingItems.data || [],
-      payment: createPaymentGatewayPayload({
+      payment: createGeideaPaymentPayload({
         order: existingPayment.data.orders,
         payment: existingPayment.data
       }),
-      nextScreen: 'order_confirmation'
+      nextScreen: 'geidea_payment'
     });
   }
 
@@ -2600,7 +2940,10 @@ customerRouter.post('/customer/orders', async (req, res) => {
     locationId: parsed.data.location_id,
     fulfillmentType: parsed.data.fulfillment_type,
     customerAddressId: parsed.data.customer_address_id || null,
-    customerNotes: parsed.data.customer_notes || null
+    addressText: parsed.data.address || null,
+    customerNotes: parsed.data.customer_notes || null,
+    promoCode: parsed.data.promo_code || null,
+    requireCustomerDetails: true
   });
 
   if (quote.error) return res.status(400).json({
@@ -2629,12 +2972,41 @@ customerRouter.post('/customer/orders', async (req, res) => {
     });
   }
 
+  let customerAddressId = parsed.data.customer_address_id || null;
+  let customerAddressSnapshot = quote.data.quote.address_text || null;
+
+  if (parsed.data.fulfillment_type === 'delivery_to_unit' && !customerAddressId) {
+    const addressInsert = await supabase
+      .from('customer_addresses')
+      .insert({
+        customer_id: ensured.customer.id,
+        label: 'Checkout address',
+        compound_name: quote.data.location.compound_name || null,
+        beach_name: quote.data.location.beach_name || null,
+        address: quote.data.quote.address_text,
+        is_default: false
+      })
+      .select()
+      .single();
+
+    if (addressInsert.error) return res.status(400).json({
+      error: addressInsert.error.message
+    });
+
+    customerAddressId = addressInsert.data.id;
+    customerAddressSnapshot = addressInsert.data.address;
+  } else if (quote.data.address) {
+    customerAddressSnapshot = quote.data.address.address || quote.data.address.delivery_notes || null;
+  }
+
   const orderInsert = await supabase
-    .from('orders')  
+    .from('orders')
     .insert({
       customer_id: ensured.customer.id,
       location_id: parsed.data.location_id,
-      customer_address_id: parsed.data.customer_address_id || null,
+      customer_address_id: customerAddressId,
+      customer_phone_snapshot: parsed.data.customer_phone,
+      customer_address_snapshot: customerAddressSnapshot,
       order_channel: 'app',
       fulfillment_type: parsed.data.fulfillment_type,
       status: 'pending_payment',
@@ -2647,7 +3019,7 @@ customerRouter.post('/customer/orders', async (req, res) => {
       total_amount: quote.data.quote.totals.total_amount,
       customer_notes: parsed.data.customer_notes || null
     })
-    .select('*, locations(id,name,type,compound_name,beach_name,banner_image_url), customer_addresses(*)')
+    .select('*, locations(id,name,type,compound_name,beach_name,banner_image_url,delivery_fee), customer_addresses(*)')
     .single();
 
   if (orderInsert.error) return res.status(400).json({
@@ -2673,10 +3045,7 @@ customerRouter.post('/customer/orders', async (req, res) => {
     .select();
 
   if (orderItems.error) {
-    await supabase
-      .from('orders')
-      .delete()
-      .eq('id', orderInsert.data.id);
+    await supabase.from('orders').delete().eq('id', orderInsert.data.id);
 
     return res.status(400).json({
       error: orderItems.error.message
@@ -2694,20 +3063,62 @@ customerRouter.post('/customer/orders', async (req, res) => {
       idempotency_key: parsed.data.idempotency_key,
       raw_payload: {
         payment_method: parsed.data.payment_method,
-        gateway_configured: Boolean(PAYMENT_GATEWAY_CHECKOUT_URL)
+        promotion: quote.data.quote.promotion
+          ? {
+              id: quote.data.quote.promotion.id,
+              code: quote.data.quote.promotion.code,
+              discount_amount: quote.data.quote.promotion.discount_amount
+            }
+          : null
       }
     })
     .select()
     .single();
 
   if (payment.error) {
-    await supabase
-      .from('orders')
-      .delete()
-      .eq('id', orderInsert.data.id);
+    await supabase.from('orders').delete().eq('id', orderInsert.data.id);
 
     return res.status(400).json({
       error: payment.error.message
+    });
+  }
+
+  let geideaSession;
+
+  try {
+    geideaSession = await createGeideaSession({
+      order: orderInsert.data,
+      payment: payment.data,
+      customer: ensured.customer,
+      paymentMethod: parsed.data.payment_method
+    });
+  } catch (err) {
+    await supabase.from('orders').delete().eq('id', orderInsert.data.id);
+
+    return res.status(502).json({
+      error: err.message || 'Could not create Geidea payment session.'
+    });
+  }
+
+  const updatedPayment = await supabase
+    .from('payments')
+    .update({
+      raw_payload: {
+        ...(payment.data.raw_payload || {}),
+        geidea_session_id: geideaSession.session_id,
+        geidea_create_session_request: geideaSession.request_payload,
+        geidea_create_session_response: geideaSession.raw_response
+      }
+    })
+    .eq('id', payment.data.id)
+    .select()
+    .single();
+
+  if (updatedPayment.error) {
+    await supabase.from('orders').delete().eq('id', orderInsert.data.id);
+
+    return res.status(400).json({
+      error: updatedPayment.error.message
     });
   }
 
@@ -2718,9 +3129,7 @@ customerRouter.post('/customer/orders', async (req, res) => {
 
   await supabase
     .from('carts')
-    .update({
-      status: 'converted'
-    })
+    .update({ status: 'converted' })
     .eq('id', parsed.data.cart_id);
 
   res.json({
@@ -2733,16 +3142,144 @@ customerRouter.post('/customer/orders', async (req, res) => {
       fulfillment_type: orderInsert.data.fulfillment_type,
       requested_fulfillment_at: orderInsert.data.requested_fulfillment_at,
       created_at: orderInsert.data.created_at,
+      customer_phone: orderInsert.data.customer_phone_snapshot,
+      address: orderInsert.data.customer_address_snapshot,
       location: publicLocation(orderInsert.data.locations),
-      address: orderInsert.data.customer_addresses,
-      totals: quote.data.quote.totals
+      totals: quote.data.quote.totals,
+      promotion: quote.data.quote.promotion
     },
     items: orderItems.data,
-    payment: createPaymentGatewayPayload({
+    payment: createGeideaPaymentPayload({
       order: orderInsert.data,
-      payment: payment.data
+      payment: updatedPayment.data,
+      sessionId: geideaSession.session_id,
+      paymentMethod: parsed.data.payment_method
     }),
-    nextScreen: 'order_confirmation'
+    nextScreen: 'geidea_payment'
+  });
+}
+
+customerRouter.post('/customer/checkout/place-order', handleCustomerPlaceOrder);
+customerRouter.post('/customer/orders', handleCustomerPlaceOrder);
+
+customerRouter.post('/payments/geidea/callback', async (req, res) => {
+  const payload = req.body || {};
+  const providerEventId = crypto
+    .createHash('sha256')
+    .update(JSON.stringify(payload))
+    .digest('hex');
+
+  await supabase
+    .from('payment_events')
+    .upsert({
+      provider: 'geidea',
+      provider_event_id: providerEventId,
+      event_type: 'callback',
+      raw_payload: payload
+    }, {
+      onConflict: 'provider_event_id',
+      ignoreDuplicates: true
+    });
+
+  const verification = verifyGeideaCallbackSignature(payload);
+  const fields = verification.fields || extractGeideaCallbackFields(payload);
+
+  if (!verification.ok) {
+    return res.status(400).json({
+      ok: false,
+      error: verification.reason
+    });
+  }
+
+  if (!fields.merchant_reference_id) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Geidea callback is missing merchantReferenceId.'
+    });
+  }
+
+  const payment = await supabase
+    .from('payments')
+    .select('*, orders(*)')
+    .eq('id', fields.merchant_reference_id)
+    .maybeSingle();
+
+  if (payment.error) return res.status(400).json({
+    ok: false,
+    error: payment.error.message
+  });
+
+  if (!payment.data?.orders) return res.status(404).json({
+    ok: false,
+    error: 'Payment was not found for this Geidea callback.'
+  });
+
+  const expectedAmount = formatGeideaAmount(payment.data.amount);
+  const receivedAmount = formatGeideaAmount(fields.amount);
+
+  if (expectedAmount !== receivedAmount || String(fields.currency || '').toUpperCase() !== String(payment.data.currency || CURRENCY).toUpperCase()) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Geidea callback amount or currency does not match the payment record.'
+    });
+  }
+
+  const isSuccess = geideaCallbackIsSuccess(fields);
+  const nextPaymentStatus = isSuccess ? 'paid' : 'failed';
+  const nextOrderPaymentStatus = isSuccess ? 'paid' : 'failed';
+  const nextOrderStatus = isSuccess ? 'confirmed' : payment.data.orders.status;
+
+  const updatedPayment = await supabase
+    .from('payments')
+    .update({
+      provider_payment_id: fields.order_id || payment.data.provider_payment_id,
+      status: nextPaymentStatus,
+      raw_payload: {
+        ...(payment.data.raw_payload || {}),
+        geidea_callback: payload,
+        geidea_callback_fields: fields
+      }
+    })
+    .eq('id', payment.data.id)
+    .select()
+    .single();
+
+  if (updatedPayment.error) return res.status(400).json({
+    ok: false,
+    error: updatedPayment.error.message
+  });
+
+  const updatedOrder = await supabase
+    .from('orders')
+    .update({
+      status: nextOrderStatus,
+      payment_status: nextOrderPaymentStatus
+    })
+    .eq('id', payment.data.order_id)
+    .select()
+    .single();
+
+  if (updatedOrder.error) return res.status(400).json({
+    ok: false,
+    error: updatedOrder.error.message
+  });
+
+  if (isSuccess) {
+    await recordPromotionRedemptionIfNeeded({
+      order: updatedOrder.data,
+      payment: updatedPayment.data
+    });
+  }
+
+  await supabase
+    .from('payment_events')
+    .update({ processed_at: new Date().toISOString() })
+    .eq('provider_event_id', providerEventId);
+
+  res.json({
+    ok: true,
+    payment_status: nextPaymentStatus,
+    order_status: nextOrderStatus
   });
 });
 
@@ -2752,7 +3289,7 @@ customerRouter.get('/customer/orders/:orderId', async (req, res) => {
 
   const order = await supabase
     .from('orders')
-    .select('*, locations(id,name,type,compound_name,beach_name,banner_image_url), customer_addresses(*)')
+    .select('*, locations(id,name,type,compound_name,beach_name,banner_image_url,delivery_fee), customer_addresses(*)')
     .eq('id', req.params.orderId)
     .eq('customer_id', ensured.customer.id)
     .maybeSingle();
@@ -2773,6 +3310,18 @@ customerRouter.get('/customer/orders/:orderId', async (req, res) => {
 
   if (items.error) return res.status(400).json({
     error: items.error.message
+  });
+
+  const payment = await supabase
+    .from('payments')
+    .select('id,provider,provider_payment_id,amount,currency,status,raw_payload,created_at,updated_at')
+    .eq('order_id', order.data.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (payment.error) return res.status(400).json({
+    error: payment.error.message
   });
 
   const statusOrder = [
@@ -2803,6 +3352,8 @@ customerRouter.get('/customer/orders/:orderId', async (req, res) => {
       fulfillment_type: order.data.fulfillment_type,
       requested_fulfillment_at: order.data.requested_fulfillment_at,
       created_at: order.data.created_at,
+      customer_phone: order.data.customer_phone_snapshot || null,
+      address_text: order.data.customer_address_snapshot || null,
       statusTimeline: timeline,
       location: publicLocation(order.data.locations),
       address: order.data.customer_addresses,
@@ -2817,6 +3368,10 @@ customerRouter.get('/customer/orders/:orderId', async (req, res) => {
       }
     },
     items: items.data || [],
+    payment: payment.data ? createGeideaPaymentPayload({
+      order: order.data,
+      payment: payment.data
+    }) : null,
     support: {
       whatsapp_number: process.env.CUSTOMER_SUPPORT_WHATSAPP || null,
       message_template: `Hi EBTL, I need help with order ${order.data.order_number}.`
@@ -2862,6 +3417,51 @@ customerRouter.get('/customer/orders/:orderId/status', async (req, res) => {
       prep_status: item.prep_status
     })),
     updated_at: order.data.updated_at
+  });
+});
+
+
+customerRouter.get('/customer/orders/:orderId/payment-status', async (req, res) => {
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const order = await supabase
+    .from('orders')
+    .select('id,order_number,status,payment_status,total_amount,customer_id,updated_at')
+    .eq('id', req.params.orderId)
+    .eq('customer_id', ensured.customer.id)
+    .maybeSingle();
+
+  if (order.error) return res.status(400).json({
+    error: order.error.message
+  });
+
+  if (!order.data) return res.status(404).json({
+    error: 'Order not found.'
+  });
+
+  const payment = await supabase
+    .from('payments')
+    .select('id,provider,provider_payment_id,amount,currency,status,raw_payload,created_at,updated_at')
+    .eq('order_id', order.data.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (payment.error) return res.status(400).json({
+    error: payment.error.message
+  });
+
+  res.json({
+    order_id: order.data.id,
+    order_number: order.data.order_number,
+    order_status: order.data.status,
+    payment_status: order.data.payment_status,
+    updated_at: order.data.updated_at,
+    payment: payment.data ? createGeideaPaymentPayload({
+      order: order.data,
+      payment: payment.data
+    }) : null
   });
 });
 
