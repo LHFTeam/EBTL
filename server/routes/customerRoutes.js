@@ -25,6 +25,8 @@ const PAYMENT_PROVIDER = 'geidea';
 const EGYPT_MOBILE_SIMPLE_RE = /^0\d{10}$/;
 const MAX_CART_ITEM_QTY = 99;
 const FULFILLMENT_TYPES = ['pickup_at_cart', 'delivery_to_unit'];
+const CUSTOMER_PROFILE_ORDER_LIMIT = 5;
+const CUSTOMER_PROFILE_AVATAR_ASSET = 'assets/images/profile/default-profile.webp';
 
 const uuid = z.string().uuid();
 const optionalUuid = uuid.optional();
@@ -786,6 +788,373 @@ function productCardPayload({
           reason: variantPayloads[0]?.availability?.reason || 'Currently unavailable.'
         }
   };
+}
+
+function humanizeStatus(value) {
+  return String(value || '')
+    .split('_')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function addFavoriteFlagToCard(card, favoriteProductIds = new Set()) {
+  if (!card) return card;
+  return {
+    ...card,
+    is_favorite: favoriteProductIds.has(card.id)
+  };
+}
+
+function addFavoriteFlagToRelated(card, favoriteProductIds = new Set()) {
+  const payload = relatedCocktailPayload(card);
+  return {
+    ...payload,
+    is_favorite: favoriteProductIds.has(payload.id)
+  };
+}
+
+function customerProfilePayload(customer) {
+  return {
+    id: customer.id,
+    full_name: customer.full_name || null,
+    phone: customer.phone || null,
+    email: customer.email || null,
+    birthday: customer.birthday || null,
+    marketing_opt_in: Boolean(customer.marketing_opt_in),
+    avatar: {
+      type: 'local_asset',
+      asset_path: CUSTOMER_PROFILE_AVATAR_ASSET,
+      image_url: null
+    },
+    completion: {
+      has_full_name: Boolean(customer.full_name),
+      has_phone: Boolean(customer.phone),
+      has_email: Boolean(customer.email),
+      missing_fields: [
+        !customer.full_name ? 'full_name' : null,
+        !customer.phone ? 'phone' : null,
+        !customer.email ? 'email' : null
+      ].filter(Boolean)
+    }
+  };
+}
+
+function publicProfileOrder(order, orderItems = []) {
+  const orderedItems = [...(orderItems || [])].sort((a, b) => {
+    return String(a.created_at || '').localeCompare(String(b.created_at || ''));
+  });
+
+  const firstItem = orderedItems[0] || null;
+  const imageItem = orderedItems.find((item) => item.products?.image_url) || firstItem;
+  const totalQuantity = orderedItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  const displayTime = order.requested_fulfillment_at || order.created_at;
+
+  return {
+    id: order.id,
+    order_number: order.order_number,
+    status: order.status,
+    status_label: humanizeStatus(order.status),
+    payment_status: order.payment_status,
+    payment_status_label: humanizeStatus(order.payment_status),
+    fulfillment_type: order.fulfillment_type,
+    requested_fulfillment_at: order.requested_fulfillment_at || null,
+    display_fulfillment_at: displayTime,
+    created_at: order.created_at,
+    updated_at: order.updated_at,
+    total_amount: money(order.total_amount),
+    currency: CURRENCY,
+    order_image_url: imageItem?.products?.image_url || null,
+    primary_item: firstItem ? {
+      product_id: firstItem.product_id || firstItem.products?.id || null,
+      slug: firstItem.products?.slug || null,
+      name: firstItem.product_name_snapshot || firstItem.products?.name || null,
+      variant_name: firstItem.variant_name_snapshot || null,
+      quantity: Number(firstItem.quantity || 0)
+    } : null,
+    item_count: orderedItems.length,
+    total_quantity: totalQuantity,
+    location: publicLocation(order.locations),
+    location_name: order.locations?.name || null
+  };
+}
+
+async function loadCustomerOrdersPreview(customerId, { limit = CUSTOMER_PROFILE_ORDER_LIMIT, offset = 0 } = {}) {
+  const safeLimit = Math.min(Math.max(Number(limit) || CUSTOMER_PROFILE_ORDER_LIMIT, 1), 100);
+  const safeOffset = Math.max(Number(offset) || 0, 0);
+
+  const orders = await supabase
+    .from('orders')
+    .select('id,order_number,status,payment_status,fulfillment_type,requested_fulfillment_at,total_amount,created_at,updated_at,locations(id,name,type,compound_name,beach_name,banner_image_url,delivery_fee,is_active)')
+    .eq('customer_id', customerId)
+    .order('created_at', { ascending: false })
+    .range(safeOffset, safeOffset + safeLimit);
+
+  if (orders.error) return { error: orders.error };
+
+  const rows = orders.data || [];
+  const hasMore = rows.length > safeLimit;
+  const pageRows = rows.slice(0, safeLimit);
+  const orderIds = pageRows.map((order) => order.id);
+
+  const items = orderIds.length
+    ? await supabase
+        .from('order_items')
+        .select('order_id,product_id,product_name_snapshot,variant_name_snapshot,quantity,created_at,products(id,slug,name,image_url)')
+        .in('order_id', orderIds)
+        .order('created_at', { ascending: true })
+    : { data: [], error: null };
+
+  if (items.error) return { error: items.error };
+
+  const itemsByOrderId = new Map();
+  for (const item of items.data || []) {
+    const list = itemsByOrderId.get(item.order_id) || [];
+    list.push(item);
+    itemsByOrderId.set(item.order_id, list);
+  }
+
+  return {
+    data: {
+      items: pageRows.map((order) => publicProfileOrder(order, itemsByOrderId.get(order.id) || [])),
+      has_more: hasMore,
+      limit: safeLimit,
+      offset: safeOffset
+    }
+  };
+}
+
+async function countRows(tableName, customerId) {
+  const result = await supabase
+    .from(tableName)
+    .select('customer_id', { count: 'exact', head: true })
+    .eq('customer_id', customerId);
+
+  return result;
+}
+
+async function loadCustomerFavoriteRows(customerId) {
+  return supabase
+    .from('customer_favorite_products')
+    .select('customer_id,product_id,created_at')
+    .eq('customer_id', customerId)
+    .order('created_at', { ascending: false });
+}
+
+async function loadCustomerFavoriteIdSet(customerId) {
+  if (!customerId) return new Set();
+
+  const favorites = await loadCustomerFavoriteRows(customerId);
+  if (favorites.error) throw favorites.error;
+
+  return new Set((favorites.data || []).map((favorite) => favorite.product_id));
+}
+
+async function loadFavoriteProducts(customerId, { locationId = null, page = 1, pageSize = 50 } = {}) {
+  const favorites = await loadCustomerFavoriteRows(customerId);
+  if (favorites.error) return { error: favorites.error };
+
+  const favoriteRows = favorites.data || [];
+  const safePage = Math.max(Number(page) || 1, 1);
+  const safePageSize = Math.min(Math.max(Number(pageSize) || 50, 1), 100);
+  const pageRows = favoriteRows.slice((safePage - 1) * safePageSize, safePage * safePageSize);
+  const productIds = pageRows.map((favorite) => favorite.product_id);
+
+  if (!productIds.length) {
+    return {
+      data: {
+        results: [],
+        meta: {
+          total: favoriteRows.length,
+          page: safePage,
+          page_size: safePageSize
+        }
+      }
+    };
+  }
+
+  const catalog = await loadCatalog({ locationId, productIds });
+  if (catalog.error) return { error: catalog.error };
+
+  const cardById = new Map((catalog.data.cards || []).map((card) => [card.id, card]));
+  const favoriteProductIds = new Set(productIds);
+
+  return {
+    data: {
+      results: pageRows
+        .map((favorite) => {
+          const card = cardById.get(favorite.product_id);
+          if (!card) return null;
+          return {
+            ...addFavoriteFlagToCard(card, favoriteProductIds),
+            favorite_created_at: favorite.created_at
+          };
+        })
+        .filter(Boolean),
+      meta: {
+        total: favoriteRows.length,
+        page: safePage,
+        page_size: safePageSize
+      }
+    }
+  };
+}
+
+async function validateFavoriteProduct(productId) {
+  const product = await supabase
+    .from('products')
+    .select('id,slug,name,status,product_type')
+    .eq('id', productId)
+    .eq('status', 'active')
+    .eq('product_type', 'cocktail')
+    .maybeSingle();
+
+  if (product.error) return { error: product.error };
+  if (!product.data) return { notFound: true };
+
+  return { data: product.data };
+}
+
+function profileQuickLinks({ addressCount = 0, favoriteCount = 0 } = {}) {
+  return [
+    {
+      key: 'addresses',
+      title: 'Addresses',
+      subtitle: 'Manage your delivery addresses',
+      endpoint: '/api/customer/addresses',
+      enabled: true,
+      count: addressCount
+    },
+    {
+      key: 'payment_methods',
+      title: 'Payment Methods',
+      subtitle: 'Saved cards coming soon',
+      endpoint: null,
+      enabled: false,
+      placeholder: true
+    },
+    {
+      key: 'favorite_cocktails',
+      title: 'Favorite Cocktails',
+      subtitle: 'Your saved cocktail picks',
+      endpoint: '/api/customer/favorites',
+      enabled: true,
+      count: favoriteCount
+    },
+    {
+      key: 'promo_codes',
+      title: 'Promo Codes',
+      subtitle: 'View available offers',
+      endpoint: null,
+      enabled: false,
+      placeholder: true
+    },
+    {
+      key: 'notifications',
+      title: 'Notifications',
+      subtitle: 'Manage your preferences',
+      endpoint: null,
+      enabled: false,
+      placeholder: true
+    }
+  ];
+}
+
+const customerProfileUpdateSchema = z.object({
+  full_name: z.preprocess(
+    (value) => value === '' ? null : value,
+    z.string().trim().min(1).max(120).nullable().optional()
+  ),
+  phone: z.preprocess(
+    (value) => value === '' ? null : value,
+    z.string().trim().regex(EGYPT_MOBILE_SIMPLE_RE, 'Use an Egyptian mobile number that starts with 0 and has 11 digits.').nullable().optional()
+  ),
+  email: z.preprocess(
+    (value) => value === '' ? null : value,
+    z.string().trim().email().max(254).nullable().optional()
+  ),
+  birthday: z.preprocess(
+    (value) => value === '' ? null : value,
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Birthday must use YYYY-MM-DD format.').nullable().optional()
+  ),
+  marketing_opt_in: z.boolean().optional()
+});
+
+async function handleCustomerProfileUpdate(req, res) {
+  const parsed = customerProfileUpdateSchema.safeParse(req.body);
+
+  if (!parsed.success) return res.status(400).json({
+    error: 'Invalid customer profile.',
+    details: parsed.error.issues.map((issue) => ({
+      path: issue.path.join('.'),
+      message: issue.message
+    }))
+  });
+
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const updated = await supabase
+    .from('customers')
+    .update(clean(parsed.data))
+    .eq('id', ensured.customer.id)
+    .select()
+    .single();
+
+  if (updated.error) return res.status(400).json({
+    error: updated.error.message
+  });
+
+  res.json({
+    session: sessionPayload(updated.data.id, setCustomerToken(res, updated.data.id)),
+    customer: customerProfilePayload(updated.data)
+  });
+}
+
+async function handleAddCustomerFavorite(req, res) {
+  const parsed = z.object({
+    product_id: uuid.optional(),
+    cocktail_id: uuid.optional(),
+    productId: uuid.optional(),
+    cocktailId: uuid.optional()
+  }).transform((data) => ({
+    product_id: data.product_id || data.cocktail_id || data.productId || data.cocktailId
+  })).refine((data) => Boolean(data.product_id), {
+    message: 'product_id is required.'
+  }).safeParse(req.body);
+
+  if (!parsed.success) return res.status(400).json({
+    error: 'Invalid favorite request.'
+  });
+
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const product = await validateFavoriteProduct(parsed.data.product_id);
+  if (product.error) return res.status(400).json({ error: product.error.message });
+  if (product.notFound) return res.status(404).json({ error: 'Cocktail not found.' });
+
+  const favorite = await supabase
+    .from('customer_favorite_products')
+    .upsert({
+      customer_id: ensured.customer.id,
+      product_id: parsed.data.product_id
+    }, { onConflict: 'customer_id,product_id' })
+    .select('customer_id,product_id,created_at')
+    .single();
+
+  if (favorite.error) return res.status(400).json({
+    error: favorite.error.message
+  });
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    favorite: {
+      ...favorite.data,
+      product: product.data
+    },
+    is_favorite: true
+  });
 }
 
 async function findCustomerFromRequest(req) {
