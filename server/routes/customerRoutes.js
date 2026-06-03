@@ -2602,10 +2602,24 @@ customerRouter.get('/customer/cocktails', async (req, res) => {
     });
   }
 
-  const total = results.length;
-  results = results.slice((page - 1) * pageSize, page * pageSize);
 
-  res.json({
+  const customer = await findCustomerFromRequest(req);
+  let favoriteProductIds = new Set();
+
+  if (customer) {
+    try {
+      favoriteProductIds = await loadCustomerFavoriteIdSet(customer.id);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+  }
+
+  const total = results.length;
+  results = results
+    .slice((page - 1) * pageSize, page * pageSize)
+    .map((card) => addFavoriteFlagToCard(card, favoriteProductIds));
+
+  res.json({  
     filters_applied: {
       liquor_type_ids: parsed.data.liquor_type_ids || [],
       category_id: parsed.data.category_id || null,
@@ -2714,21 +2728,198 @@ customerRouter.get('/customer/cocktails/:slug', async (req, res) => {
     error: relatedCatalog.error.message
   });
 
+  let favoriteProductIds = new Set();
+
+  if (customer) {
+    try {
+      favoriteProductIds = await loadCustomerFavoriteIdSet(customer.id);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+  }
+
+  const cocktail = cocktailDetailPayload({
+    card: detail.data.card,
+    selectedVariant: detail.data.selectedVariant,
+    selectedLiquor: detail.data.selectedLiquor,
+    recipe: detail.data.recipe,
+    recipeItems: detail.data.recipeItems,
+    balancesByIngredientId: detail.data.balancesByIngredientId,
+    locationId
+  });
+
   res.json({
-    cocktail: cocktailDetailPayload({
-      card: detail.data.card,
-      selectedVariant: detail.data.selectedVariant,
-      selectedLiquor: detail.data.selectedLiquor,
-      recipe: detail.data.recipe,
-      recipeItems: detail.data.recipeItems,
-      balancesByIngredientId: detail.data.balancesByIngredientId,
-      locationId
-    }),
+    cocktail: {
+      ...cocktail,
+      is_favorite: favoriteProductIds.has(cocktail.id)
+    },
     cartContext,
     relatedCocktails: (relatedCatalog.data.cards || [])
       .filter((card) => card.id !== detail.data.product.id)
       .slice(0, 6)
-      .map(relatedCocktailPayload)
+      .map((card) => addFavoriteFlagToRelated(card, favoriteProductIds))
+  });
+});
+
+customerRouter.get('/customer/profile', async (req, res) => {
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const [ordersPreview, addressesCount, favoritesCount] = await Promise.all([
+    loadCustomerOrdersPreview(ensured.customer.id, { limit: CUSTOMER_PROFILE_ORDER_LIMIT }),
+    countRows('customer_addresses', ensured.customer.id),
+    countRows('customer_favorite_products', ensured.customer.id)
+  ]);
+
+  for (const result of [ordersPreview, addressesCount, favoritesCount]) {
+    if (result.error) return res.status(400).json({ error: result.error.message });
+  }
+
+  const addressCount = Number(addressesCount.count || 0);
+  const favoriteCount = Number(favoritesCount.count || 0);
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    customer: customerProfilePayload(ensured.customer),
+    recent_orders: {
+      title: 'My Orders',
+      limit: CUSTOMER_PROFILE_ORDER_LIMIT,
+      has_more: ordersPreview.data.has_more,
+      view_all_endpoint: '/api/customer/orders',
+      items: ordersPreview.data.items
+    },
+    quick_links: profileQuickLinks({ addressCount, favoriteCount }),
+    payment_methods: {
+      enabled: false,
+      placeholder: true,
+      provider_managed: true,
+      saved_count: 0,
+      message: 'Saved payment methods will be enabled after the payment processor stored-card contract is finalized.'
+    },
+    favorites: {
+      enabled: true,
+      count: favoriteCount,
+      endpoint: '/api/customer/favorites'
+    },
+    promo_codes: {
+      enabled: false,
+      navigation_only: true,
+      placeholder: true
+    },
+    notifications: {
+      enabled: false,
+      navigation_only: true,
+      placeholder: true
+    },
+    brand_message: {
+      title: 'You bring the bottle.',
+      accent: 'We bring the magic.'
+    }
+  });
+});
+
+customerRouter.patch('/customer/profile', handleCustomerProfileUpdate);
+
+customerRouter.get('/customer/orders', async (req, res) => {
+  const parsed = z.object({
+    limit: z.coerce.number().int().positive().max(100).optional(),
+    offset: z.coerce.number().int().min(0).optional()
+  }).safeParse(req.query);
+
+  if (!parsed.success) return res.status(400).json({
+    error: 'Invalid orders request.'
+  });
+
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const orders = await loadCustomerOrdersPreview(ensured.customer.id, {
+    limit: parsed.data.limit || 20,
+    offset: parsed.data.offset || 0
+  });
+
+  if (orders.error) return res.status(400).json({
+    error: orders.error.message
+  });
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    orders: orders.data.items,
+    meta: {
+      limit: orders.data.limit,
+      offset: orders.data.offset,
+      has_more: orders.data.has_more
+    }
+  });
+});
+
+customerRouter.get('/customer/favorites', async (req, res) => {
+  const parsed = z.object({
+    location_id: optionalUuid,
+    locationId: optionalUuid,
+    page: z.coerce.number().int().positive().optional(),
+    page_size: z.coerce.number().int().positive().max(100).optional()
+  }).safeParse(req.query);
+
+  if (!parsed.success) return res.status(400).json({
+    error: 'Invalid favorites request.'
+  });
+
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const favorites = await loadFavoriteProducts(ensured.customer.id, {
+    locationId: parsed.data.location_id || parsed.data.locationId || null,
+    page: parsed.data.page || 1,
+    pageSize: parsed.data.page_size || 50
+  });
+
+  if (favorites.error) return res.status(400).json({
+    error: favorites.error.message
+  });
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    ...favorites.data
+  });
+});
+
+customerRouter.post('/customer/favorites', handleAddCustomerFavorite);
+
+customerRouter.post('/customer/favorites/:productId', async (req, res) => {
+  req.body = {
+    ...req.body,
+    product_id: req.params.productId
+  };
+
+  return handleAddCustomerFavorite(req, res);
+});
+
+customerRouter.delete('/customer/favorites/:productId', async (req, res) => {
+  const parsed = z.object({ productId: uuid }).safeParse(req.params);
+
+  if (!parsed.success) return res.status(400).json({
+    error: 'Invalid favorite request.'
+  });
+
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const deleted = await supabase
+    .from('customer_favorite_products')
+    .delete()
+    .eq('customer_id', ensured.customer.id)
+    .eq('product_id', parsed.data.productId);
+
+  if (deleted.error) return res.status(400).json({
+    error: deleted.error.message
+  });
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    ok: true,
+    product_id: parsed.data.productId,
+    is_favorite: false
   });
 });
 
@@ -4043,38 +4234,7 @@ customerRouter.get('/customer/me', async (req, res) => {
   });
 });
 
-customerRouter.patch('/customer/me', async (req, res) => {
-  const parsed = z.object({
-    full_name: z.string().min(1).nullable().optional(),
-    phone: z.string().min(5).nullable().optional(),
-    email: z.string().email().nullable().optional(),
-    birthday: z.string().nullable().optional(),
-    marketing_opt_in: z.boolean().optional()
-  }).safeParse(req.body);
-
-  if (!parsed.success) return res.status(400).json({
-    error: 'Invalid customer profile.'
-  });
-
-  const ensured = await ensureCustomer(req, res);
-  if (!ensured) return;
-
-  const updated = await supabase
-    .from('customers')
-    .update(clean(parsed.data))
-    .eq('id', ensured.customer.id)
-    .select()
-    .single();
-
-  if (updated.error) return res.status(400).json({
-    error: updated.error.message
-  });
-
-  res.json({
-    session: sessionPayload(ensured.customer.id, ensured.token),
-    customer: updated.data
-  });
-});
+customerRouter.patch('/customer/me', handleCustomerProfileUpdate);
 
 customerRouter.get('/customer/addresses', async (req, res) => {
   const ensured = await ensureCustomer(req, res);
