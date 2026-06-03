@@ -385,7 +385,9 @@ function publicCategory(category) {
   return {
     id: category.id,
     name: category.name,
-    sort_order: category.sort_order
+    slug: category.slug || null,
+    image_url: category.image_url || null,
+    sort_order: category.sort_order || 0
   };
 }
 
@@ -762,6 +764,7 @@ function productCardPayload({
     id: product.id,
     slug: product.slug,
     name: product.name,
+    product_type: product.product_type,
     short_description: product.short_description || null,
     description: product.description,
     description_format: 'markdown',
@@ -1348,6 +1351,7 @@ async function loadCatalog({
   onlyFeatured = false,
   categoryId = null,
   productIds = [],
+  productTypes = [],
   q = '',
   liquorTypeIds = [],
   tags = []
@@ -1367,6 +1371,9 @@ async function loadCatalog({
   if (categoryId) productQuery = productQuery.eq('category_id', categoryId);
   if (Array.isArray(productIds) && productIds.length) {
     productQuery = productQuery.in('id', productIds);
+  }
+  if (Array.isArray(productTypes) && productTypes.length) {
+    productQuery = productQuery.in('product_type', productTypes);
   }
   
   const products = await productQuery;
@@ -2216,6 +2223,63 @@ async function recordPromotionRedemptionIfNeeded({ order, payment }) {
     });
 }
 
+
+async function loadShopSettings() {
+  const settings = await supabase
+    .from('shop_settings')
+    .select('*')
+    .eq('id', true)
+    .maybeSingle();
+
+  if (settings.error) return { error: settings.error };
+  return { data: settings.data || { id: true, banner_image_url: null } };
+}
+
+async function loadVisibleShopCategories() {
+  const [categories, products] = await Promise.all([
+    supabase
+      .from('product_categories')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order')
+      .order('name'),
+
+    supabase
+      .from('products')
+      .select('category_id')
+      .eq('status', 'active')
+      .not('category_id', 'is', null)
+  ]);
+
+  if (categories.error) return { error: categories.error };
+  if (products.error) return { error: products.error };
+
+  const countsByCategoryId = new Map();
+  for (const product of products.data || []) {
+    countsByCategoryId.set(product.category_id, (countsByCategoryId.get(product.category_id) || 0) + 1);
+  }
+
+  return {
+    data: (categories.data || [])
+      .filter((category) => countsByCategoryId.has(category.id))
+      .map((category) => ({
+        ...publicCategory(category),
+        product_count: countsByCategoryId.get(category.id) || 0
+      }))
+  };
+}
+
+async function loadCategoryByIdentifier(identifier) {
+  if (!identifier) return { data: null };
+
+  const byId = uuid.safeParse(identifier);
+  let query = supabase.from('product_categories').select('*').eq('is_active', true);
+
+  query = byId.success ? query.eq('id', identifier) : query.eq('slug', identifier);
+
+  return query.maybeSingle();
+}
+
 customerRouter.post('/customer/session', async (req, res) => {
   const ensured = await ensureCustomer(req, res);
   if (!ensured) return;
@@ -2295,6 +2359,134 @@ customerRouter.get('/customer/home', async (req, res) => {
     categories: (categories.data || []).map(publicCategory),
     liquorTypes: (liquorTypes.data || []).map(publicLiquorType),
     cartSummary: summary
+  });
+});
+
+
+customerRouter.get('/customer/shop', async (req, res) => {
+  const parsed = z.object({
+    location_id: optionalUuid,
+    locationId: optionalUuid
+  }).safeParse(req.query);
+
+  if (!parsed.success) return res.status(400).json({
+    error: 'Invalid shop request.'
+  });
+
+  const locationId = parsed.data.location_id || parsed.data.locationId || null;
+
+  const [settings, categories, featuredCocktails, snacksAndMore] = await Promise.all([
+    loadShopSettings(),
+    loadVisibleShopCategories(),
+    loadCatalog({
+      locationId,
+      onlyFeatured: true,
+      productTypes: ['cocktail']
+    }),
+    loadCatalog({
+      locationId,
+      onlyFeatured: true,
+      productTypes: ['snack', 'essential', 'bundle', 'add_on']
+    })
+  ]);
+
+  for (const result of [settings, categories, featuredCocktails, snacksAndMore]) {
+    if (result.error) return res.status(400).json({
+      error: result.error.message
+    });
+  }
+
+  const customer = await findCustomerFromRequest(req);
+  let summary = null;
+
+  if (customer) {
+    const cart = await getActiveCart(customer.id, { createIfMissing: false });
+    if (cart.error) return res.status(400).json({ error: cart.error.message });
+    summary = await cartSummary(cart.data?.id || null);
+  }
+
+  res.json({
+    banner: {
+      image_url: settings.data?.banner_image_url || null
+    },
+    categories: categories.data,
+    sections: {
+      featured_cocktails: {
+        title: 'Cocktails',
+        items: featuredCocktails.data.cards.slice(0, 8)
+      },
+      snacks_and_more: {
+        title: 'Snacks and More',
+        items: snacksAndMore.data.cards.slice(0, 8)
+      }
+    },
+    cartSummary: summary,
+    meta: {
+      location_id: locationId,
+      product_counts: {
+        featured_cocktails: featuredCocktails.data.cards.length,
+        snacks_and_more: snacksAndMore.data.cards.length
+      }
+    }
+  });
+});
+
+customerRouter.get('/customer/shop/categories/:identifier/products', async (req, res) => {
+  const parsed = z.object({
+    location_id: optionalUuid,
+    locationId: optionalUuid,
+    sort: z.enum(['display_order', 'price_asc', 'prep_time']).optional(),
+    page: z.coerce.number().int().positive().optional(),
+    page_size: z.coerce.number().int().positive().max(100).optional()
+  }).safeParse(req.query);
+
+  if (!parsed.success) return res.status(400).json({
+    error: 'Invalid category products request.'
+  });
+
+  const category = await loadCategoryByIdentifier(req.params.identifier);
+  if (category.error) return res.status(400).json({ error: category.error.message });
+  if (!category.data) return res.status(404).json({ error: 'Category not found.' });
+
+  const page = parsed.data.page || 1;
+  const pageSize = parsed.data.page_size || 24;
+  const locationId = parsed.data.location_id || parsed.data.locationId || null;
+
+  const catalog = await loadCatalog({
+    locationId,
+    categoryId: category.data.id
+  });
+
+  if (catalog.error) return res.status(400).json({ error: catalog.error.message });
+
+  let results = [...catalog.data.cards];
+
+  if (!parsed.data.sort || parsed.data.sort === 'display_order') {
+    results.sort((a, b) => Number(a.display_order || 0) - Number(b.display_order || 0) || a.name.localeCompare(b.name));
+  }
+
+  if (parsed.data.sort === 'price_asc') {
+    results.sort((a, b) => Number(a.price.starting_price_inc_vat || 0) - Number(b.price.starting_price_inc_vat || 0));
+  }
+
+  if (parsed.data.sort === 'prep_time') {
+    results.sort((a, b) => Number(a.prep_time_minutes || 0) - Number(b.prep_time_minutes || 0));
+  }
+
+  const total = results.length;
+  const pagedResults = results.slice((page - 1) * pageSize, page * pageSize);
+
+  res.json({
+    category: publicCategory(category.data),
+    results: pagedResults,
+    meta: {
+      total,
+      page,
+      page_size: pageSize,
+      has_more: page * pageSize < total,
+      location_id: locationId,
+      sort: parsed.data.sort || 'display_order'
+    }
   });
 });
 

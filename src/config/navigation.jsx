@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, ClipboardList, MapPin, Martini, Truck, Users, FlaskConical, Wine } from 'lucide-react';
+import { BarChart3, Boxes, ClipboardList, MapPin, Martini, ShoppingBag, Truck, Users, FlaskConical, Wine } from 'lucide-react';
 
 export const tabs = [
   { key: 'dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -8,6 +8,7 @@ export const tabs = [
   { key: 'ingredients', label: 'Ingredients', icon: FlaskConical },
   { key: 'cocktails', label: 'Cocktails', icon: Martini },
   { key: 'liquors', label: 'Liquors', icon: Wine },
+  { key: 'shop', label: 'Shop', icon: ShoppingBag },
   { key: 'locations', label: 'Locations', icon: MapPin },
   { key: 'employees', label: 'Employees', icon: Users }
 ];
