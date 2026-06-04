@@ -4,15 +4,6 @@ import { z } from 'zod';
 import { isProd, SESSION_SECRET } from '../config/appConfig.js';
 import { clean } from '../lib/objectUtils.js';
 import { getCookie } from '../lib/session.js';
-import {
-  createGeideaSession,
-  extractGeideaCallbackFields,
-  formatGeideaAmount,
-  geideaCallbackIsSuccess,
-  geideaCheckoutConfig,
-  geideaIsConfigured,
-  verifyGeideaCallbackSignature
-} from '../lib/geidea.js';
 import { supabase } from '../lib/supabase.js';
 
 export const customerRouter = Router();
@@ -21,12 +12,11 @@ const CUSTOMER_COOKIE = 'ebtl_customer';
 const CUSTOMER_TOKEN_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
 const BUSINESS_TIME_ZONE = 'Africa/Cairo';
 const CURRENCY = 'EGP';
-const PAYMENT_PROVIDER = 'geidea';
-const EGYPT_MOBILE_SIMPLE_RE = /^0\d{10}$/;
+const PAYMENT_PROVIDER = process.env.PAYMENT_PROVIDER || 'payment_gateway';
+const PAYMENT_GATEWAY_CHECKOUT_URL = process.env.PAYMENT_GATEWAY_CHECKOUT_URL || '';
+const DEFAULT_DELIVERY_FEE = Number(process.env.CUSTOMER_APP_DELIVERY_FEE || 0);
 const MAX_CART_ITEM_QTY = 99;
 const FULFILLMENT_TYPES = ['pickup_at_cart', 'delivery_to_unit'];
-const CUSTOMER_PROFILE_ORDER_LIMIT = 5;
-const CUSTOMER_PROFILE_AVATAR_ASSET = 'assets/images/profile/default-profile.webp';
 
 const uuid = z.string().uuid();
 const optionalUuid = uuid.optional();
@@ -181,7 +171,6 @@ function publicLocation(location) {
     latitude: location.latitude,
     longitude: location.longitude,
     banner_image_url: location.banner_image_url || null,
-    delivery_fee: money(location.delivery_fee || 0),
     is_active: location.is_active
   };
 }
@@ -385,9 +374,7 @@ function publicCategory(category) {
   return {
     id: category.id,
     name: category.name,
-    slug: category.slug || null,
-    image_url: category.image_url || null,
-    sort_order: category.sort_order || 0
+    sort_order: category.sort_order
   };
 }
 
@@ -764,7 +751,6 @@ function productCardPayload({
     id: product.id,
     slug: product.slug,
     name: product.name,
-    product_type: product.product_type,
     short_description: product.short_description || null,
     description: product.description,
     description_format: 'markdown',
@@ -791,373 +777,6 @@ function productCardPayload({
           reason: variantPayloads[0]?.availability?.reason || 'Currently unavailable.'
         }
   };
-}
-
-function humanizeStatus(value) {
-  return String(value || '')
-    .split('_')
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}
-
-function addFavoriteFlagToCard(card, favoriteProductIds = new Set()) {
-  if (!card) return card;
-  return {
-    ...card,
-    is_favorite: favoriteProductIds.has(card.id)
-  };
-}
-
-function addFavoriteFlagToRelated(card, favoriteProductIds = new Set()) {
-  const payload = relatedCocktailPayload(card);
-  return {
-    ...payload,
-    is_favorite: favoriteProductIds.has(payload.id)
-  };
-}
-
-function customerProfilePayload(customer) {
-  return {
-    id: customer.id,
-    full_name: customer.full_name || null,
-    phone: customer.phone || null,
-    email: customer.email || null,
-    birthday: customer.birthday || null,
-    marketing_opt_in: Boolean(customer.marketing_opt_in),
-    avatar: {
-      type: 'local_asset',
-      asset_path: CUSTOMER_PROFILE_AVATAR_ASSET,
-      image_url: null
-    },
-    completion: {
-      has_full_name: Boolean(customer.full_name),
-      has_phone: Boolean(customer.phone),
-      has_email: Boolean(customer.email),
-      missing_fields: [
-        !customer.full_name ? 'full_name' : null,
-        !customer.phone ? 'phone' : null,
-        !customer.email ? 'email' : null
-      ].filter(Boolean)
-    }
-  };
-}
-
-function publicProfileOrder(order, orderItems = []) {
-  const orderedItems = [...(orderItems || [])].sort((a, b) => {
-    return String(a.created_at || '').localeCompare(String(b.created_at || ''));
-  });
-
-  const firstItem = orderedItems[0] || null;
-  const imageItem = orderedItems.find((item) => item.products?.image_url) || firstItem;
-  const totalQuantity = orderedItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-  const displayTime = order.requested_fulfillment_at || order.created_at;
-
-  return {
-    id: order.id,
-    order_number: order.order_number,
-    status: order.status,
-    status_label: humanizeStatus(order.status),
-    payment_status: order.payment_status,
-    payment_status_label: humanizeStatus(order.payment_status),
-    fulfillment_type: order.fulfillment_type,
-    requested_fulfillment_at: order.requested_fulfillment_at || null,
-    display_fulfillment_at: displayTime,
-    created_at: order.created_at,
-    updated_at: order.updated_at,
-    total_amount: money(order.total_amount),
-    currency: CURRENCY,
-    order_image_url: imageItem?.products?.image_url || null,
-    primary_item: firstItem ? {
-      product_id: firstItem.product_id || firstItem.products?.id || null,
-      slug: firstItem.products?.slug || null,
-      name: firstItem.product_name_snapshot || firstItem.products?.name || null,
-      variant_name: firstItem.variant_name_snapshot || null,
-      quantity: Number(firstItem.quantity || 0)
-    } : null,
-    item_count: orderedItems.length,
-    total_quantity: totalQuantity,
-    location: publicLocation(order.locations),
-    location_name: order.locations?.name || null
-  };
-}
-
-async function loadCustomerOrdersPreview(customerId, { limit = CUSTOMER_PROFILE_ORDER_LIMIT, offset = 0 } = {}) {
-  const safeLimit = Math.min(Math.max(Number(limit) || CUSTOMER_PROFILE_ORDER_LIMIT, 1), 100);
-  const safeOffset = Math.max(Number(offset) || 0, 0);
-
-  const orders = await supabase
-    .from('orders')
-    .select('id,order_number,status,payment_status,fulfillment_type,requested_fulfillment_at,total_amount,created_at,updated_at,locations(id,name,type,compound_name,beach_name,banner_image_url,delivery_fee,is_active)')
-    .eq('customer_id', customerId)
-    .order('created_at', { ascending: false })
-    .range(safeOffset, safeOffset + safeLimit);
-
-  if (orders.error) return { error: orders.error };
-
-  const rows = orders.data || [];
-  const hasMore = rows.length > safeLimit;
-  const pageRows = rows.slice(0, safeLimit);
-  const orderIds = pageRows.map((order) => order.id);
-
-  const items = orderIds.length
-    ? await supabase
-        .from('order_items')
-        .select('order_id,product_id,product_name_snapshot,variant_name_snapshot,quantity,created_at,products(id,slug,name,image_url)')
-        .in('order_id', orderIds)
-        .order('created_at', { ascending: true })
-    : { data: [], error: null };
-
-  if (items.error) return { error: items.error };
-
-  const itemsByOrderId = new Map();
-  for (const item of items.data || []) {
-    const list = itemsByOrderId.get(item.order_id) || [];
-    list.push(item);
-    itemsByOrderId.set(item.order_id, list);
-  }
-
-  return {
-    data: {
-      items: pageRows.map((order) => publicProfileOrder(order, itemsByOrderId.get(order.id) || [])),
-      has_more: hasMore,
-      limit: safeLimit,
-      offset: safeOffset
-    }
-  };
-}
-
-async function countRows(tableName, customerId) {
-  const result = await supabase
-    .from(tableName)
-    .select('customer_id', { count: 'exact', head: true })
-    .eq('customer_id', customerId);
-
-  return result;
-}
-
-async function loadCustomerFavoriteRows(customerId) {
-  return supabase
-    .from('customer_favorite_products')
-    .select('customer_id,product_id,created_at')
-    .eq('customer_id', customerId)
-    .order('created_at', { ascending: false });
-}
-
-async function loadCustomerFavoriteIdSet(customerId) {
-  if (!customerId) return new Set();
-
-  const favorites = await loadCustomerFavoriteRows(customerId);
-  if (favorites.error) throw favorites.error;
-
-  return new Set((favorites.data || []).map((favorite) => favorite.product_id));
-}
-
-async function loadFavoriteProducts(customerId, { locationId = null, page = 1, pageSize = 50 } = {}) {
-  const favorites = await loadCustomerFavoriteRows(customerId);
-  if (favorites.error) return { error: favorites.error };
-
-  const favoriteRows = favorites.data || [];
-  const safePage = Math.max(Number(page) || 1, 1);
-  const safePageSize = Math.min(Math.max(Number(pageSize) || 50, 1), 100);
-  const pageRows = favoriteRows.slice((safePage - 1) * safePageSize, safePage * safePageSize);
-  const productIds = pageRows.map((favorite) => favorite.product_id);
-
-  if (!productIds.length) {
-    return {
-      data: {
-        results: [],
-        meta: {
-          total: favoriteRows.length,
-          page: safePage,
-          page_size: safePageSize
-        }
-      }
-    };
-  }
-
-  const catalog = await loadCatalog({ locationId, productIds });
-  if (catalog.error) return { error: catalog.error };
-
-  const cardById = new Map((catalog.data.cards || []).map((card) => [card.id, card]));
-  const favoriteProductIds = new Set(productIds);
-
-  return {
-    data: {
-      results: pageRows
-        .map((favorite) => {
-          const card = cardById.get(favorite.product_id);
-          if (!card) return null;
-          return {
-            ...addFavoriteFlagToCard(card, favoriteProductIds),
-            favorite_created_at: favorite.created_at
-          };
-        })
-        .filter(Boolean),
-      meta: {
-        total: favoriteRows.length,
-        page: safePage,
-        page_size: safePageSize
-      }
-    }
-  };
-}
-
-async function validateFavoriteProduct(productId) {
-  const product = await supabase
-    .from('products')
-    .select('id,slug,name,status,product_type')
-    .eq('id', productId)
-    .eq('status', 'active')
-    .eq('product_type', 'cocktail')
-    .maybeSingle();
-
-  if (product.error) return { error: product.error };
-  if (!product.data) return { notFound: true };
-
-  return { data: product.data };
-}
-
-function profileQuickLinks({ addressCount = 0, favoriteCount = 0 } = {}) {
-  return [
-    {
-      key: 'addresses',
-      title: 'Addresses',
-      subtitle: 'Manage your delivery addresses',
-      endpoint: '/api/customer/addresses',
-      enabled: true,
-      count: addressCount
-    },
-    {
-      key: 'payment_methods',
-      title: 'Payment Methods',
-      subtitle: 'Saved cards coming soon',
-      endpoint: null,
-      enabled: false,
-      placeholder: true
-    },
-    {
-      key: 'favorite_cocktails',
-      title: 'Favorite Cocktails',
-      subtitle: 'Your saved cocktail picks',
-      endpoint: '/api/customer/favorites',
-      enabled: true,
-      count: favoriteCount
-    },
-    {
-      key: 'promo_codes',
-      title: 'Promo Codes',
-      subtitle: 'View available offers',
-      endpoint: null,
-      enabled: false,
-      placeholder: true
-    },
-    {
-      key: 'notifications',
-      title: 'Notifications',
-      subtitle: 'Manage your preferences',
-      endpoint: null,
-      enabled: false,
-      placeholder: true
-    }
-  ];
-}
-
-const customerProfileUpdateSchema = z.object({
-  full_name: z.preprocess(
-    (value) => value === '' ? null : value,
-    z.string().trim().min(1).max(120).nullable().optional()
-  ),
-  phone: z.preprocess(
-    (value) => value === '' ? null : value,
-    z.string().trim().regex(EGYPT_MOBILE_SIMPLE_RE, 'Use an Egyptian mobile number that starts with 0 and has 11 digits.').nullable().optional()
-  ),
-  email: z.preprocess(
-    (value) => value === '' ? null : value,
-    z.string().trim().email().max(254).nullable().optional()
-  ),
-  birthday: z.preprocess(
-    (value) => value === '' ? null : value,
-    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Birthday must use YYYY-MM-DD format.').nullable().optional()
-  ),
-  marketing_opt_in: z.boolean().optional()
-});
-
-async function handleCustomerProfileUpdate(req, res) {
-  const parsed = customerProfileUpdateSchema.safeParse(req.body);
-
-  if (!parsed.success) return res.status(400).json({
-    error: 'Invalid customer profile.',
-    details: parsed.error.issues.map((issue) => ({
-      path: issue.path.join('.'),
-      message: issue.message
-    }))
-  });
-
-  const ensured = await ensureCustomer(req, res);
-  if (!ensured) return;
-
-  const updated = await supabase
-    .from('customers')
-    .update(clean(parsed.data))
-    .eq('id', ensured.customer.id)
-    .select()
-    .single();
-
-  if (updated.error) return res.status(400).json({
-    error: updated.error.message
-  });
-
-  res.json({
-    session: sessionPayload(updated.data.id, setCustomerToken(res, updated.data.id)),
-    customer: customerProfilePayload(updated.data)
-  });
-}
-
-async function handleAddCustomerFavorite(req, res) {
-  const parsed = z.object({
-    product_id: uuid.optional(),
-    cocktail_id: uuid.optional(),
-    productId: uuid.optional(),
-    cocktailId: uuid.optional()
-  }).transform((data) => ({
-    product_id: data.product_id || data.cocktail_id || data.productId || data.cocktailId
-  })).refine((data) => Boolean(data.product_id), {
-    message: 'product_id is required.'
-  }).safeParse(req.body);
-
-  if (!parsed.success) return res.status(400).json({
-    error: 'Invalid favorite request.'
-  });
-
-  const ensured = await ensureCustomer(req, res);
-  if (!ensured) return;
-
-  const product = await validateFavoriteProduct(parsed.data.product_id);
-  if (product.error) return res.status(400).json({ error: product.error.message });
-  if (product.notFound) return res.status(404).json({ error: 'Cocktail not found.' });
-
-  const favorite = await supabase
-    .from('customer_favorite_products')
-    .upsert({
-      customer_id: ensured.customer.id,
-      product_id: parsed.data.product_id
-    }, { onConflict: 'customer_id,product_id' })
-    .select('customer_id,product_id,created_at')
-    .single();
-
-  if (favorite.error) return res.status(400).json({
-    error: favorite.error.message
-  });
-
-  res.json({
-    session: sessionPayload(ensured.customer.id, ensured.token),
-    favorite: {
-      ...favorite.data,
-      product: product.data
-    },
-    is_favorite: true
-  });
 }
 
 async function findCustomerFromRequest(req) {
@@ -1264,11 +883,7 @@ async function cartItemsForCart(cartId) {
     .order('created_at');
 }
 
-function cartTotals(items = [], {
-  fulfillmentType = 'pickup_at_cart',
-  deliveryFee = 0,
-  discountAmount = 0
-} = {}) {
+function cartTotals(items = []) {
   const itemCount = items.length;
 
   const totalQuantity = items.reduce((sum, item) => {
@@ -1287,17 +902,14 @@ function cartTotals(items = [], {
     return sum + (lineIncVat - lineExVat);
   }, 0));
 
-  const appliedDeliveryFee = fulfillmentType === 'delivery_to_unit' ? money(deliveryFee) : 0;
-  const appliedDiscountAmount = money(Math.min(Math.max(Number(discountAmount || 0), 0), subtotalIncVat + appliedDeliveryFee));
-
   return {
     item_count: itemCount,
     total_quantity: totalQuantity,
     subtotal_inc_vat: subtotalIncVat,
     estimated_vat_amount: estimatedVatAmount,
-    discount_amount: appliedDiscountAmount,
-    delivery_fee: appliedDeliveryFee,
-    total_amount: money(Math.max(subtotalIncVat + appliedDeliveryFee - appliedDiscountAmount, 0)),
+    discount_amount: 0,
+    delivery_fee: 0,
+    total_amount: subtotalIncVat,
     currency: CURRENCY
   };
 }
@@ -1351,7 +963,6 @@ async function loadCatalog({
   onlyFeatured = false,
   categoryId = null,
   productIds = [],
-  productTypes = [],
   q = '',
   liquorTypeIds = [],
   tags = []
@@ -1371,9 +982,6 @@ async function loadCatalog({
   if (categoryId) productQuery = productQuery.eq('category_id', categoryId);
   if (Array.isArray(productIds) && productIds.length) {
     productQuery = productQuery.in('id', productIds);
-  }
-  if (Array.isArray(productTypes) && productTypes.length) {
-    productQuery = productQuery.in('product_type', productTypes);
   }
   
   const products = await productQuery;
@@ -1652,10 +1260,7 @@ async function buildCartResponse(customerId, {
         cart: null,
         selected_location: selectedLocation.data,
         items: [],
-        totals: cartTotals([], {
-          fulfillmentType: normalizedFulfillmentType,
-          deliveryFee: selectedLocation.data?.delivery_fee || 0
-        }),
+        totals: cartTotals([], { fulfillmentType: normalizedFulfillmentType }),
         checkoutReadiness: {
           can_checkout: false,
           blocking_reasons: ['Cart is empty.']
@@ -1761,10 +1366,7 @@ async function buildCartResponse(customerId, {
     };
   });
 
-  const totals = cartTotals(items.data || [], {
-    fulfillmentType: normalizedFulfillmentType,
-    deliveryFee: selectedLocation.data?.delivery_fee || 0
-  });
+  const totals = cartTotals(items.data || [], { fulfillmentType: normalizedFulfillmentType });
   const blockingReasons = [];
 
   if (!responseItems.length) blockingReasons.push('Cart is empty.');
@@ -1823,145 +1425,13 @@ async function validateBeachCart(locationId, res) {
   return location.data;
 }
 
-
-function normalizePromoCode(value) {
-  return String(value || '').trim().toUpperCase();
-}
-
-function isSimpleEgyptianMobile(value) {
-  return EGYPT_MOBILE_SIMPLE_RE.test(String(value || '').trim());
-}
-
-function publicPromotion(promotion, discountAmount = 0) {
-  if (!promotion) return null;
-
-  return {
-    id: promotion.id,
-    code: promotion.code,
-    name: promotion.name,
-    discount_type: promotion.discount_type,
-    discount_value: money(promotion.discount_value),
-    discount_amount: money(discountAmount),
-    currency: CURRENCY
-  };
-}
-
-function promotionDateIsActive(promotion, now = new Date()) {
-  const nowMs = now.getTime();
-
-  if (promotion.starts_at && new Date(promotion.starts_at).getTime() > nowMs) return false;
-  if (promotion.ends_at && new Date(promotion.ends_at).getTime() < nowMs) return false;
-
-  return true;
-}
-
-function calculatePromotionDiscount(promotion, { subtotalIncVat, deliveryFee }) {
-  if (!promotion) return 0;
-
-  const discountValue = Number(promotion.discount_value || 0);
-
-  if (promotion.discount_type === 'percentage') {
-    return money(Math.min(subtotalIncVat, subtotalIncVat * (discountValue / 100)));
-  }
-
-  if (promotion.discount_type === 'fixed_amount') {
-    return money(Math.min(subtotalIncVat, discountValue));
-  }
-
-  if (promotion.discount_type === 'free_delivery') {
-    return money(deliveryFee);
-  }
-
-  return 0;
-}
-
-async function resolvePromotion({ promoCode, customerId, subtotalIncVat, deliveryFee }) {
-  const code = normalizePromoCode(promoCode);
-  if (!code) return { data: { promotion: null, discountAmount: 0 } };
-
-  const promotion = await supabase
-    .from('promotions')
-    .select('*')
-    .ilike('code', code)
-    .eq('is_active', true)
-    .maybeSingle();
-
-  if (promotion.error) return { error: promotion.error };
-
-  if (!promotion.data) return { badRequest: 'Promotion code was not found or is no longer active.' };
-
-  if (!promotionDateIsActive(promotion.data)) {
-    return { badRequest: 'Promotion code is not active right now.' };
-  }
-
-  if (money(subtotalIncVat) < money(promotion.data.min_order_value || 0)) {
-    return { badRequest: `Promotion requires a minimum order value of EGP ${money(promotion.data.min_order_value)}.` };
-  }
-
-  if (promotion.data.usage_limit) {
-    const redemptions = await supabase
-      .from('promotion_redemptions')
-      .select('id', { count: 'exact', head: true })
-      .eq('promotion_id', promotion.data.id);
-
-    if (redemptions.error) return { error: redemptions.error };
-
-    if (Number(redemptions.count || 0) >= Number(promotion.data.usage_limit)) {
-      return { badRequest: 'Promotion code usage limit has been reached.' };
-    }
-  }
-
-  const discountAmount = calculatePromotionDiscount(promotion.data, {
-    subtotalIncVat,
-    deliveryFee
-  });
-
-  if (discountAmount <= 0) {
-    return { badRequest: 'Promotion code does not apply to this checkout.' };
-  }
-
-  return {
-    data: {
-      promotion: publicPromotion(promotion.data, discountAmount),
-      rawPromotion: promotion.data,
-      discountAmount
-    }
-  };
-}
-
-function checkoutPaymentMethods() {
-  const config = geideaCheckoutConfig();
-
-  return [
-    {
-      key: 'geidea_card',
-      label: 'Credit / Debit Card',
-      provider: 'geidea',
-      enabled: config.configured,
-      setup_required: !config.configured,
-      sdk: config
-    },
-    {
-      key: 'geidea_apple_pay',
-      label: 'Apple Pay',
-      provider: 'geidea',
-      enabled: config.configured && Boolean(config.apple_pay_merchant_id),
-      setup_required: !config.configured || !config.apple_pay_merchant_id,
-      sdk: config
-    }
-  ];
-}
-
 async function buildCheckoutQuote({
   customerId,
   cartId,
   locationId,
   fulfillmentType,
   customerAddressId = null,
-  addressText = null,
-  customerNotes = null,
-  promoCode = null,
-  requireCustomerDetails = false
+  customerNotes = null
 }) {
   const location = await supabase
     .from('locations')
@@ -1993,9 +1463,9 @@ async function buildCheckoutQuote({
     };
   }
 
-  if (requireCustomerDetails && fulfillmentType === 'delivery_to_unit' && !String(addressText || '').trim() && !customerAddressId) {
+  if (fulfillmentType === 'delivery_to_unit' && !customerAddressId) {
     return {
-      badRequest: 'Delivery orders require an address.'
+      badRequest: 'Delivery orders require a customer address.'
     };
   }
 
@@ -2119,21 +1589,9 @@ async function buildCheckoutQuote({
 
   const subtotalExVat = money(quoteItems.reduce((sum, item) => sum + item.line_subtotal_ex_vat, 0));
   const vatAmount = money(quoteItems.reduce((sum, item) => sum + item.line_vat_amount, 0));
-  const subtotalIncVat = money(subtotalExVat + vatAmount);
-  const deliveryFee = fulfillmentType === 'delivery_to_unit' ? money(location.data.delivery_fee || 0) : 0;
-
-  const promotionResult = await resolvePromotion({
-    promoCode,
-    customerId,
-    subtotalIncVat,
-    deliveryFee
-  });
-
-  if (promotionResult.error) return { error: promotionResult.error };
-  if (promotionResult.badRequest) return { badRequest: promotionResult.badRequest };
-
-  const discountAmount = money(promotionResult.data?.discountAmount || 0);
-  const totalAmount = money(Math.max(subtotalIncVat + deliveryFee - discountAmount, 0));
+  const discountAmount = 0;
+  const deliveryFee = fulfillmentType === 'delivery_to_unit' ? money(DEFAULT_DELIVERY_FEE) : 0;
+  const totalAmount = money(subtotalExVat + vatAmount - discountAmount + deliveryFee);
 
   return {
     data: {
@@ -2142,21 +1600,15 @@ async function buildCheckoutQuote({
         location_id: locationId,
         fulfillment_type: fulfillmentType,
         customer_address_id: customerAddressId,
-        address_text: addressText ? String(addressText).trim() : null,
         customer_notes: customerNotes,
-        promo_code: normalizePromoCode(promoCode) || null,
-        promotion: promotionResult.data?.promotion || null,
-        raw_promotion: promotionResult.data?.rawPromotion || null,
         items: quoteItems,
         totals: {
           subtotal_ex_vat: subtotalExVat,
           vat_amount: vatAmount,
-          subtotal_inc_vat: subtotalIncVat,
           discount_amount: discountAmount,
           delivery_fee: deliveryFee,
           total_amount: totalAmount,
-          currency: CURRENCY,
-          vat_included: true
+          currency: CURRENCY
         },
         validation: {
           can_place_order: blockingReasons.length === 0,
@@ -2169,115 +1621,38 @@ async function buildCheckoutQuote({
   };
 }
 
-function createGeideaPaymentPayload({
+function createPaymentGatewayPayload({
   order,
-  payment,
-  sessionId = null,
-  paymentMethod = null
+  payment
 }) {
-  const config = geideaCheckoutConfig();
+  if (!PAYMENT_GATEWAY_CHECKOUT_URL) {
+    return {
+      required: true,
+      provider: PAYMENT_PROVIDER,
+      payment_id: payment.id,
+      payment_url: null,
+      status: payment.status,
+      gateway_configured: false,
+      message: 'Payment gateway checkout URL is not configured yet.'
+    };
+  }
+
+  const url = new URL(PAYMENT_GATEWAY_CHECKOUT_URL);
+
+  url.searchParams.set('order_id', order.id);
+  url.searchParams.set('order_number', order.order_number || '');
+  url.searchParams.set('payment_id', payment.id);
+  url.searchParams.set('amount', String(order.total_amount));
+  url.searchParams.set('currency', CURRENCY);
 
   return {
     required: true,
-    provider: 'geidea',
+    provider: PAYMENT_PROVIDER,
     payment_id: payment.id,
-    payment_method: paymentMethod || payment.raw_payload?.payment_method || null,
+    payment_url: url.toString(),
     status: payment.status,
-    amount: money(payment.amount),
-    currency: payment.currency || CURRENCY,
-    geidea: {
-      configured: config.configured,
-      is_sandbox: config.is_sandbox,
-      region: config.region,
-      language: config.language,
-      session_id: sessionId || payment.raw_payload?.geidea_session_id || null,
-      apple_pay_merchant_id: config.apple_pay_merchant_id
-    },
-    order_reference: order.order_number || order.id
+    gateway_configured: true
   };
-}
-
-async function recordPromotionRedemptionIfNeeded({ order, payment }) {
-  const promotion = payment?.raw_payload?.promotion;
-
-  if (!promotion?.id || !Number(payment?.raw_payload?.promotion?.discount_amount || order.discount_amount || 0)) {
-    return;
-  }
-
-  const existing = await supabase
-    .from('promotion_redemptions')
-    .select('id')
-    .eq('promotion_id', promotion.id)
-    .eq('order_id', order.id)
-    .maybeSingle();
-
-  if (existing.error || existing.data) return;
-
-  await supabase
-    .from('promotion_redemptions')
-    .insert({
-      promotion_id: promotion.id,
-      customer_id: order.customer_id || null,
-      order_id: order.id,
-      discount_amount: money(payment.raw_payload.promotion.discount_amount || order.discount_amount || 0)
-    });
-}
-
-
-async function loadShopSettings() {
-  const settings = await supabase
-    .from('shop_settings')
-    .select('*')
-    .eq('id', true)
-    .maybeSingle();
-
-  if (settings.error) return { error: settings.error };
-  return { data: settings.data || { id: true, banner_image_url: null } };
-}
-
-async function loadVisibleShopCategories() {
-  const [categories, products] = await Promise.all([
-    supabase
-      .from('product_categories')
-      .select('*')
-      .eq('is_active', true)
-      .order('sort_order')
-      .order('name'),
-
-    supabase
-      .from('products')
-      .select('category_id')
-      .eq('status', 'active')
-      .not('category_id', 'is', null)
-  ]);
-
-  if (categories.error) return { error: categories.error };
-  if (products.error) return { error: products.error };
-
-  const countsByCategoryId = new Map();
-  for (const product of products.data || []) {
-    countsByCategoryId.set(product.category_id, (countsByCategoryId.get(product.category_id) || 0) + 1);
-  }
-
-  return {
-    data: (categories.data || [])
-      .filter((category) => countsByCategoryId.has(category.id))
-      .map((category) => ({
-        ...publicCategory(category),
-        product_count: countsByCategoryId.get(category.id) || 0
-      }))
-  };
-}
-
-async function loadCategoryByIdentifier(identifier) {
-  if (!identifier) return { data: null };
-
-  const byId = uuid.safeParse(identifier);
-  let query = supabase.from('product_categories').select('*').eq('is_active', true);
-
-  query = byId.success ? query.eq('id', identifier) : query.eq('slug', identifier);
-
-  return query.maybeSingle();
 }
 
 customerRouter.post('/customer/session', async (req, res) => {
@@ -2359,134 +1734,6 @@ customerRouter.get('/customer/home', async (req, res) => {
     categories: (categories.data || []).map(publicCategory),
     liquorTypes: (liquorTypes.data || []).map(publicLiquorType),
     cartSummary: summary
-  });
-});
-
-
-customerRouter.get('/customer/shop', async (req, res) => {
-  const parsed = z.object({
-    location_id: optionalUuid,
-    locationId: optionalUuid
-  }).safeParse(req.query);
-
-  if (!parsed.success) return res.status(400).json({
-    error: 'Invalid shop request.'
-  });
-
-  const locationId = parsed.data.location_id || parsed.data.locationId || null;
-
-  const [settings, categories, featuredCocktails, snacksAndMore] = await Promise.all([
-    loadShopSettings(),
-    loadVisibleShopCategories(),
-    loadCatalog({
-      locationId,
-      onlyFeatured: true,
-      productTypes: ['cocktail']
-    }),
-    loadCatalog({
-      locationId,
-      onlyFeatured: true,
-      productTypes: ['snack', 'essential', 'bundle', 'add_on']
-    })
-  ]);
-
-  for (const result of [settings, categories, featuredCocktails, snacksAndMore]) {
-    if (result.error) return res.status(400).json({
-      error: result.error.message
-    });
-  }
-
-  const customer = await findCustomerFromRequest(req);
-  let summary = null;
-
-  if (customer) {
-    const cart = await getActiveCart(customer.id, { createIfMissing: false });
-    if (cart.error) return res.status(400).json({ error: cart.error.message });
-    summary = await cartSummary(cart.data?.id || null);
-  }
-
-  res.json({
-    banner: {
-      image_url: settings.data?.banner_image_url || null
-    },
-    categories: categories.data,
-    sections: {
-      featured_cocktails: {
-        title: 'Cocktails',
-        items: featuredCocktails.data.cards.slice(0, 8)
-      },
-      snacks_and_more: {
-        title: 'Snacks and More',
-        items: snacksAndMore.data.cards.slice(0, 8)
-      }
-    },
-    cartSummary: summary,
-    meta: {
-      location_id: locationId,
-      product_counts: {
-        featured_cocktails: featuredCocktails.data.cards.length,
-        snacks_and_more: snacksAndMore.data.cards.length
-      }
-    }
-  });
-});
-
-customerRouter.get('/customer/shop/categories/:identifier/products', async (req, res) => {
-  const parsed = z.object({
-    location_id: optionalUuid,
-    locationId: optionalUuid,
-    sort: z.enum(['display_order', 'price_asc', 'prep_time']).optional(),
-    page: z.coerce.number().int().positive().optional(),
-    page_size: z.coerce.number().int().positive().max(100).optional()
-  }).safeParse(req.query);
-
-  if (!parsed.success) return res.status(400).json({
-    error: 'Invalid category products request.'
-  });
-
-  const category = await loadCategoryByIdentifier(req.params.identifier);
-  if (category.error) return res.status(400).json({ error: category.error.message });
-  if (!category.data) return res.status(404).json({ error: 'Category not found.' });
-
-  const page = parsed.data.page || 1;
-  const pageSize = parsed.data.page_size || 24;
-  const locationId = parsed.data.location_id || parsed.data.locationId || null;
-
-  const catalog = await loadCatalog({
-    locationId,
-    categoryId: category.data.id
-  });
-
-  if (catalog.error) return res.status(400).json({ error: catalog.error.message });
-
-  let results = [...catalog.data.cards];
-
-  if (!parsed.data.sort || parsed.data.sort === 'display_order') {
-    results.sort((a, b) => Number(a.display_order || 0) - Number(b.display_order || 0) || a.name.localeCompare(b.name));
-  }
-
-  if (parsed.data.sort === 'price_asc') {
-    results.sort((a, b) => Number(a.price.starting_price_inc_vat || 0) - Number(b.price.starting_price_inc_vat || 0));
-  }
-
-  if (parsed.data.sort === 'prep_time') {
-    results.sort((a, b) => Number(a.prep_time_minutes || 0) - Number(b.prep_time_minutes || 0));
-  }
-
-  const total = results.length;
-  const pagedResults = results.slice((page - 1) * pageSize, page * pageSize);
-
-  res.json({
-    category: publicCategory(category.data),
-    results: pagedResults,
-    meta: {
-      total,
-      page,
-      page_size: pageSize,
-      has_more: page * pageSize < total,
-      location_id: locationId,
-      sort: parsed.data.sort || 'display_order'
-    }
   });
 });
 
@@ -2602,24 +1849,10 @@ customerRouter.get('/customer/cocktails', async (req, res) => {
     });
   }
 
-
-  const customer = await findCustomerFromRequest(req);
-  let favoriteProductIds = new Set();
-
-  if (customer) {
-    try {
-      favoriteProductIds = await loadCustomerFavoriteIdSet(customer.id);
-    } catch (error) {
-      return res.status(400).json({ error: error.message });
-    }
-  }
-
   const total = results.length;
-  results = results
-    .slice((page - 1) * pageSize, page * pageSize)
-    .map((card) => addFavoriteFlagToCard(card, favoriteProductIds));
+  results = results.slice((page - 1) * pageSize, page * pageSize);
 
-  res.json({  
+  res.json({
     filters_applied: {
       liquor_type_ids: parsed.data.liquor_type_ids || [],
       category_id: parsed.data.category_id || null,
@@ -2728,198 +1961,21 @@ customerRouter.get('/customer/cocktails/:slug', async (req, res) => {
     error: relatedCatalog.error.message
   });
 
-  let favoriteProductIds = new Set();
-
-  if (customer) {
-    try {
-      favoriteProductIds = await loadCustomerFavoriteIdSet(customer.id);
-    } catch (error) {
-      return res.status(400).json({ error: error.message });
-    }
-  }
-
-  const cocktail = cocktailDetailPayload({
-    card: detail.data.card,
-    selectedVariant: detail.data.selectedVariant,
-    selectedLiquor: detail.data.selectedLiquor,
-    recipe: detail.data.recipe,
-    recipeItems: detail.data.recipeItems,
-    balancesByIngredientId: detail.data.balancesByIngredientId,
-    locationId
-  });
-
   res.json({
-    cocktail: {
-      ...cocktail,
-      is_favorite: favoriteProductIds.has(cocktail.id)
-    },
+    cocktail: cocktailDetailPayload({
+      card: detail.data.card,
+      selectedVariant: detail.data.selectedVariant,
+      selectedLiquor: detail.data.selectedLiquor,
+      recipe: detail.data.recipe,
+      recipeItems: detail.data.recipeItems,
+      balancesByIngredientId: detail.data.balancesByIngredientId,
+      locationId
+    }),
     cartContext,
     relatedCocktails: (relatedCatalog.data.cards || [])
       .filter((card) => card.id !== detail.data.product.id)
       .slice(0, 6)
-      .map((card) => addFavoriteFlagToRelated(card, favoriteProductIds))
-  });
-});
-
-customerRouter.get('/customer/profile', async (req, res) => {
-  const ensured = await ensureCustomer(req, res);
-  if (!ensured) return;
-
-  const [ordersPreview, addressesCount, favoritesCount] = await Promise.all([
-    loadCustomerOrdersPreview(ensured.customer.id, { limit: CUSTOMER_PROFILE_ORDER_LIMIT }),
-    countRows('customer_addresses', ensured.customer.id),
-    countRows('customer_favorite_products', ensured.customer.id)
-  ]);
-
-  for (const result of [ordersPreview, addressesCount, favoritesCount]) {
-    if (result.error) return res.status(400).json({ error: result.error.message });
-  }
-
-  const addressCount = Number(addressesCount.count || 0);
-  const favoriteCount = Number(favoritesCount.count || 0);
-
-  res.json({
-    session: sessionPayload(ensured.customer.id, ensured.token),
-    customer: customerProfilePayload(ensured.customer),
-    recent_orders: {
-      title: 'My Orders',
-      limit: CUSTOMER_PROFILE_ORDER_LIMIT,
-      has_more: ordersPreview.data.has_more,
-      view_all_endpoint: '/api/customer/orders',
-      items: ordersPreview.data.items
-    },
-    quick_links: profileQuickLinks({ addressCount, favoriteCount }),
-    payment_methods: {
-      enabled: false,
-      placeholder: true,
-      provider_managed: true,
-      saved_count: 0,
-      message: 'Saved payment methods will be enabled after the payment processor stored-card contract is finalized.'
-    },
-    favorites: {
-      enabled: true,
-      count: favoriteCount,
-      endpoint: '/api/customer/favorites'
-    },
-    promo_codes: {
-      enabled: false,
-      navigation_only: true,
-      placeholder: true
-    },
-    notifications: {
-      enabled: false,
-      navigation_only: true,
-      placeholder: true
-    },
-    brand_message: {
-      title: 'You bring the bottle.',
-      accent: 'We bring the magic.'
-    }
-  });
-});
-
-customerRouter.patch('/customer/profile', handleCustomerProfileUpdate);
-
-customerRouter.get('/customer/orders', async (req, res) => {
-  const parsed = z.object({
-    limit: z.coerce.number().int().positive().max(100).optional(),
-    offset: z.coerce.number().int().min(0).optional()
-  }).safeParse(req.query);
-
-  if (!parsed.success) return res.status(400).json({
-    error: 'Invalid orders request.'
-  });
-
-  const ensured = await ensureCustomer(req, res);
-  if (!ensured) return;
-
-  const orders = await loadCustomerOrdersPreview(ensured.customer.id, {
-    limit: parsed.data.limit || 20,
-    offset: parsed.data.offset || 0
-  });
-
-  if (orders.error) return res.status(400).json({
-    error: orders.error.message
-  });
-
-  res.json({
-    session: sessionPayload(ensured.customer.id, ensured.token),
-    orders: orders.data.items,
-    meta: {
-      limit: orders.data.limit,
-      offset: orders.data.offset,
-      has_more: orders.data.has_more
-    }
-  });
-});
-
-customerRouter.get('/customer/favorites', async (req, res) => {
-  const parsed = z.object({
-    location_id: optionalUuid,
-    locationId: optionalUuid,
-    page: z.coerce.number().int().positive().optional(),
-    page_size: z.coerce.number().int().positive().max(100).optional()
-  }).safeParse(req.query);
-
-  if (!parsed.success) return res.status(400).json({
-    error: 'Invalid favorites request.'
-  });
-
-  const ensured = await ensureCustomer(req, res);
-  if (!ensured) return;
-
-  const favorites = await loadFavoriteProducts(ensured.customer.id, {
-    locationId: parsed.data.location_id || parsed.data.locationId || null,
-    page: parsed.data.page || 1,
-    pageSize: parsed.data.page_size || 50
-  });
-
-  if (favorites.error) return res.status(400).json({
-    error: favorites.error.message
-  });
-
-  res.json({
-    session: sessionPayload(ensured.customer.id, ensured.token),
-    ...favorites.data
-  });
-});
-
-customerRouter.post('/customer/favorites', handleAddCustomerFavorite);
-
-customerRouter.post('/customer/favorites/:productId', async (req, res) => {
-  req.body = {
-    ...req.body,
-    product_id: req.params.productId
-  };
-
-  return handleAddCustomerFavorite(req, res);
-});
-
-customerRouter.delete('/customer/favorites/:productId', async (req, res) => {
-  const parsed = z.object({ productId: uuid }).safeParse(req.params);
-
-  if (!parsed.success) return res.status(400).json({
-    error: 'Invalid favorite request.'
-  });
-
-  const ensured = await ensureCustomer(req, res);
-  if (!ensured) return;
-
-  const deleted = await supabase
-    .from('customer_favorite_products')
-    .delete()
-    .eq('customer_id', ensured.customer.id)
-    .eq('product_id', parsed.data.productId);
-
-  if (deleted.error) return res.status(400).json({
-    error: deleted.error.message
-  });
-
-  res.json({
-    session: sessionPayload(ensured.customer.id, ensured.token),
-    ok: true,
-    product_id: parsed.data.productId,
-    is_favorite: false
+      .map(relatedCocktailPayload)
   });
 });
 
@@ -3382,122 +2438,6 @@ customerRouter.delete('/customer/cart', async (req, res) => {
   });
 });
 
-
-customerRouter.get('/customer/checkout', async (req, res) => {
-  const parsed = z.object({
-    location_id: uuid.optional(),
-    locationId: uuid.optional(),
-    fulfillment_type: z.enum(['pickup_at_cart', 'delivery_to_unit']).optional(),
-    fulfillmentType: z.enum(['pickup_at_cart', 'delivery_to_unit']).optional(),
-    promo_code: z.string().nullable().optional(),
-    promoCode: z.string().nullable().optional()
-  }).safeParse(req.query);
-
-  if (!parsed.success) return res.status(400).json({
-    error: 'Invalid checkout request.'
-  });
-
-  const locationId = parsed.data.location_id || parsed.data.locationId;
-
-  if (!locationId) return res.status(400).json({
-    error: 'location_id is required.'
-  });
-
-  const ensured = await ensureCustomer(req, res);
-  if (!ensured) return;
-
-  const cart = await getActiveCart(ensured.customer.id, {
-    createIfMissing: false
-  });
-
-  if (cart.error) return res.status(400).json({
-    error: cart.error.message
-  });
-
-  if (!cart.data) return res.status(400).json({
-    error: 'Cart is empty.'
-  });
-
-  const fulfillmentType = parsed.data.fulfillment_type || parsed.data.fulfillmentType || 'delivery_to_unit';
-
-  const quote = await buildCheckoutQuote({
-    customerId: ensured.customer.id,
-    cartId: cart.data.id,
-    locationId,
-    fulfillmentType,
-    promoCode: parsed.data.promo_code || parsed.data.promoCode || null,
-    requireCustomerDetails: false
-  });
-
-  if (quote.error) return res.status(400).json({
-    error: quote.error.message
-  });
-
-  if (quote.badRequest) return res.status(400).json({
-    error: quote.badRequest
-  });
-
-  const location = await loadCartLocation(locationId);
-
-  if (location.error) return res.status(400).json({
-    error: location.error.message
-  });
-
-  const itemWarnings = quote.data.quote.items
-    .filter((item) => !item.is_available)
-    .map((item) => ({
-      cart_item_id: item.cart_item_id,
-      product_id: item.product_id,
-      product_name: item.product_name,
-      reason: item.blocking_reason || 'Currently unavailable at this beach cart.'
-    }));
-
-  res.json({
-    session: sessionPayload(ensured.customer.id, ensured.token),
-    checkout: {
-      cart_id: cart.data.id,
-      cart_expires_at: cart.data.expires_at || cartExpiresAtIso(),
-      location: location.data,
-      fulfillment: {
-        type: fulfillmentType,
-        delivery_fee: quote.data.quote.totals.delivery_fee,
-        currency: CURRENCY
-      },
-      customer: {
-        id: ensured.customer.id,
-        phone: ensured.customer.phone || null
-      },
-      requirements: {
-        customer_phone: {
-          required: true,
-          validation: '^0[0-9]{10}$',
-          helper_text: 'Egyptian mobile number, 11 digits, starting with 0.'
-        },
-        address: {
-          required: fulfillmentType === 'delivery_to_unit',
-          max_length: 500
-        },
-        promo_code: {
-          required: false,
-          max_count: 1
-        }
-      },
-      items: quote.data.quote.items,
-      item_warnings: itemWarnings,
-      summary: quote.data.quote.totals,
-      promotion: quote.data.quote.promotion,
-      payment_methods: checkoutPaymentMethods(),
-      validation: {
-        can_place_order: quote.data.quote.validation.can_place_order && geideaIsConfigured(),
-        blocking_reasons: [
-          ...quote.data.quote.validation.blocking_reasons,
-          ...(geideaIsConfigured() ? [] : ['Geidea payment gateway is not configured yet.'])
-        ]
-      }
-    }
-  });
-});
-
 customerRouter.get('/customer/checkout/options', async (req, res) => {
   const ensured = await ensureCustomer(req, res);
   if (!ensured) return;
@@ -3546,7 +2486,12 @@ customerRouter.get('/customer/checkout/options', async (req, res) => {
         label: 'Delivery to unit'
       }
     ],
-    paymentMethods: checkoutPaymentMethods()
+    paymentMethods: [
+      {
+        value: 'payment_gateway',
+        label: 'Card payment'
+      }
+    ]
   });
 });
 
@@ -3556,7 +2501,6 @@ customerRouter.post('/customer/checkout/quote', async (req, res) => {
     location_id: uuid,
     fulfillment_type: z.enum(['pickup_at_cart', 'delivery_to_unit']),
     customer_address_id: uuid.nullable().optional(),
-    address: z.string().trim().min(1).max(500).nullable().optional(),
     requested_fulfillment_at: z.string().nullable().optional(),
     promo_code: z.string().nullable().optional(),
     customer_notes: z.string().nullable().optional()
@@ -3575,9 +2519,7 @@ customerRouter.post('/customer/checkout/quote', async (req, res) => {
     locationId: parsed.data.location_id,
     fulfillmentType: parsed.data.fulfillment_type,
     customerAddressId: parsed.data.customer_address_id || null,
-    addressText: parsed.data.address || null,
-    customerNotes: parsed.data.customer_notes || null,
-    promoCode: parsed.data.promo_code || null
+    customerNotes: parsed.data.customer_notes || null
   });
 
   if (quote.error) return res.status(400).json({
@@ -3594,55 +2536,21 @@ customerRouter.post('/customer/checkout/quote', async (req, res) => {
   });
 });
 
-
-async function handleCustomerPlaceOrder(req, res) {
+customerRouter.post('/customer/orders', async (req, res) => {
   const parsed = z.object({
     cart_id: uuid,
     location_id: uuid,
     fulfillment_type: z.enum(['pickup_at_cart', 'delivery_to_unit']),
-    address: z.string().trim().min(1).max(500).nullable().optional(),
     customer_address_id: uuid.nullable().optional(),
-    customer_phone: z.string().trim().optional(),
-    mobile_phone: z.string().trim().optional(),
-    phone: z.string().trim().optional(),
     requested_fulfillment_at: z.string().nullable().optional(),
-    promo_code: z.string().nullable().optional(),
     customer_notes: z.string().nullable().optional(),
-    payment_method: z.enum(['geidea_card', 'geidea_apple_pay', 'payment_gateway']),
+    payment_method: z.literal('payment_gateway').default('payment_gateway'),
     idempotency_key: z.string().min(8).max(120)
-  }).transform((data) => ({
-    ...data,
-    customer_phone: data.customer_phone || data.mobile_phone || data.phone || '',
-    payment_method: data.payment_method === 'payment_gateway' ? 'geidea_card' : data.payment_method
-  })).safeParse(req.body);
+  }).safeParse(req.body);
 
   if (!parsed.success) return res.status(400).json({
-    error: 'Invalid order request.',
-    details: parsed.error.issues.map((issue) => ({
-      path: issue.path.join('.'),
-      message: issue.message
-    }))
+    error: 'Invalid order request.'
   });
-
-  if (!isSimpleEgyptianMobile(parsed.data.customer_phone)) {
-    return res.status(400).json({
-      error: 'Invalid mobile number. Use an Egyptian mobile number that starts with 0 and has 11 digits.'
-    });
-  }
-
-  if (!geideaIsConfigured()) {
-    return res.status(503).json({
-      error: 'Geidea payment gateway is not configured yet.'
-    });
-  }
-
-  const method = checkoutPaymentMethods().find((entry) => entry.key === parsed.data.payment_method);
-
-  if (!method?.enabled) {
-    return res.status(400).json({
-      error: `${method?.label || 'Selected payment method'} is not available yet.`
-    });
-  }
 
   const ensured = await ensureCustomer(req, res);
   if (!ensured) return;
@@ -3678,11 +2586,11 @@ async function handleCustomerPlaceOrder(req, res) {
       session: sessionPayload(ensured.customer.id, ensured.token),
       order: existingPayment.data.orders,
       items: existingItems.data || [],
-      payment: createGeideaPaymentPayload({
+      payment: createPaymentGatewayPayload({
         order: existingPayment.data.orders,
         payment: existingPayment.data
       }),
-      nextScreen: 'geidea_payment'
+      nextScreen: 'order_confirmation'
     });
   }
 
@@ -3692,10 +2600,7 @@ async function handleCustomerPlaceOrder(req, res) {
     locationId: parsed.data.location_id,
     fulfillmentType: parsed.data.fulfillment_type,
     customerAddressId: parsed.data.customer_address_id || null,
-    addressText: parsed.data.address || null,
-    customerNotes: parsed.data.customer_notes || null,
-    promoCode: parsed.data.promo_code || null,
-    requireCustomerDetails: true
+    customerNotes: parsed.data.customer_notes || null
   });
 
   if (quote.error) return res.status(400).json({
@@ -3724,41 +2629,12 @@ async function handleCustomerPlaceOrder(req, res) {
     });
   }
 
-  let customerAddressId = parsed.data.customer_address_id || null;
-  let customerAddressSnapshot = quote.data.quote.address_text || null;
-
-  if (parsed.data.fulfillment_type === 'delivery_to_unit' && !customerAddressId) {
-    const addressInsert = await supabase
-      .from('customer_addresses')
-      .insert({
-        customer_id: ensured.customer.id,
-        label: 'Checkout address',
-        compound_name: quote.data.location.compound_name || null,
-        beach_name: quote.data.location.beach_name || null,
-        address: quote.data.quote.address_text,
-        is_default: false
-      })
-      .select()
-      .single();
-
-    if (addressInsert.error) return res.status(400).json({
-      error: addressInsert.error.message
-    });
-
-    customerAddressId = addressInsert.data.id;
-    customerAddressSnapshot = addressInsert.data.address;
-  } else if (quote.data.address) {
-    customerAddressSnapshot = quote.data.address.address || quote.data.address.delivery_notes || null;
-  }
-
   const orderInsert = await supabase
-    .from('orders')
+    .from('orders')  
     .insert({
       customer_id: ensured.customer.id,
       location_id: parsed.data.location_id,
-      customer_address_id: customerAddressId,
-      customer_phone_snapshot: parsed.data.customer_phone,
-      customer_address_snapshot: customerAddressSnapshot,
+      customer_address_id: parsed.data.customer_address_id || null,
       order_channel: 'app',
       fulfillment_type: parsed.data.fulfillment_type,
       status: 'pending_payment',
@@ -3771,7 +2647,7 @@ async function handleCustomerPlaceOrder(req, res) {
       total_amount: quote.data.quote.totals.total_amount,
       customer_notes: parsed.data.customer_notes || null
     })
-    .select('*, locations(id,name,type,compound_name,beach_name,banner_image_url,delivery_fee), customer_addresses(*)')
+    .select('*, locations(id,name,type,compound_name,beach_name,banner_image_url), customer_addresses(*)')
     .single();
 
   if (orderInsert.error) return res.status(400).json({
@@ -3797,7 +2673,10 @@ async function handleCustomerPlaceOrder(req, res) {
     .select();
 
   if (orderItems.error) {
-    await supabase.from('orders').delete().eq('id', orderInsert.data.id);
+    await supabase
+      .from('orders')
+      .delete()
+      .eq('id', orderInsert.data.id);
 
     return res.status(400).json({
       error: orderItems.error.message
@@ -3815,62 +2694,20 @@ async function handleCustomerPlaceOrder(req, res) {
       idempotency_key: parsed.data.idempotency_key,
       raw_payload: {
         payment_method: parsed.data.payment_method,
-        promotion: quote.data.quote.promotion
-          ? {
-              id: quote.data.quote.promotion.id,
-              code: quote.data.quote.promotion.code,
-              discount_amount: quote.data.quote.promotion.discount_amount
-            }
-          : null
+        gateway_configured: Boolean(PAYMENT_GATEWAY_CHECKOUT_URL)
       }
     })
     .select()
     .single();
 
   if (payment.error) {
-    await supabase.from('orders').delete().eq('id', orderInsert.data.id);
+    await supabase
+      .from('orders')
+      .delete()
+      .eq('id', orderInsert.data.id);
 
     return res.status(400).json({
       error: payment.error.message
-    });
-  }
-
-  let geideaSession;
-
-  try {
-    geideaSession = await createGeideaSession({
-      order: orderInsert.data,
-      payment: payment.data,
-      customer: ensured.customer,
-      paymentMethod: parsed.data.payment_method
-    });
-  } catch (err) {
-    await supabase.from('orders').delete().eq('id', orderInsert.data.id);
-
-    return res.status(502).json({
-      error: err.message || 'Could not create Geidea payment session.'
-    });
-  }
-
-  const updatedPayment = await supabase
-    .from('payments')
-    .update({
-      raw_payload: {
-        ...(payment.data.raw_payload || {}),
-        geidea_session_id: geideaSession.session_id,
-        geidea_create_session_request: geideaSession.request_payload,
-        geidea_create_session_response: geideaSession.raw_response
-      }
-    })
-    .eq('id', payment.data.id)
-    .select()
-    .single();
-
-  if (updatedPayment.error) {
-    await supabase.from('orders').delete().eq('id', orderInsert.data.id);
-
-    return res.status(400).json({
-      error: updatedPayment.error.message
     });
   }
 
@@ -3881,7 +2718,9 @@ async function handleCustomerPlaceOrder(req, res) {
 
   await supabase
     .from('carts')
-    .update({ status: 'converted' })
+    .update({
+      status: 'converted'
+    })
     .eq('id', parsed.data.cart_id);
 
   res.json({
@@ -3894,144 +2733,16 @@ async function handleCustomerPlaceOrder(req, res) {
       fulfillment_type: orderInsert.data.fulfillment_type,
       requested_fulfillment_at: orderInsert.data.requested_fulfillment_at,
       created_at: orderInsert.data.created_at,
-      customer_phone: orderInsert.data.customer_phone_snapshot,
-      address: orderInsert.data.customer_address_snapshot,
       location: publicLocation(orderInsert.data.locations),
-      totals: quote.data.quote.totals,
-      promotion: quote.data.quote.promotion
+      address: orderInsert.data.customer_addresses,
+      totals: quote.data.quote.totals
     },
     items: orderItems.data,
-    payment: createGeideaPaymentPayload({
+    payment: createPaymentGatewayPayload({
       order: orderInsert.data,
-      payment: updatedPayment.data,
-      sessionId: geideaSession.session_id,
-      paymentMethod: parsed.data.payment_method
+      payment: payment.data
     }),
-    nextScreen: 'geidea_payment'
-  });
-}
-
-customerRouter.post('/customer/checkout/place-order', handleCustomerPlaceOrder);
-customerRouter.post('/customer/orders', handleCustomerPlaceOrder);
-
-customerRouter.post('/payments/geidea/callback', async (req, res) => {
-  const payload = req.body || {};
-  const providerEventId = crypto
-    .createHash('sha256')
-    .update(JSON.stringify(payload))
-    .digest('hex');
-
-  await supabase
-    .from('payment_events')
-    .upsert({
-      provider: 'geidea',
-      provider_event_id: providerEventId,
-      event_type: 'callback',
-      raw_payload: payload
-    }, {
-      onConflict: 'provider_event_id',
-      ignoreDuplicates: true
-    });
-
-  const verification = verifyGeideaCallbackSignature(payload);
-  const fields = verification.fields || extractGeideaCallbackFields(payload);
-
-  if (!verification.ok) {
-    return res.status(400).json({
-      ok: false,
-      error: verification.reason
-    });
-  }
-
-  if (!fields.merchant_reference_id) {
-    return res.status(400).json({
-      ok: false,
-      error: 'Geidea callback is missing merchantReferenceId.'
-    });
-  }
-
-  const payment = await supabase
-    .from('payments')
-    .select('*, orders(*)')
-    .eq('id', fields.merchant_reference_id)
-    .maybeSingle();
-
-  if (payment.error) return res.status(400).json({
-    ok: false,
-    error: payment.error.message
-  });
-
-  if (!payment.data?.orders) return res.status(404).json({
-    ok: false,
-    error: 'Payment was not found for this Geidea callback.'
-  });
-
-  const expectedAmount = formatGeideaAmount(payment.data.amount);
-  const receivedAmount = formatGeideaAmount(fields.amount);
-
-  if (expectedAmount !== receivedAmount || String(fields.currency || '').toUpperCase() !== String(payment.data.currency || CURRENCY).toUpperCase()) {
-    return res.status(400).json({
-      ok: false,
-      error: 'Geidea callback amount or currency does not match the payment record.'
-    });
-  }
-
-  const isSuccess = geideaCallbackIsSuccess(fields);
-  const nextPaymentStatus = isSuccess ? 'paid' : 'failed';
-  const nextOrderPaymentStatus = isSuccess ? 'paid' : 'failed';
-  const nextOrderStatus = isSuccess ? 'confirmed' : payment.data.orders.status;
-
-  const updatedPayment = await supabase
-    .from('payments')
-    .update({
-      provider_payment_id: fields.order_id || payment.data.provider_payment_id,
-      status: nextPaymentStatus,
-      raw_payload: {
-        ...(payment.data.raw_payload || {}),
-        geidea_callback: payload,
-        geidea_callback_fields: fields
-      }
-    })
-    .eq('id', payment.data.id)
-    .select()
-    .single();
-
-  if (updatedPayment.error) return res.status(400).json({
-    ok: false,
-    error: updatedPayment.error.message
-  });
-
-  const updatedOrder = await supabase
-    .from('orders')
-    .update({
-      status: nextOrderStatus,
-      payment_status: nextOrderPaymentStatus
-    })
-    .eq('id', payment.data.order_id)
-    .select()
-    .single();
-
-  if (updatedOrder.error) return res.status(400).json({
-    ok: false,
-    error: updatedOrder.error.message
-  });
-
-  if (isSuccess) {
-    await recordPromotionRedemptionIfNeeded({
-      order: updatedOrder.data,
-      payment: updatedPayment.data
-    });
-  }
-
-  await supabase
-    .from('payment_events')
-    .update({ processed_at: new Date().toISOString() })
-    .eq('provider_event_id', providerEventId);
-
-  res.json({
-    ok: true,
-    payment_status: nextPaymentStatus,
-    order_status: nextOrderStatus
+    nextScreen: 'order_confirmation'
   });
 });
 
@@ -4041,7 +2752,7 @@ customerRouter.get('/customer/orders/:orderId', async (req, res) => {
 
   const order = await supabase
     .from('orders')
-    .select('*, locations(id,name,type,compound_name,beach_name,banner_image_url,delivery_fee), customer_addresses(*)')
+    .select('*, locations(id,name,type,compound_name,beach_name,banner_image_url), customer_addresses(*)')
     .eq('id', req.params.orderId)
     .eq('customer_id', ensured.customer.id)
     .maybeSingle();
@@ -4062,18 +2773,6 @@ customerRouter.get('/customer/orders/:orderId', async (req, res) => {
 
   if (items.error) return res.status(400).json({
     error: items.error.message
-  });
-
-  const payment = await supabase
-    .from('payments')
-    .select('id,provider,provider_payment_id,amount,currency,status,raw_payload,created_at,updated_at')
-    .eq('order_id', order.data.id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (payment.error) return res.status(400).json({
-    error: payment.error.message
   });
 
   const statusOrder = [
@@ -4104,8 +2803,6 @@ customerRouter.get('/customer/orders/:orderId', async (req, res) => {
       fulfillment_type: order.data.fulfillment_type,
       requested_fulfillment_at: order.data.requested_fulfillment_at,
       created_at: order.data.created_at,
-      customer_phone: order.data.customer_phone_snapshot || null,
-      address_text: order.data.customer_address_snapshot || null,
       statusTimeline: timeline,
       location: publicLocation(order.data.locations),
       address: order.data.customer_addresses,
@@ -4120,10 +2817,6 @@ customerRouter.get('/customer/orders/:orderId', async (req, res) => {
       }
     },
     items: items.data || [],
-    payment: payment.data ? createGeideaPaymentPayload({
-      order: order.data,
-      payment: payment.data
-    }) : null,
     support: {
       whatsapp_number: process.env.CUSTOMER_SUPPORT_WHATSAPP || null,
       message_template: `Hi EBTL, I need help with order ${order.data.order_number}.`
@@ -4172,51 +2865,6 @@ customerRouter.get('/customer/orders/:orderId/status', async (req, res) => {
   });
 });
 
-
-customerRouter.get('/customer/orders/:orderId/payment-status', async (req, res) => {
-  const ensured = await ensureCustomer(req, res);
-  if (!ensured) return;
-
-  const order = await supabase
-    .from('orders')
-    .select('id,order_number,status,payment_status,total_amount,customer_id,updated_at')
-    .eq('id', req.params.orderId)
-    .eq('customer_id', ensured.customer.id)
-    .maybeSingle();
-
-  if (order.error) return res.status(400).json({
-    error: order.error.message
-  });
-
-  if (!order.data) return res.status(404).json({
-    error: 'Order not found.'
-  });
-
-  const payment = await supabase
-    .from('payments')
-    .select('id,provider,provider_payment_id,amount,currency,status,raw_payload,created_at,updated_at')
-    .eq('order_id', order.data.id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (payment.error) return res.status(400).json({
-    error: payment.error.message
-  });
-
-  res.json({
-    order_id: order.data.id,
-    order_number: order.data.order_number,
-    order_status: order.data.status,
-    payment_status: order.data.payment_status,
-    updated_at: order.data.updated_at,
-    payment: payment.data ? createGeideaPaymentPayload({
-      order: order.data,
-      payment: payment.data
-    }) : null
-  });
-});
-
 customerRouter.get('/customer/me', async (req, res) => {
   const ensured = await ensureCustomer(req, res);
   if (!ensured) return;
@@ -4234,7 +2882,38 @@ customerRouter.get('/customer/me', async (req, res) => {
   });
 });
 
-customerRouter.patch('/customer/me', handleCustomerProfileUpdate);
+customerRouter.patch('/customer/me', async (req, res) => {
+  const parsed = z.object({
+    full_name: z.string().min(1).nullable().optional(),
+    phone: z.string().min(5).nullable().optional(),
+    email: z.string().email().nullable().optional(),
+    birthday: z.string().nullable().optional(),
+    marketing_opt_in: z.boolean().optional()
+  }).safeParse(req.body);
+
+  if (!parsed.success) return res.status(400).json({
+    error: 'Invalid customer profile.'
+  });
+
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const updated = await supabase
+    .from('customers')
+    .update(clean(parsed.data))
+    .eq('id', ensured.customer.id)
+    .select()
+    .single();
+
+  if (updated.error) return res.status(400).json({
+    error: updated.error.message
+  });
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    customer: updated.data
+  });
+});
 
 customerRouter.get('/customer/addresses', async (req, res) => {
   const ensured = await ensureCustomer(req, res);
