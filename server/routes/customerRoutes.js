@@ -1358,7 +1358,7 @@ async function loadCatalog({
 } = {}) {
   let productQuery = supabase
     .from('products')
-    .select('*, product_categories(id,name,sort_order)')
+    .select('*, product_categories(id,name,slug,image_url,sort_order)')
     .eq('status', 'active')
     .order('display_order', {
       ascending: true
@@ -2223,7 +2223,6 @@ async function recordPromotionRedemptionIfNeeded({ order, payment }) {
     });
 }
 
-
 async function loadShopSettings() {
   const settings = await supabase
     .from('shop_settings')
@@ -2362,7 +2361,6 @@ customerRouter.get('/customer/home', async (req, res) => {
   });
 });
 
-
 customerRouter.get('/customer/shop', async (req, res) => {
   const parsed = z.object({
     location_id: optionalUuid,
@@ -2489,7 +2487,6 @@ customerRouter.get('/customer/shop/categories/:identifier/products', async (req,
     }
   });
 });
-
 
 customerRouter.get('/customer/cocktail-finder/options', async (_req, res) => {
   const [liquorTypes, categories, productTags] = await Promise.all([
