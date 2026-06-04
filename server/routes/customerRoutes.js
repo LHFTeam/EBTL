@@ -7,6 +7,7 @@ import { getCookie } from '../lib/session.js';
 import {
   createGeideaSession,
   extractGeideaCallbackFields,
+  extractGeideaSavedCard,
   formatGeideaAmount,
   geideaCallbackIsSuccess,
   geideaCheckoutConfig,
@@ -2200,6 +2201,7 @@ function createGeideaPaymentPayload({
   paymentMethod = null
 }) {
   const config = geideaCheckoutConfig();
+  const resolvedSessionId = sessionId || payment.raw_payload?.geidea_session_id || null;
 
   return {
     required: true,
@@ -2209,14 +2211,31 @@ function createGeideaPaymentPayload({
     status: payment.status,
     amount: money(payment.amount),
     currency: payment.currency || CURRENCY,
+
+    // Flutter SDK should use this object.
+    sdk: {
+      session_id: resolvedSessionId,
+      region: config.region,
+      language: config.language,
+      is_sandbox: config.is_sandbox,
+      apple_pay_merchant_id: config.apple_pay_merchant_id,
+      theme: {
+        primaryColor: '#F35F4B',
+        secondaryColor: '#0E2238',
+        merchantLogoPath: 'assets/logo.png'
+      }
+    },
+
+    // Kept for backward compatibility with previous customer app handoffs.
     geidea: {
       configured: config.configured,
       is_sandbox: config.is_sandbox,
       region: config.region,
       language: config.language,
-      session_id: sessionId || payment.raw_payload?.geidea_session_id || null,
+      session_id: resolvedSessionId,
       apple_pay_merchant_id: config.apple_pay_merchant_id
     },
+
     order_reference: order.order_number || order.id
   };
 }
@@ -2245,6 +2264,50 @@ async function recordPromotionRedemptionIfNeeded({ order, payment }) {
       order_id: order.id,
       discount_amount: money(payment.raw_payload.promotion.discount_amount || order.discount_amount || 0)
     });
+}
+
+async function recordGeideaSavedCardIfNeeded({ customerId, payload }) {
+  const savedCard = extractGeideaSavedCard(payload);
+  if (!savedCard?.token_id) return null;
+
+  const existingCards = await supabase
+    .from('customer_payment_methods')
+    .select('id')
+    .eq('customer_id', customerId)
+    .eq('is_active', true)
+    .limit(1);
+
+  const shouldBeDefault = !existingCards.error && !existingCards.data?.length;
+
+  const upsert = await supabase
+    .from('customer_payment_methods')
+    .upsert({
+      customer_id: customerId,
+      provider: 'geidea',
+      provider_token_id: savedCard.token_id,
+      provider_agreement_id: savedCard.agreement_id || null,
+      agreement_type: savedCard.agreement_type || 'Unscheduled',
+      card_brand: savedCard.card_brand || null,
+      cardholder_name: savedCard.cardholder_name || null,
+      masked_card_number: savedCard.masked_card_number || null,
+      expiry_month: savedCard.expiry_month || null,
+      expiry_year: savedCard.expiry_year || null,
+      is_default: shouldBeDefault,
+      is_active: true,
+      last_used_at: new Date().toISOString(),
+      raw_payload: payload
+    }, {
+      onConflict: 'provider,provider_token_id'
+    })
+    .select()
+    .single();
+
+  if (upsert.error) {
+    console.error('Failed to save Geidea card token:', upsert.error.message);
+    return null;
+  }
+
+  return upsert.data;
 }
 
 async function loadShopSettings() {
@@ -3630,6 +3693,7 @@ async function handleCustomerPlaceOrder(req, res) {
     promo_code: z.string().nullable().optional(),
     customer_notes: z.string().nullable().optional(),
     payment_method: z.enum(['geidea_card', 'geidea_apple_pay', 'payment_gateway']),
+    save_card: z.boolean().optional().default(false),
     idempotency_key: z.string().min(8).max(120)
   }).transform((data) => ({
     ...data,
@@ -3836,6 +3900,7 @@ async function handleCustomerPlaceOrder(req, res) {
       idempotency_key: parsed.data.idempotency_key,
       raw_payload: {
         payment_method: parsed.data.payment_method,
+        save_card: Boolean(parsed.data.save_card),
         promotion: quote.data.quote.promotion
           ? {
               id: quote.data.quote.promotion.id,
@@ -3863,7 +3928,8 @@ async function handleCustomerPlaceOrder(req, res) {
       order: orderInsert.data,
       payment: payment.data,
       customer: ensured.customer,
-      paymentMethod: parsed.data.payment_method
+      paymentMethod: parsed.data.payment_method,
+      saveCard: Boolean(parsed.data.save_card)
     });
   } catch (err) {
     await supabase.from('orders').delete().eq('id', orderInsert.data.id);
@@ -3934,6 +4000,131 @@ async function handleCustomerPlaceOrder(req, res) {
 
 customerRouter.post('/customer/checkout/place-order', handleCustomerPlaceOrder);
 customerRouter.post('/customer/orders', handleCustomerPlaceOrder);
+
+customerRouter.post('/customer/orders/:orderId/payment-result', async (req, res) => {
+  const parsed = z.object({
+    status: z.enum(['success', 'failure', 'canceled']),
+    order_id: z.string().nullable().optional(),
+    token_id: z.string().nullable().optional(),
+    agreement_id: z.string().nullable().optional(),
+    payment_method: z.any().nullable().optional(),
+    error: z.object({
+      code: z.string().optional(),
+      message: z.string().optional(),
+      details: z.string().nullable().optional()
+    }).nullable().optional(),
+    raw_result: z.any().nullable().optional()
+  }).safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: 'Invalid Geidea SDK payment result.'
+    });
+  }
+
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const order = await supabase
+    .from('orders')
+    .select('id,order_number,status,payment_status,total_amount,customer_id,updated_at')
+    .eq('id', req.params.orderId)
+    .eq('customer_id', ensured.customer.id)
+    .maybeSingle();
+
+  if (order.error) {
+    return res.status(400).json({
+      error: order.error.message
+    });
+  }
+
+  if (!order.data) {
+    return res.status(404).json({
+      error: 'Order not found.'
+    });
+  }
+
+  const payment = await supabase
+    .from('payments')
+    .select('*')
+    .eq('order_id', order.data.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (payment.error) {
+    return res.status(400).json({
+      error: payment.error.message
+    });
+  }
+
+  if (!payment.data) {
+    return res.status(404).json({
+      error: 'Payment not found.'
+    });
+  }
+
+  const providerEventId = crypto
+    .createHash('sha256')
+    .update(JSON.stringify({
+      type: 'flutter_sdk_result',
+      payment_id: payment.data.id,
+      order_id: order.data.id,
+      payload: parsed.data
+    }))
+    .digest('hex');
+
+  await supabase
+    .from('payment_events')
+    .upsert({
+      provider: 'geidea',
+      provider_event_id: providerEventId,
+      event_type: 'flutter_sdk_result',
+      raw_payload: {
+        order_id: order.data.id,
+        payment_id: payment.data.id,
+        sdk_result: parsed.data
+      },
+      processed_at: new Date().toISOString()
+    }, {
+      onConflict: 'provider_event_id',
+      ignoreDuplicates: true
+    });
+
+  const updatedPayment = await supabase
+    .from('payments')
+    .update({
+      provider_payment_id: parsed.data.order_id || payment.data.provider_payment_id,
+      raw_payload: {
+        ...(payment.data.raw_payload || {}),
+        geidea_flutter_sdk_result: parsed.data
+      }
+    })
+    .eq('id', payment.data.id)
+    .select()
+    .single();
+
+  if (updatedPayment.error) {
+    return res.status(400).json({
+      error: updatedPayment.error.message
+    });
+  }
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    ok: true,
+    trusted_payment_confirmation: 'callback',
+    message: parsed.data.status === 'success'
+      ? 'SDK reported success. The order will be marked paid only after the verified Geidea callback is processed.'
+      : 'SDK result was recorded.',
+    order_status: order.data.status,
+    payment_status: order.data.payment_status,
+    payment: createGeideaPaymentPayload({
+      order: order.data,
+      payment: updatedPayment.data
+    })
+  });
+});
 
 customerRouter.post('/payments/geidea/callback', async (req, res) => {
   const payload = req.body || {};
@@ -4042,8 +4233,26 @@ customerRouter.post('/payments/geidea/callback', async (req, res) => {
       order: updatedOrder.data,
       payment: updatedPayment.data
     });
+  
+    if (payment.data.raw_payload?.save_card) {
+      const savedCard = await recordGeideaSavedCardIfNeeded({
+        customerId: payment.data.orders.customer_id,
+        payload
+      });
+  
+      if (savedCard) {
+        await supabase
+          .from('payments')
+          .update({
+            raw_payload: {
+              ...(updatedPayment.data.raw_payload || {}),
+              saved_payment_method_id: savedCard.id
+            }
+          })
+          .eq('id', updatedPayment.data.id);
+      }
+    }
   }
-
   await supabase
     .from('payment_events')
     .update({ processed_at: new Date().toISOString() })
@@ -4256,6 +4465,30 @@ customerRouter.get('/customer/me', async (req, res) => {
 });
 
 customerRouter.patch('/customer/me', handleCustomerProfileUpdate);
+
+customerRouter.get('/customer/payment-methods', async (req, res) => {
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const paymentMethods = await supabase
+    .from('customer_payment_methods')
+    .select('id,provider,card_brand,cardholder_name,masked_card_number,expiry_month,expiry_year,is_default,is_active,last_used_at,created_at,updated_at')
+    .eq('customer_id', ensured.customer.id)
+    .eq('is_active', true)
+    .order('is_default', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  if (paymentMethods.error) {
+    return res.status(400).json({
+      error: paymentMethods.error.message
+    });
+  }
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    payment_methods: paymentMethods.data || []
+  });
+});
 
 customerRouter.get('/customer/addresses', async (req, res) => {
   const ensured = await ensureCustomer(req, res);
