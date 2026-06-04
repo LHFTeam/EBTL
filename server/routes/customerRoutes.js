@@ -27,6 +27,7 @@ const MAX_CART_ITEM_QTY = 99;
 const FULFILLMENT_TYPES = ['pickup_at_cart', 'delivery_to_unit'];
 const CUSTOMER_PROFILE_ORDER_LIMIT = 5;
 const CUSTOMER_PROFILE_AVATAR_ASSET = 'assets/images/profile/default-profile.webp';
+const CUSTOMER_GENDER_VALUES = ['male', 'female'];
 
 const uuid = z.string().uuid();
 const optionalUuid = uuid.optional();
@@ -818,22 +819,37 @@ function addFavoriteFlagToRelated(card, favoriteProductIds = new Set()) {
 }
 
 function customerProfilePayload(customer) {
+  const gender = CUSTOMER_GENDER_VALUES.includes(customer.gender) ? customer.gender : null;
+
   return {
     id: customer.id,
     full_name: customer.full_name || null,
     phone: customer.phone || null,
     email: customer.email || null,
     birthday: customer.birthday || null,
+    gender,
+    gender_options: [
+      {
+        value: 'male',
+        label: 'Male'
+      },
+      {
+        value: 'female',
+        label: 'Female'
+      }
+    ],
     marketing_opt_in: Boolean(customer.marketing_opt_in),
     avatar: {
       type: 'local_asset',
       asset_path: CUSTOMER_PROFILE_AVATAR_ASSET,
-      image_url: null
+      image_url: null,
+      gender
     },
     completion: {
       has_full_name: Boolean(customer.full_name),
       has_phone: Boolean(customer.phone),
       has_email: Boolean(customer.email),
+      has_gender: Boolean(gender),
       missing_fields: [
         !customer.full_name ? 'full_name' : null,
         !customer.phone ? 'phone' : null,
@@ -1079,6 +1095,14 @@ const customerProfileUpdateSchema = z.object({
   birthday: z.preprocess(
     (value) => value === '' ? null : value,
     z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Birthday must use YYYY-MM-DD format.').nullable().optional()
+  ),
+  gender: z.preprocess(
+    (value) => {
+      if (value === '' || value === null) return null;
+      if (typeof value === 'string') return value.trim().toLowerCase();
+      return value;
+    },
+    z.enum(['male', 'female']).nullable().optional()
   ),
   marketing_opt_in: z.boolean().optional()
 });
