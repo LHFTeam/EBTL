@@ -46,7 +46,9 @@ function buildPayload(form, isEditing) {
 }
 
 export default function Locations() {
-  const { data = [], loading, error, reload } = useLoad(() => api('/api/locations'));
+  const { data: loadedLocations, loading, error, reload } = useLoad(() => api('/api/locations'));
+  const data = Array.isArray(loadedLocations) ? loadedLocations : [];
+
   const [form, setForm] = useState(blank);
   const [editing, setEditing] = useState(null);
   const [message, setMessage] = useState('');
