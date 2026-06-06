@@ -1585,3 +1585,97 @@ textarea {
     justify-content: flex-start;
   }
 }
+
+/* Location banner and opening-hours admin */
+.locationAssetGrid {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.locationBannerPreviewBox {
+  width: 220px;
+  height: 124px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fffaf6;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.locationBannerPreview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.locationTableBannerThumb {
+  width: 72px;
+  height: 42px;
+}
+
+.openingHoursForm {
+  display: grid;
+  gap: 10px;
+}
+
+.openingHourLine {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) 110px minmax(130px, 1fr) minmax(130px, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fffaf6;
+}
+
+.openingHourLine label:not(.checkboxField) {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.openingHourLine input[type="time"] {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: white;
+  color: var(--ink);
+}
+
+.openingHourLine input[type="time"]:disabled {
+  background: #f3eee7;
+  color: var(--muted);
+}
+
+.locationAssetGrid .shopAssetRow {
+  grid-template-columns: 240px 1fr;
+}
+
+@media (max-width: 860px) {
+  .openingHourLine {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .locationBannerPreviewBox {
+    width: 100%;
+    max-width: 320px;
+  }
+}
+
+@media (max-width: 720px) {
+  .locationAssetGrid .shopAssetRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .openingHourLine {
+    grid-template-columns: 1fr;
+  }
+}
