@@ -28,7 +28,6 @@ const blankProduct = {
 const blankVariant = { name: '', serving_count: 1, price_ex_vat: '', vat_rate: 0.14, is_active: true };
 const blankRecipe = { status: 'draft', yield_servings: 1, notes: '' };
 const blankRecipeItem = { ingredient_id: '', quantity: '', unit: '', is_optional: false, is_customer_supplied: false };
-const blankProductTag = { name: '', color_hex: '#1F6F68', display_order: 0, is_active: true };
 
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
@@ -154,6 +153,35 @@ function TagPicker({ label = 'Product tags', value = [], productTags = [], onCha
   </div>;
 }
 
+function initialsForLiquor(name) {
+  return String(name || '?')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase() || '?';
+}
+
+function LiquorFilterChip({ liquor, selected, count, onClick }) {
+  return (
+    <button
+      type="button"
+      className={`liquorFilterChip${selected ? ' selected' : ''}`}
+      onClick={onClick}
+      aria-pressed={selected}
+    >
+      {liquor?.image_url ? (
+        <img src={liquor.image_url} alt="" />
+      ) : (
+        <span className="liquorFilterInitials">{liquor ? initialsForLiquor(liquor.name) : 'All'}</span>
+      )}
+      <span>{liquor?.name || 'All liquors'}</span>
+      <small>{count}</small>
+    </button>
+  );
+}
+
 export default function Cocktails() {
   const { data, loading, error, reload } = useLoad(() => api('/api/cocktails'));
   const [form, setForm] = useState(blankProduct);
@@ -169,10 +197,9 @@ export default function Cocktails() {
   const [recipeReplaceRows, setRecipeReplaceRows] = useState([blankRecipeItem]);
   const [compatEdit, setCompatEdit] = useState([]);
   const [createImageFile, setCreateImageFile] = useState(null);
+  const [selectedLiquorFilter, setSelectedLiquorFilter] = useState('all');
 
   const [editImageFile, setEditImageFile] = useState(null);
-  const [newTag, setNewTag] = useState(blankProductTag);
-  const [tagEdits, setTagEdits] = useState({});
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState('ok');
 
@@ -188,6 +215,35 @@ export default function Cocktails() {
   const activeProductTags = productTags.filter((tag) => tag.is_active);
   const firstCategory = categories[0]?.id || '';  
   const selectedProduct = products.find((product) => product.id === editing) || null;
+
+  const compatibleLiquorIdsByProduct = useMemo(() => {
+    const map = new Map();
+
+    compatibility.forEach((row) => {
+      if (!row.product_id || !row.liquor_type_id) return;
+      if (!map.has(row.product_id)) map.set(row.product_id, new Set());
+      map.get(row.product_id).add(row.liquor_type_id);
+    });
+
+    return map;
+  }, [compatibility]);
+
+  const cocktailRows = useMemo(() => {
+    if (selectedLiquorFilter === 'all') return products;
+    return products.filter((product) => compatibleLiquorIdsByProduct.get(product.id)?.has(selectedLiquorFilter));
+  }, [products, compatibleLiquorIdsByProduct, selectedLiquorFilter]);
+
+  const liquorFilterCounts = useMemo(() => {
+    const counts = Object.fromEntries(liquorTypes.map((liquor) => [liquor.id, 0]));
+
+    products.forEach((product) => {
+      compatibleLiquorIdsByProduct.get(product.id)?.forEach((liquorId) => {
+        counts[liquorId] = (counts[liquorId] || 0) + 1;
+      });
+    });
+
+    return counts;
+  }, [products, liquorTypes, compatibleLiquorIdsByProduct]);
 
   const variantRows = useMemo(
     () => variants.map((variant) => ({
@@ -302,14 +358,6 @@ export default function Cocktails() {
     );
   }, [selectedProduct, variants, recipes, recipeItems, compatibility]);
 
-  useEffect(() => {
-    setTagEdits(Object.fromEntries(productTags.map((tag) => [tag.id, {
-      name: tag.name || '',
-      color_hex: tag.color_hex || '#1F6F68',
-      display_order: tag.display_order ?? 0,
-      is_active: !!tag.is_active
-    }])));
-  }, [productTags]);
 
   function ingredientUnit(ingredientId) {
     return ingredients.find((ingredient) => ingredient.id === ingredientId)?.base_unit || '';
@@ -486,45 +534,6 @@ export default function Cocktails() {
     scrollMessageToTop();
   }
 
-  async function addProductTag(e) {
-    e.preventDefault();
-
-    await runAction(async () => {
-      await api('/api/product-tags', {
-        method: 'POST',
-        body: JSON.stringify(newTag)
-      });
-
-      setNewTag(blankProductTag);
-    }, 'Product tag added.');
-  }
-
-  async function saveProductTag(tagId) {
-    await runAction(async () => {
-      await api(`/api/product-tags/${tagId}`, {
-        method: 'PATCH',
-        body: JSON.stringify(tagEdits[tagId])
-      });
-    }, 'Product tag updated.');
-  }
-
-  async function setProductTagActive(tagId, isActive) {
-    const tag = productTags.find((row) => row.id === tagId);
-
-    if (!isActive && !window.confirm(`Deactivate tag "${tag?.name || 'this tag'}"? Existing cocktails that use it will keep the text value, but it will not be selectable for new edits.`)) return;
-
-    await runAction(async () => {
-      if (isActive) {
-        await api(`/api/product-tags/${tagId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ is_active: true })
-        });
-      } else {
-        await api(`/api/product-tags/${tagId}`, { method: 'DELETE' });
-      }
-    }, isActive ? 'Product tag activated.' : 'Product tag deactivated.');
-  }
-  
   async function saveProduct(e) {
     e.preventDefault();
 
@@ -725,103 +734,6 @@ export default function Cocktails() {
   if (loading || error) return <Loading error={error} />;
 
   return <div className="grid">
-    <Section title="Product Tags">
-      <form className="miniForm tagAdminForm" onSubmit={addProductTag}>
-        <input
-          required
-          maxLength="40"
-          placeholder="Tag name, e.g. Best Seller"
-          value={newTag.name}
-          onChange={(e) => setNewTag({ ...newTag, name: e.target.value })}
-        />
-
-        <input
-          required
-          type="color"
-          value={newTag.color_hex}
-          onChange={(e) => setNewTag({ ...newTag, color_hex: e.target.value })}
-        />
-
-        <input
-          type="number"
-          placeholder="Display order"
-          value={newTag.display_order}
-          onChange={(e) => setNewTag({ ...newTag, display_order: e.target.value })}
-        />
-
-        <label className="checkboxField">
-          <input
-            type="checkbox"
-            checked={toBool(newTag.is_active)}
-            onChange={(e) => setNewTag({ ...newTag, is_active: e.target.checked })}
-          />
-          <span>Active</span>
-        </label>
-
-        <button className="primary">Add tag</button>
-      </form>
-
-      <div className="tagAdminList">
-        {productTags.length ? productTags.map((tag) => {
-          const draft = tagEdits[tag.id] || {};
-
-          return <div className="tagAdminRow" key={tag.id}>
-            <input
-              value={draft.name || ''}
-              maxLength="40"
-              onChange={(e) => setTagEdits({
-                ...tagEdits,
-                [tag.id]: { ...draft, name: e.target.value }
-              })}
-            />
-
-            <input
-              type="color"
-              value={draft.color_hex || '#1F6F68'}
-              onChange={(e) => setTagEdits({
-                ...tagEdits,
-                [tag.id]: { ...draft, color_hex: e.target.value }
-              })}
-            />
-
-            <input
-              type="number"
-              value={draft.display_order ?? 0}
-              onChange={(e) => setTagEdits({
-                ...tagEdits,
-                [tag.id]: { ...draft, display_order: e.target.value }
-              })}
-            />
-
-            <label className="checkboxField">
-              <input
-                type="checkbox"
-                checked={toBool(draft.is_active)}
-                onChange={(e) => setTagEdits({
-                  ...tagEdits,
-                  [tag.id]: { ...draft, is_active: e.target.checked }
-                })}
-              />
-              <span>Active</span>
-            </label>
-
-            <ProductTagChips tags={[draft.name || tag.name]} productTags={[{ ...tag, ...draft }]} />
-
-            <div className="inlineActions">
-              <button type="button" onClick={() => saveProductTag(tag.id)}>Save</button>
-              <button
-                type="button"
-                className={tag.is_active ? 'danger' : ''}
-                onClick={() => setProductTagActive(tag.id, !tag.is_active)}
-              >
-                {tag.is_active ? 'Deactivate' : 'Activate'}
-              </button>
-            </div>
-          </div>;
-        }) : <div className="empty">No product tags yet. Create your first tag above.</div>}
-      </div>
-    </Section>
-
     <Section
       title="Add New Cocktail"  
       action={
@@ -1428,9 +1340,26 @@ export default function Cocktails() {
     )}
 
     <Section title="Cocktails">
+      <div className="liquorFilterPanel" aria-label="Filter cocktails by compatible liquor">
+        <LiquorFilterChip
+          selected={selectedLiquorFilter === 'all'}
+          count={products.length}
+          onClick={() => setSelectedLiquorFilter('all')}
+        />
+
+        {liquorTypes.map((liquor) => (
+          <LiquorFilterChip
+            key={liquor.id}
+            liquor={liquor}
+            selected={selectedLiquorFilter === liquor.id}
+            count={liquorFilterCounts[liquor.id] || 0}
+            onClick={() => setSelectedLiquorFilter(liquor.id)}
+          />
+        ))}
+      </div>
 
       <SimpleTable
-        rows={products}
+        rows={cocktailRows}
         columns={['image_url', 'name', 'short_description', 'tags', 'status', 'is_featured', 'prep_time_minutes']}
         format={{
           image_url: (value, row) => value ? <img className="tableImageThumb" src={value} alt={row.name} /> : '-',

@@ -1679,3 +1679,56 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Cocktails liquor filters */
+.liquorFilterPanel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.liquorFilterChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--brand-border, var(--line));
+  border-radius: 999px;
+  background: #fffaf6;
+  color: var(--brand-navy, #0E2238);
+  padding: 7px 11px 7px 7px;
+  min-height: 44px;
+  font-weight: 800;
+}
+
+.liquorFilterChip.selected {
+  border-color: var(--brand-coral, #F35F4B);
+  background: color-mix(in srgb, var(--brand-coral, #F35F4B) 12%, white);
+}
+
+.liquorFilterChip img,
+.liquorFilterInitials {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid var(--brand-border, var(--line));
+  background: #fff;
+  flex: 0 0 auto;
+}
+
+.liquorFilterChip img {
+  object-fit: cover;
+}
+
+.liquorFilterInitials {
+  display: inline-grid;
+  place-items: center;
+  color: var(--brand-muted, var(--muted));
+  font-size: 10px;
+}
+
+.liquorFilterChip small {
+  color: var(--brand-muted, var(--muted));
+  font-size: 11px;
+}
