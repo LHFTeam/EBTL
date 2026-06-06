@@ -16,12 +16,73 @@ const blank = {
   is_active: true
 };
 
+const MAX_LOCATION_BANNER_BYTES = 3 * 1024 * 1024;
+
+const DAYS = [
+  { day_of_week: 0, label: 'Sunday' },
+  { day_of_week: 1, label: 'Monday' },
+  { day_of_week: 2, label: 'Tuesday' },
+  { day_of_week: 3, label: 'Wednesday' },
+  { day_of_week: 4, label: 'Thursday' },
+  { day_of_week: 5, label: 'Friday' },
+  { day_of_week: 6, label: 'Saturday' }
+];
+
 function hasText(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
 function emptyToNull(value) {
   return typeof value === 'string' && value.trim() === '' ? null : value;
+}
+
+function timeForInput(value) {
+  if (!value) return '';
+  return String(value).slice(0, 5);
+}
+
+function defaultOpeningHours() {
+  return DAYS.map((day) => ({
+    day_of_week: day.day_of_week,
+    is_closed: true,
+    opens_at: '10:00',
+    closes_at: '19:00'
+  }));
+}
+
+function buildOpeningHoursForm(rows = []) {
+  const byDay = new Map((rows || []).map((row) => [Number(row.day_of_week), row]));
+
+  return DAYS.map((day) => {
+    const row = byDay.get(day.day_of_week);
+
+    if (!row) {
+      return {
+        day_of_week: day.day_of_week,
+        is_closed: true,
+        opens_at: '10:00',
+        closes_at: '19:00'
+      };
+    }
+
+    return {
+      day_of_week: day.day_of_week,
+      is_closed: Boolean(row.is_closed),
+      opens_at: timeForInput(row.opens_at) || '10:00',
+      closes_at: timeForInput(row.closes_at) || '19:00'
+    };
+  });
+}
+
+function openingHoursPayload(hours) {
+  return {
+    hours: hours.map((row) => ({
+      day_of_week: row.day_of_week,
+      is_closed: Boolean(row.is_closed),
+      opens_at: row.is_closed ? null : row.opens_at,
+      closes_at: row.is_closed ? null : row.closes_at
+    }))
+  };
 }
 
 function isProtectedCentralWarehouse(location) {
@@ -45,6 +106,44 @@ function buildPayload(form, isEditing) {
   return payload;
 }
 
+function fileSizeLabel(bytes) {
+  if (!bytes) return '0 KB';
+  if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function isWebpFile(file) {
+  return file && (file.type === 'image/webp' || file.name.toLowerCase().endsWith('.webp'));
+}
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+
+  return btoa(binary);
+}
+
+async function imageUploadPayload(file) {
+  return {
+    file_name: file.name,
+    content_type: file.type || 'image/webp',
+    data_base64: arrayBufferToBase64(await file.arrayBuffer())
+  };
+}
+
+function LocationBannerPreview({ src, label = 'No banner' }) {
+  return (
+    <div className="locationBannerPreviewBox">
+      {src ? <img className="locationBannerPreview" src={src} alt="Location banner" /> : <span className="imagePlaceholder">{label}</span>}
+    </div>
+  );
+}
+
 export default function Locations() {
   const { data: loadedLocations, loading, error, reload } = useLoad(() => api('/api/locations'));
   const data = Array.isArray(loadedLocations) ? loadedLocations : [];
@@ -53,6 +152,9 @@ export default function Locations() {
   const [editing, setEditing] = useState(null);
   const [message, setMessage] = useState('');
   const [formError, setFormError] = useState('');
+  const [bannerFile, setBannerFile] = useState(null);
+  const [openingHours, setOpeningHours] = useState(defaultOpeningHours());
+  const [hoursLoading, setHoursLoading] = useState(false);
 
   const editingRow = data.find((location) => location.id === editing);
   const editingProtectedCentralWarehouse = isProtectedCentralWarehouse(editingRow);
@@ -60,6 +162,8 @@ export default function Locations() {
   function resetForm() {
     setForm(blank);
     setEditing(null);
+    setBannerFile(null);
+    setOpeningHours(defaultOpeningHours());
     setFormError('');
     setMessage('');
   }
@@ -78,6 +182,68 @@ export default function Locations() {
     }
 
     return '';
+  }
+
+  function validateOpeningHours() {
+    for (const row of openingHours) {
+      const dayLabel = DAYS.find((day) => day.day_of_week === row.day_of_week)?.label || 'Day';
+
+      if (row.is_closed) continue;
+
+      if (!row.opens_at || !row.closes_at) {
+        return `${dayLabel}: open and close times are required unless the day is closed.`;
+      }
+
+      if (row.opens_at === row.closes_at) {
+        return `${dayLabel}: open and close times cannot be the same.`;
+      }
+    }
+
+    return '';
+  }
+
+  function chooseBannerFile(file) {
+    setFormError('');
+    setMessage('');
+
+    if (!file) {
+      setBannerFile(null);
+      return;
+    }
+
+    if (!isWebpFile(file)) {
+      setBannerFile(null);
+      setFormError('Please choose a .webp image file.');
+      return;
+    }
+
+    if (file.size > MAX_LOCATION_BANNER_BYTES) {
+      setBannerFile(null);
+      setFormError('Image is too large. Maximum size is 3 MB.');
+      return;
+    }
+
+    setBannerFile(file);
+  }
+
+  function patchOpeningHour(dayOfWeek, patch) {
+    setOpeningHours((current) => current.map((row) => (
+      row.day_of_week === dayOfWeek ? { ...row, ...patch } : row
+    )));
+  }
+
+  async function loadOpeningHours(locationId) {
+    setHoursLoading(true);
+
+    try {
+      const response = await api(`/api/locations/${locationId}/opening-hours`);
+      setOpeningHours(buildOpeningHoursForm(response.hours || []));
+    } catch (err) {
+      setOpeningHours(defaultOpeningHours());
+      setFormError(err.message || 'Could not load opening hours.');
+    } finally {
+      setHoursLoading(false);
+    }
   }
 
   async function save(e) {
@@ -108,18 +274,20 @@ export default function Locations() {
           body: JSON.stringify(payload)
         });
 
-        setMessage('Location added.');
+        setMessage('Location added. Edit the new location to upload a banner and set opening hours.');
       }
 
       setForm(blank);
       setEditing(null);
+      setBannerFile(null);
+      setOpeningHours(defaultOpeningHours());
       await reload();
     } catch (err) {
       setFormError(err.message || 'Could not save location.');
     }
   }
 
-  function edit(row) {
+  async function edit(row) {
     setEditing(row.id);
 
     setForm({
@@ -133,10 +301,89 @@ export default function Locations() {
       longitude: row.longitude ?? ''
     });
 
+    setBannerFile(null);
+    setOpeningHours(defaultOpeningHours());
     setFormError('');
     setMessage('');
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    await loadOpeningHours(row.id);
+  }
+
+  async function uploadBanner(e) {
+    e.preventDefault();
+    setFormError('');
+    setMessage('');
+
+    if (!editing) {
+      setFormError('Save the location first, then upload a banner.');
+      return;
+    }
+
+    if (!bannerFile) {
+      setFormError('Choose a .webp banner image first.');
+      return;
+    }
+
+    try {
+      await api(`/api/locations/${editing}/banner`, {
+        method: 'POST',
+        body: JSON.stringify(await imageUploadPayload(bannerFile))
+      });
+
+      setBannerFile(null);
+      setMessage('Location banner uploaded.');
+      await reload();
+    } catch (err) {
+      setFormError(err.message || 'Could not upload location banner.');
+    }
+  }
+
+  async function removeBanner() {
+    setFormError('');
+    setMessage('');
+
+    if (!editing) return;
+    if (!window.confirm('Remove this location banner image?')) return;
+
+    try {
+      await api(`/api/locations/${editing}/banner`, { method: 'DELETE' });
+      setBannerFile(null);
+      setMessage('Location banner removed.');
+      await reload();
+    } catch (err) {
+      setFormError(err.message || 'Could not remove location banner.');
+    }
+  }
+
+  async function saveOpeningHours(e) {
+    e.preventDefault();
+    setFormError('');
+    setMessage('');
+
+    if (!editing) {
+      setFormError('Save the location first, then set opening hours.');
+      return;
+    }
+
+    const validationError = validateOpeningHours();
+
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
+
+    try {
+      await api(`/api/locations/${editing}/opening-hours`, {
+        method: 'PUT',
+        body: JSON.stringify(openingHoursPayload(openingHours))
+      });
+
+      setMessage('Opening hours saved.');
+      await loadOpeningHours(editing);
+    } catch (err) {
+      setFormError(err.message || 'Could not save opening hours.');
+    }
   }
 
   async function deactivate(row) {
@@ -191,14 +438,14 @@ export default function Locations() {
     <div className="grid">
       <Section
         title={editing ? 'Edit Location' : 'Add Location'}
-        action={editing && <button onClick={resetForm}>Cancel edit</button>}
+        action={editing && <button type="button" onClick={resetForm}>Cancel edit</button>}
       >
         <Message text={message} />
         <Message text={formError} type="error" />
 
         {editingProtectedCentralWarehouse && (
           <div className="muted helperText">
-            Central Warehouse is protected. You can edit address and coordinates, but you cannot change its name, type, or active status.
+            Central Warehouse is protected. You can edit address, coordinates, delivery fee, banner image, and opening hours, but you cannot change its name, type, or active status.
           </div>
         )}
 
@@ -271,26 +518,124 @@ export default function Locations() {
             onChange={(e) => setForm({ ...form, longitude: e.target.value })}
           />
 
-          <label>
+          <label className="checkboxField">
             <input
               type="checkbox"
               checked={toBool(form.is_active)}
               disabled={editingProtectedCentralWarehouse}
               onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
             />
-            Active
+            <span>Active</span>
           </label>
 
           <button className="primary">
             {editing ? 'Save Changes' : 'Add Location'}
           </button>
         </form>
+
+        {editing && (
+          <div className="locationAssetGrid">
+            <div className="subPanel noTopMargin">
+              <h3>Location banner image</h3>
+              <div className="shopAssetRow">
+                <LocationBannerPreview src={editingRow?.banner_image_url} />
+
+                <div className="imageUploadControls">
+                  <b>Customer app location banner</b>
+                  <p className="muted smallText noPad">
+                    Upload a public WebP banner for this beach cart/location. Maximum file size is 3 MB.
+                  </p>
+
+                  <form className="miniForm inlineShopUpload" onSubmit={uploadBanner}>
+                    <label className="fileButton">
+                      <input
+                        type="file"
+                        accept="image/webp,.webp"
+                        onChange={(e) => chooseBannerFile(e.target.files?.[0])}
+                      />
+                      <span>{bannerFile ? 'Change WebP banner' : 'Choose WebP banner'}</span>
+                    </label>
+
+                    <button className="primary" disabled={!bannerFile}>Upload banner</button>
+
+                    {editingRow?.banner_image_url && (
+                      <button type="button" onClick={removeBanner}>Remove</button>
+                    )}
+                  </form>
+
+                  {bannerFile && (
+                    <div className="selectedFile">
+                      Selected: {bannerFile.name} · {fileSizeLabel(bannerFile.size)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="subPanel noTopMargin">
+              <h3>Opening hours</h3>
+              <p className="muted smallText noPad">
+                Days use Cairo business time. Closed days are still saved so the app can show accurate availability.
+              </p>
+
+              {hoursLoading ? (
+                <div className="muted">Loading opening hours…</div>
+              ) : (
+                <form className="openingHoursForm" onSubmit={saveOpeningHours}>
+                  {openingHours.map((row) => {
+                    const day = DAYS.find((item) => item.day_of_week === row.day_of_week);
+
+                    return (
+                      <div className="openingHourLine" key={row.day_of_week}>
+                        <b>{day?.label}</b>
+
+                        <label className="checkboxField">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(row.is_closed)}
+                            onChange={(e) => patchOpeningHour(row.day_of_week, { is_closed: e.target.checked })}
+                          />
+                          <span>Closed</span>
+                        </label>
+
+                        <label>
+                          Opens
+                          <input
+                            type="time"
+                            value={row.opens_at}
+                            disabled={row.is_closed}
+                            onChange={(e) => patchOpeningHour(row.day_of_week, { opens_at: e.target.value })}
+                          />
+                        </label>
+
+                        <label>
+                          Closes
+                          <input
+                            type="time"
+                            value={row.closes_at}
+                            disabled={row.is_closed}
+                            onChange={(e) => patchOpeningHour(row.day_of_week, { closes_at: e.target.value })}
+                          />
+                        </label>
+                      </div>
+                    );
+                  })}
+
+                  <button className="primary">Save opening hours</button>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
       </Section>
 
       <Section title="Locations">
         <SimpleTable
           rows={data}
-          columns={['name', 'type', 'compound_name', 'beach_name', 'address', 'delivery_fee', 'is_active']}
+          columns={['banner_image_url', 'name', 'type', 'compound_name', 'beach_name', 'address', 'delivery_fee', 'is_active']}
+          format={{
+            banner_image_url: (value, row) => value ? <img className="tableImageThumb locationTableBannerThumb" src={value} alt={row.name} /> : '-'
+          }}
           actions={(row) => {
             const protectedCentralWarehouse = isProtectedCentralWarehouse(row);
 
