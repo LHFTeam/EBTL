@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { BarChart3 } from 'lucide-react';
 import { tabs } from '../config/navigation.jsx';
 import Cocktails from '../pages/Cocktails.jsx';
+import AdditionalProducts from '../pages/AdditionalProducts.jsx';
 import Liquors from '../pages/Liquors.jsx';
 import Shop from '../pages/Shop.jsx';
 import Dashboard from '../pages/Dashboard.jsx';
@@ -28,6 +29,7 @@ export default function Shell({ user, access, onLogout }) {
     {active === 'transfers' && <Transfers />}
     {active === 'ingredients' && <Ingredients />}
     {active === 'cocktails' && <Cocktails />}
+    {active === 'additional-products' && <AdditionalProducts />}
     {active === 'liquors' && <Liquors />}
     {active === 'shop' && <Shop />}
     {active === 'locations' && <Locations />}

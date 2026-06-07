@@ -7,6 +7,7 @@ export const tabs = [
   { key: 'transfers', label: 'Transfers', icon: Truck },
   { key: 'ingredients', label: 'Ingredients', icon: FlaskConical },
   { key: 'cocktails', label: 'Cocktails', icon: Martini },
+  { key: 'additional-products', label: 'Additional Products', icon: ShoppingBag },
   { key: 'liquors', label: 'Liquors', icon: Wine },
   { key: 'shop', label: 'Shop', icon: ShoppingBag },
   { key: 'locations', label: 'Locations', icon: MapPin },

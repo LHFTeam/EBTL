@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { productStatuses } from '../config/appConfig.js';
+import { productStatuses, productTypes } from '../config/appConfig.js';
 import { requireArea } from '../middleware/auth.js';
 import { clean } from '../lib/objectUtils.js';
 import { sb } from '../lib/supabaseResponse.js';
@@ -11,6 +11,7 @@ export const cocktailRouter = Router();
 const uuid = z.string().uuid();
 const nullableUuid = uuid.nullable();
 const vatRate = z.coerce.number().min(0).max(1);
+const additionalProductTypes = productTypes.filter((type) => type !== 'cocktail');
 
 const shortDescription = z.string().max(40, 'Short description must be 40 characters or less.').nullable().optional();
 const markdownDescription = z.string().max(6000, 'Description is too long.').nullable().optional();
@@ -154,12 +155,19 @@ async function findCurrentRecipeForProduct(productId) {
     .maybeSingle();
 }
 
-async function loadCocktailAdminData({ activeIngredientsOnly = true } = {}) {
+async function loadCocktailAdminData({ activeIngredientsOnly = true, productMode = 'cocktails' } = {}) {
   const ingredientQuery = supabase.from('ingredients').select('*').order('name');
   if (activeIngredientsOnly) ingredientQuery.eq('is_active', true);
 
+  let productQuery = supabase.from('products').select('*, product_categories(name)').order('name');
+  if (productMode === 'cocktails') {
+    productQuery = productQuery.eq('product_type', 'cocktail');
+  } else if (productMode === 'additional') {
+    productQuery = productQuery.neq('product_type', 'cocktail');
+  }
+
   const [products, categories, variants, liquorTypes, compatibility, ingredients, recipes, recipeItems, productTags] = await Promise.all([
-    supabase.from('products').select('*, product_categories(name)').order('name'),
+    productQuery,
     supabase.from('product_categories').select('*').order('sort_order').order('name'),
     supabase.from('product_variants').select('*').order('name'),
     supabase.from('liquor_types').select('*').order('name'),
@@ -209,12 +217,16 @@ async function fetchRecipe(recipeId) {
 }
 
 cocktailRouter.get('/cocktails', requireArea('cocktails'), async (_req, res) => {
-  sendCocktailAdminData(await loadCocktailAdminData({ activeIngredientsOnly: false }), res);
+  sendCocktailAdminData(await loadCocktailAdminData({ activeIngredientsOnly: false, productMode: 'cocktails' }), res);
 });
 
-// Backward-compatible old route name.
+cocktailRouter.get('/additional-products', requireArea('additional-products'), async (_req, res) => {
+  sendCocktailAdminData(await loadCocktailAdminData({ activeIngredientsOnly: false, productMode: 'additional' }), res);
+});
+
+// Backward-compatible old route name. Keep it aligned with the Cocktails tab.
 cocktailRouter.get('/products', requireArea('cocktails'), async (_req, res) => {
-  sendCocktailAdminData(await loadCocktailAdminData({ activeIngredientsOnly: false }), res);
+  sendCocktailAdminData(await loadCocktailAdminData({ activeIngredientsOnly: false, productMode: 'cocktails' }), res);
 });
 
 const productTagPayloadSchema = z.object({
@@ -279,31 +291,42 @@ cocktailRouter.delete('/product-tags/:id', requireArea('cocktails'), async (req,
   if (data) res.json(data);
 });
 
-cocktailRouter.post('/cocktails', requireArea('cocktails'), async (req, res) => {
-  const parsed = z.object({
-    name: z.string().min(1),
-    slug: z.string().min(1),
-    description: markdownDescription,
-    short_description: shortDescription,
-    description: z.string().nullable().optional(),
-    image_url: z.string().nullable().optional(),
-    category_id: nullableUuid.optional(),
-    status: z.enum(productStatuses).default('active'),
-    is_featured: z.boolean().optional(),
-    prep_time_minutes: z.coerce.number().int().nonnegative().optional(),
-    tags: z.array(z.string()).optional(),
-    variant_name: z.string().min(1).default('Standard'),
-    serving_count: z.coerce.number().int().positive().default(1),
-    price_ex_vat: z.coerce.number().nonnegative().default(0),
-    vat_rate: vatRate.default(0.14),
-    recipe_version: z.coerce.number().int().positive().default(1),
-    yield_servings: z.coerce.number().int().positive().default(1),
-    liquor_type_ids: z.array(uuid).optional(),
-    recipe_items: z.array(recipeItemPayloadSchema).optional()
-  }).safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid cocktail') });
+const productCreateSchema = z.object({
+  name: z.string().min(1),
+  slug: z.string().min(1),
+  product_type: z.enum(productTypes).optional(),
+  description: markdownDescription,
+  short_description: shortDescription,
+  image_url: z.string().nullable().optional(),
+  category_id: nullableUuid.optional(),
+  status: z.enum(productStatuses).default('active'),
+  is_featured: z.boolean().optional(),
+  prep_time_minutes: z.coerce.number().int().nonnegative().optional(),
+  tags: z.array(z.string()).optional(),
+  variant_name: z.string().min(1).default('Standard'),
+  serving_count: z.coerce.number().int().positive().default(1),
+  price_ex_vat: z.coerce.number().nonnegative().default(0),
+  vat_rate: vatRate.default(0.14),
+  recipe_version: z.coerce.number().int().positive().default(1),
+  yield_servings: z.coerce.number().int().positive().default(1),
+  liquor_type_ids: z.array(uuid).optional(),
+  recipe_items: z.array(recipeItemPayloadSchema).optional()
+});
+
+async function createProduct(req, res, { mode }) {
+  const parsed = productCreateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid product') });
 
   const p = parsed.data;
+  const productType = mode === 'cocktails' ? 'cocktail' : (p.product_type || 'snack');
+
+  if (mode === 'cocktails' && productType !== 'cocktail') {
+    return res.status(400).json({ error: 'The Cocktails tab can only create cocktail products.' });
+  }
+
+  if (mode === 'additional' && !additionalProductTypes.includes(productType)) {
+    return res.status(400).json({ error: 'Additional Products must be snack, essential, bundle, or add_on.' });
+  }
 
   const validatedTags = await validateProductTagNames(p.tags || [], res);
   if (!validatedTags.ok) return;
@@ -312,6 +335,7 @@ cocktailRouter.post('/cocktails', requireArea('cocktails'), async (req, res) => 
     category_id: p.category_id,
     name: p.name,
     slug: p.slug,
+    product_type: productType,
     description: p.description,
     short_description: p.short_description,
     image_url: p.image_url,
@@ -355,7 +379,7 @@ cocktailRouter.post('/cocktails', requireArea('cocktails'), async (req, res) => 
     if (recipeItems.error) { await cleanup(); return res.status(400).json({ error: recipeItems.error.message }); }
   }
   
-  if (p.liquor_type_ids?.length) {
+  if (productType === 'cocktail' && p.liquor_type_ids?.length) {
     const compat = await supabase
       .from('product_liquor_compatibility')
       .insert(p.liquor_type_ids.map((liquor_type_id) => ({ product_id: product.data.id, liquor_type_id })))
@@ -364,12 +388,21 @@ cocktailRouter.post('/cocktails', requireArea('cocktails'), async (req, res) => 
   }
 
   res.json({ product: product.data, variant: variant.data, recipe: recipe.data });
+}
+
+cocktailRouter.post('/cocktails', requireArea('cocktails'), async (req, res) => {
+  await createProduct(req, res, { mode: 'cocktails' });
+});
+
+cocktailRouter.post('/additional-products', requireArea('additional-products'), async (req, res) => {
+  await createProduct(req, res, { mode: 'additional' });
 });
 
 cocktailRouter.patch('/cocktails/:id', requireArea('cocktails'), async (req, res) => {
   const parsed = z.object({
     name: z.string().min(1).optional(),
     slug: z.string().min(1).optional(),
+    product_type: z.enum(productTypes).optional(),
     description: markdownDescription,
     short_description: shortDescription,
     image_url: z.string().nullable().optional(),

@@ -17,8 +17,8 @@ if (isProd && SESSION_SECRET === 'dev-only-change-me') {
 
 export const roleAccess = {
   admin: ['*'],
-  manager: ['dashboard', 'orders', 'inventory', 'transfers', 'ingredients', 'cocktails', 'liquors', 'shop', 'locations', 'employees'],
-  supervisor: ['dashboard', 'orders', 'inventory', 'transfers', 'ingredients', 'cocktails', 'liquors', 'shop', 'locations'],
+  manager: ['dashboard', 'orders', 'inventory', 'transfers', 'ingredients', 'cocktails', 'additional-products', 'liquors', 'shop', 'locations', 'employees'],
+  supervisor: ['dashboard', 'orders', 'inventory', 'transfers', 'ingredients', 'cocktails', 'additional-products', 'liquors', 'shop', 'locations'],
   warehouse: ['dashboard', 'inventory', 'transfers', 'ingredients', 'locations'],
   cart_operator: ['dashboard', 'orders', 'inventory', 'transfers'],
   prep: ['dashboard', 'orders']
@@ -29,6 +29,7 @@ export const orderStatuses = ['draft', 'pending_payment', 'confirmed', 'preparin
 export const paymentStatuses = ['unpaid', 'pending', 'paid', 'failed', 'refunded', 'partially_refunded'];
 export const transferStatuses = ['draft', 'picked', 'in_transit', 'received', 'cancelled'];
 export const productStatuses = ['draft', 'active', 'archived'];
+export const productTypes = ['cocktail', 'snack', 'essential', 'bundle', 'add_on'];
 export const locationTypes = ['central_warehouse', 'beach_cart'];
 export const roles = Object.keys(roleAccess);
 

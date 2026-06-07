@@ -8,6 +8,7 @@ import { money, slugify, toBool } from '../utils/format.js';
 const blankProduct = {
   name: '',
   slug: '',
+  product_type: 'cocktail',
   category_id: '',
   short_description: '',
   description: '',
@@ -104,6 +105,48 @@ function colorForTag(productTags, tagName) {
   return productTags.find((tag) => tag.name === tagName)?.color_hex || '#1F6F68';
 }
 
+function productTypeLabel(value) {
+  return String(value || '')
+    .split('_')
+    .map((part) => part ? part[0].toUpperCase() + part.slice(1) : '')
+    .join(' ');
+}
+
+export const additionalProductTypeOptions = [
+  { value: 'snack', label: 'Snack' },
+  { value: 'essential', label: 'Essential' },
+  { value: 'bundle', label: 'Bundle' },
+  { value: 'add_on', label: 'Add-on' }
+];
+
+const defaultProductManagerLabels = {
+  addTitle: 'Add New Cocktail',
+  addButton: 'Add cocktail',
+  namePlaceholder: 'Cocktail name',
+  imageTitle: 'Cocktail image',
+  imageHelp: <>Upload a 500px × 500px WebP image. The file will be stored in the Supabase <code>cocktails</code> bucket after the cocktail is created.</>,
+  editImageHelp: 'Upload a replacement 500px × 500px WebP image. It will be saved to Supabase Storage and linked to this cocktail.',
+  saveCreateButton: 'Save Cocktail',
+  editTitle: 'Edit Cocktail',
+  archiveButton: 'Archive cocktail',
+  archiveNoun: 'this cocktail',
+  entityName: 'Cocktail',
+  entityLower: 'cocktail',
+  tableTitle: 'Cocktails',
+  emptyRecipeText: 'This cocktail has no recipe yet. This is okay for drafts; create a recipe when you are ready to define inventory consumption.',
+  replaceRecipeHelp: 'This editor replaces the full recipe item set for the cocktail. Remove a line here, then save, to delete it from the recipe.',
+  recipeProductColumn: 'cocktail',
+  editVariantButton: 'Edit in cocktail',
+  detailsUpdated: 'Cocktail details updated.',
+  archived: 'Cocktail archived.',
+  imageUploaded: 'Cocktail image uploaded.',
+  imageRemoved: 'Cocktail image removed.',
+  saved: 'Cocktail saved.',
+  savedWithImage: 'Cocktail and image saved.',
+  savedImageFailedPrefix: 'Cocktail saved, but image upload failed'
+};
+
+
 function ProductTagChips({ tags = [], productTags = [], onRemove }) {
   const selected = normalizeSelectedTags(tags);
   if (!selected.length) return <span className="muted smallText">No tags selected.</span>;
@@ -182,9 +225,26 @@ function LiquorFilterChip({ liquor, selected, count, onClick }) {
   );
 }
 
-export default function Cocktails() {
-  const { data, loading, error, reload } = useLoad(() => api('/api/cocktails'));
-  const [form, setForm] = useState(blankProduct);
+export default function Cocktails({
+  listApiPath = '/api/cocktails',
+  createApiPath = '/api/cocktails',
+  editApiPath = '/api/cocktails',
+  productType = 'cocktail',
+  productTypeOptions = [],
+  showProductTypeField = false,
+  showLiquorControls = true,
+  labels = {}
+} = {}) {
+  const copy = { ...defaultProductManagerLabels, ...labels };
+  const makeBlankForm = (overrides = {}) => ({
+    ...blankProduct,
+    product_type: productType,
+    liquor_type_ids: [],
+    ...overrides
+  });
+
+  const { data, loading, error, reload } = useLoad(() => api(listApiPath), [listApiPath]);
+  const [form, setForm] = useState(() => makeBlankForm());
   const [addOpen, setAddOpen] = useState(false);
   const messageRef = useRef(null);
   const [editing, setEditing] = useState(null);
@@ -228,10 +288,12 @@ export default function Cocktails() {
     return map;
   }, [compatibility]);
 
+  const productIds = useMemo(() => new Set(products.map((product) => product.id)), [products]);
+
   const cocktailRows = useMemo(() => {
-    if (selectedLiquorFilter === 'all') return products;
+    if (!showLiquorControls || selectedLiquorFilter === 'all') return products;
     return products.filter((product) => compatibleLiquorIdsByProduct.get(product.id)?.has(selectedLiquorFilter));
-  }, [products, compatibleLiquorIdsByProduct, selectedLiquorFilter]);
+  }, [products, compatibleLiquorIdsByProduct, selectedLiquorFilter, showLiquorControls]);
 
   const liquorFilterCounts = useMemo(() => {
     const counts = Object.fromEntries(liquorTypes.map((liquor) => [liquor.id, 0]));
@@ -246,11 +308,13 @@ export default function Cocktails() {
   }, [products, liquorTypes, compatibleLiquorIdsByProduct]);
 
   const variantRows = useMemo(
-    () => variants.map((variant) => ({
-      ...variant,
-      product: products.find((product) => product.id === variant.product_id)?.name || '-'
-    })),
-    [variants, products]
+    () => variants
+      .filter((variant) => productIds.has(variant.product_id))
+      .map((variant) => ({
+        ...variant,
+        product: products.find((product) => product.id === variant.product_id)?.name || '-'
+      })),
+    [variants, products, productIds]
   );
 
   const currentVariants = useMemo(
@@ -278,7 +342,7 @@ export default function Cocktails() {
 
     return {
       id: product.id,
-      cocktail: product.name,
+      product: product.name,
       recipe_status: latestRecipe?.status || 'none',
       recipe_version: latestRecipe?.version || '-',
       yield_servings: latestRecipe?.yield_servings || '-',
@@ -304,6 +368,7 @@ export default function Cocktails() {
     setProductEdit({
       name: selectedProduct.name || '',
       slug: selectedProduct.slug || '',
+      product_type: selectedProduct.product_type || productType,
       category_id: selectedProduct.category_id || '',
       short_description: selectedProduct.short_description || '',
       description: selectedProduct.description || '',
@@ -356,7 +421,7 @@ export default function Cocktails() {
       .filter((row) => row.product_id === selectedProduct.id)
       .map((row) => row.liquor_type_id)
     );
-  }, [selectedProduct, variants, recipes, recipeItems, compatibility]);
+  }, [selectedProduct, variants, recipes, recipeItems, compatibility, productType]);
 
 
   function ingredientUnit(ingredientId) {
@@ -466,7 +531,7 @@ export default function Cocktails() {
   }
 
   async function uploadCocktailImage(productId, file) {
-    await api(`/api/cocktails/${productId}/image`, {
+    await api(`${editApiPath}/${productId}/image`, {
       method: 'POST',
       body: JSON.stringify(await imageUploadPayload(file))
     });
@@ -490,18 +555,19 @@ export default function Cocktails() {
 
     const payload = {
       ...form,
+      product_type: form.product_type || productType,
       category_id: nullableUuid(form.category_id),
       short_description: nullableText(form.short_description),
       description: nullableText(form.description),
       image_url: nullableText(form.image_url),
       tags: normalizeSelectedTags(form.tags),
       is_featured: toBool(form.is_featured),
-      liquor_type_ids: form.liquor_type_ids,
+      liquor_type_ids: showLiquorControls ? form.liquor_type_ids : [],
       recipe_items: recipeItemsPayload(form.recipe_items)
     };
 
     try {
-      const created = await api('/api/cocktails', {
+      const created = await api(createApiPath, {
         method: 'POST',
         body: JSON.stringify(payload)
       });
@@ -510,17 +576,17 @@ export default function Cocktails() {
         try {
           await uploadCocktailImage(created.product.id, createImageFile);
         } catch (imageErr) {
-          setForm({ ...blankProduct, category_id: firstCategory });
+          setForm(makeBlankForm({ category_id: firstCategory }));
           setCreateImageFile(null);
-          showMessage(`Cocktail saved, but image upload failed: ${imageErr.message || 'Upload failed'}`, 'error');
+          showMessage(`${copy.savedImageFailedPrefix}: ${imageErr.message || 'Upload failed'}`, 'error');
           await reload();
           return;
         }
       }
 
-      setForm({ ...blankProduct, category_id: firstCategory });
+      setForm(makeBlankForm({ category_id: firstCategory }));
       setCreateImageFile(null);
-      showMessage(createImageFile ? 'Cocktail and image saved.' : 'Cocktail saved.');
+      showMessage(createImageFile ? copy.savedWithImage : copy.saved);
       await reload();
     } catch (err) {
       showMessage(err.message || 'Request failed', 'error');
@@ -538,11 +604,12 @@ export default function Cocktails() {
     e.preventDefault();
 
     await runAction(async () => {
-      await api(`/api/cocktails/${editing}`, {
+      await api(`${editApiPath}/${editing}`, {
         method: 'PATCH',
         body: JSON.stringify({
           name: productEdit.name,
           slug: productEdit.slug,
+          ...(showProductTypeField ? { product_type: productEdit.product_type } : {}),
           category_id: nullableUuid(productEdit.category_id),
           short_description: nullableText(productEdit.short_description),
           description: nullableText(productEdit.description),
@@ -553,18 +620,18 @@ export default function Cocktails() {
           tags: normalizeSelectedTags(productEdit.tags)
         })
       });
-    }, 'Cocktail details updated.');
+    }, copy.detailsUpdated);
   }
 
   async function archiveProduct() {
-    const name = selectedProduct?.name || 'this cocktail';
+    const name = selectedProduct?.name || copy.archiveNoun;
 
     if (!window.confirm(`Archive ${name}? This will hide it from the app and deactivate its variants.`)) return;
 
     await runAction(async () => {
-      await api(`/api/cocktails/${editing}`, { method: 'DELETE' });
+      await api(`${editApiPath}/${editing}`, { method: 'DELETE' });
       setEditing(null);
-    }, 'Cocktail archived.');
+    }, copy.archived);
   }
 
   async function saveEditedImage(e) {
@@ -578,18 +645,18 @@ export default function Cocktails() {
     await runAction(async () => {
       await uploadCocktailImage(editing, editImageFile);
       setEditImageFile(null);
-    }, 'Cocktail image uploaded.');
+    }, copy.imageUploaded);
   }
 
   async function clearEditedImage() {
-    const name = selectedProduct?.name || 'this cocktail';
+    const name = selectedProduct?.name || copy.archiveNoun;
 
     if (!window.confirm(`Remove the image for ${name}?`)) return;
 
     await runAction(async () => {
-      await api(`/api/cocktails/${editing}/image`, { method: 'DELETE' });
+      await api(`${editApiPath}/${editing}/image`, { method: 'DELETE' });
       setEditImageFile(null);
-    }, 'Cocktail image removed.');
+    }, copy.imageRemoved);
   }
 
   async function saveVariant(variantId) {
@@ -624,7 +691,7 @@ export default function Cocktails() {
     e.preventDefault();
 
     await runAction(async () => {
-      await api(`/api/cocktails/${editing}/variants`, {
+      await api(`${editApiPath}/${editing}/variants`, {
         method: 'POST',
         body: JSON.stringify(newVariant)
       });
@@ -634,7 +701,7 @@ export default function Cocktails() {
 
   async function saveLiquors() {
     await runAction(async () => {
-      await api(`/api/cocktails/${editing}/liquors`, {
+      await api(`${editApiPath}/${editing}/liquors`, {
         method: 'POST',
         body: JSON.stringify({ liquor_type_ids: compatEdit })
       });
@@ -676,7 +743,7 @@ export default function Cocktails() {
     e.preventDefault();
 
     await runAction(async () => {
-      await api(`/api/cocktails/${editing}/recipe-items`, {
+      await api(`${editApiPath}/${editing}/recipe-items`, {
         method: 'PUT',
         body: JSON.stringify({
           recipe_id: currentRecipe?.id,
@@ -735,17 +802,17 @@ export default function Cocktails() {
 
   return <div className="grid">
     <Section
-      title="Add New Cocktail"  
+      title={copy.addTitle}  
       action={
         <button type="button" onClick={() => setAddOpen((current) => !current)}>
-          {addOpen ? 'Collapse' : 'Add cocktail'}
+          {addOpen ? 'Collapse' : copy.addButton}
         </button>
       }
     >
       {addOpen && <form className="miniForm formGrid" onSubmit={add}>    
         <input
           required
-          placeholder="Cocktail name"
+          placeholder={copy.namePlaceholder}
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value, slug: slugify(e.target.value) })}
         />
@@ -756,6 +823,18 @@ export default function Cocktails() {
           value={form.slug}
           onChange={(e) => setForm({ ...form, slug: e.target.value })}
         />
+
+        {showProductTypeField && (
+          <select
+            required
+            value={form.product_type || productType}
+            onChange={(e) => setForm({ ...form, product_type: e.target.value })}
+          >
+            {productTypeOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        )}
 
         <select value={form.category_id || ''} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
           <option value="">No category</option>
@@ -790,9 +869,9 @@ export default function Cocktails() {
         
         <div className="full imageUploadPanel">
           <div>
-            <b>Cocktail image</b>
+            <b>{copy.imageTitle}</b>
             <p className="muted smallText noPad">
-              Upload a 500px × 500px WebP image. The file will be stored in the Supabase <code>cocktails</code> bucket after the cocktail is created.
+              {copy.imageHelp}
             </p>
           </div>
 
@@ -880,20 +959,22 @@ export default function Cocktails() {
           <span>Featured</span>
         </label>
 
-        <div className="full subPanel">
-          <b>Compatible liquor bottles</b>
-          <div className="checks">
-            {liquorTypes.map((liquor) => (
-              <label key={liquor.id}>
-                <input
-                  type="checkbox"
-                  checked={form.liquor_type_ids.includes(liquor.id)}
-                  onChange={() => toggleCreateLiquor(liquor.id)}
-                /> {liquor.name}
-              </label>
-            ))}
+        {showLiquorControls && (
+          <div className="full subPanel">
+            <b>Compatible liquor bottles</b>
+            <div className="checks">
+              {liquorTypes.map((liquor) => (
+                <label key={liquor.id}>
+                  <input
+                    type="checkbox"
+                    checked={form.liquor_type_ids.includes(liquor.id)}
+                    onChange={() => toggleCreateLiquor(liquor.id)}
+                  /> {liquor.name}
+                </label>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="full subPanel">
           <b>Recipe Items</b>
@@ -940,7 +1021,7 @@ export default function Cocktails() {
           </button>
         </div>
 
-        <button className="primary">Save Cocktail</button>
+        <button className="primary">{copy.saveCreateButton}</button>
       </form>}
     </Section>
 
@@ -950,11 +1031,11 @@ export default function Cocktails() {
     
     {selectedProduct && (
       <Section
-        title={`Edit Cocktail: ${selectedProduct.name}`}
+        title={`${copy.editTitle}: ${selectedProduct.name}`}
         action={
           <div className="inlineActions">
             <button onClick={() => setEditing(null)}>Close editor</button>
-            <button className="danger" onClick={archiveProduct}>Archive cocktail</button>
+            <button className="danger" onClick={archiveProduct}>{copy.archiveButton}</button>
           </div>
         }
       >
@@ -968,9 +1049,9 @@ export default function Cocktails() {
           </div>
 
           <form className="imageUploadControls" onSubmit={saveEditedImage}>
-            <b>Cocktail image</b>
+            <b>{copy.imageTitle}</b>
             <p className="muted smallText noPad">
-              Upload a replacement 500px × 500px WebP image. It will be saved to Supabase Storage and linked to this cocktail.
+              {copy.editImageHelp}
             </p>
 
             <label className="fileButton">
@@ -1011,6 +1092,18 @@ export default function Cocktails() {
             value={productEdit.slug || ''}
             onChange={(e) => setProductEdit({ ...productEdit, slug: e.target.value })}
           />
+
+          {showProductTypeField && (
+            <select
+              required
+              value={productEdit.product_type || productType}
+              onChange={(e) => setProductEdit({ ...productEdit, product_type: e.target.value })}
+            >
+              {productTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          )}
 
           <select value={productEdit.category_id || ''} onChange={(e) => setProductEdit({ ...productEdit, category_id: e.target.value })}>
             <option value="">No category</option>
@@ -1204,23 +1297,25 @@ export default function Cocktails() {
             </form>
           </div>
 
-          <div className="subPanel">
-            <h3>Compatible Liquor Bottles</h3>
-            <div className="checks">
-              {liquorTypes.map((liquor) => (
-                <label key={liquor.id}>
-                  <input
-                    type="checkbox"
-                    checked={compatEdit.includes(liquor.id)}
-                    onChange={() => toggleEditLiquor(liquor.id)}
-                  /> {liquor.name}
-                </label>
-              ))}
+          {showLiquorControls && (
+            <div className="subPanel">
+              <h3>Compatible Liquor Bottles</h3>
+              <div className="checks">
+                {liquorTypes.map((liquor) => (
+                  <label key={liquor.id}>
+                    <input
+                      type="checkbox"
+                      checked={compatEdit.includes(liquor.id)}
+                      onChange={() => toggleEditLiquor(liquor.id)}
+                    /> {liquor.name}
+                  </label>
+                ))}
+              </div>
+              <button type="button" className="primary compactButton" onClick={saveLiquors}>
+                Save compatible bottles
+              </button>
             </div>
-            <button type="button" className="primary compactButton" onClick={saveLiquors}>
-              Save compatible bottles
-            </button>
-          </div>
+          )}
 
           <div className="subPanel">
             <h3>Recipe</h3>
@@ -1228,7 +1323,7 @@ export default function Cocktails() {
             {!currentRecipe ? (
               <>
                 <div className="empty">
-                  This cocktail has no recipe yet. This is okay for drafts; create a recipe when you are ready to define inventory consumption.
+                  {copy.emptyRecipeText}
                 </div>
 
                 <form className="miniForm formGrid" onSubmit={createRecipe}>
@@ -1279,7 +1374,7 @@ export default function Cocktails() {
 
                 <h3>Recipe Items</h3>
                 <p className="muted smallText noPad">
-                  This editor replaces the full recipe item set for the cocktail. Remove a line here, then save, to delete it from the recipe.
+                  {copy.replaceRecipeHelp}
                 </p>
 
                 <form onSubmit={replaceRecipeItems}>
@@ -1339,30 +1434,35 @@ export default function Cocktails() {
       </Section>
     )}
 
-    <Section title="Cocktails">
-      <div className="liquorFilterPanel" aria-label="Filter cocktails by compatible liquor">
-        <LiquorFilterChip
-          selected={selectedLiquorFilter === 'all'}
-          count={products.length}
-          onClick={() => setSelectedLiquorFilter('all')}
-        />
-
-        {liquorTypes.map((liquor) => (
+    <Section title={copy.tableTitle}>
+      {showLiquorControls && (
+        <div className="liquorFilterPanel" aria-label="Filter cocktails by compatible liquor">
           <LiquorFilterChip
-            key={liquor.id}
-            liquor={liquor}
-            selected={selectedLiquorFilter === liquor.id}
-            count={liquorFilterCounts[liquor.id] || 0}
-            onClick={() => setSelectedLiquorFilter(liquor.id)}
+            selected={selectedLiquorFilter === 'all'}
+            count={products.length}
+            onClick={() => setSelectedLiquorFilter('all')}
           />
-        ))}
-      </div>
+
+          {liquorTypes.map((liquor) => (
+            <LiquorFilterChip
+              key={liquor.id}
+              liquor={liquor}
+              selected={selectedLiquorFilter === liquor.id}
+              count={liquorFilterCounts[liquor.id] || 0}
+              onClick={() => setSelectedLiquorFilter(liquor.id)}
+            />
+          ))}
+        </div>
+      )}
 
       <SimpleTable
         rows={cocktailRows}
-        columns={['image_url', 'name', 'short_description', 'tags', 'status', 'is_featured', 'prep_time_minutes']}
+        columns={showProductTypeField
+          ? ['image_url', 'product_type', 'name', 'short_description', 'tags', 'status', 'is_featured', 'prep_time_minutes']
+          : ['image_url', 'name', 'short_description', 'tags', 'status', 'is_featured', 'prep_time_minutes']}
         format={{
           image_url: (value, row) => value ? <img className="tableImageThumb" src={value} alt={row.name} /> : '-',
+          product_type: (value) => productTypeLabel(value),
           tags: (value) => <ProductTagChips tags={value || []} productTags={productTags} />,
           is_featured: (value) => value ? 'Yes' : 'No'
         }}
@@ -1373,9 +1473,9 @@ export default function Cocktails() {
     <Section title="Recipes">
       <SimpleTable
         rows={recipeRows}
-        columns={['cocktail', 'recipe_status', 'recipe_version', 'yield_servings', 'item_count']}
+        columns={['product', 'recipe_status', 'recipe_version', 'yield_servings', 'item_count']}
         actions={(row) => (
-          <button type="button" onClick={() => startEdit({ id: row.id, name: row.cocktail })}>
+          <button type="button" onClick={() => startEdit({ id: row.id, name: row.product })}>
             Edit recipe
           </button>
         )}
@@ -1394,7 +1494,7 @@ export default function Cocktails() {
         }}
         actions={(row) => (
           <button type="button" onClick={() => startEdit({ id: row.product_id, name: row.product })}>
-            Edit in cocktail
+            {copy.editVariantButton}
           </button>
         )}
       />
