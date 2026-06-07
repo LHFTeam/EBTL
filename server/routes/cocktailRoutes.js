@@ -88,10 +88,6 @@ async function removeStoredCocktailImage(publicUrl) {
   await supabase.storage.from(COCKTAIL_IMAGE_BUCKET).remove([oldPath]);
 }
 
-function priceIncVat(priceExVat, vatRateValue) {
-  return Number((Number(priceExVat || 0) * (1 + Number(vatRateValue || 0))).toFixed(2));
-}
-
 function zodErrorMessage(error, fallback) {
   const first = error?.issues?.[0];
   if (!first) return fallback;
@@ -336,7 +332,6 @@ cocktailRouter.post('/cocktails', requireArea('cocktails'), async (req, res) => 
     serving_count: p.serving_count,
     price_ex_vat: p.price_ex_vat,
     vat_rate: p.vat_rate,
-    price_inc_vat: priceIncVat(p.price_ex_vat, p.vat_rate),
     is_active: true
   }).select().single();
   if (variant.error) { await cleanup(); return res.status(400).json({ error: variant.error.message }); }
@@ -532,12 +527,7 @@ async function updateVariant({ variantId, productId, patch, res }) {
   if (!current.data) return res.status(404).json({ error: 'Variant not found.' });
 
   const payload = clean(patch);
-  if (payload.price_ex_vat !== undefined || payload.vat_rate !== undefined) {
-    const nextPriceExVat = payload.price_ex_vat !== undefined ? payload.price_ex_vat : current.data.price_ex_vat;
-    const nextVatRate = payload.vat_rate !== undefined ? payload.vat_rate : current.data.vat_rate;
-    payload.price_inc_vat = priceIncVat(nextPriceExVat, nextVatRate);
-  }
-
+  
   if (!Object.keys(payload).length) return res.status(400).json({ error: 'No variant fields were provided to update.' });
 
   const updateQuery = supabase.from('product_variants').update(payload).eq('id', variantId);
@@ -561,10 +551,9 @@ cocktailRouter.post('/cocktails/:id/variants', requireArea('cocktails'), async (
 
   const payload = {
     ...parsed.data,
-    product_id: req.params.id,
-    price_inc_vat: priceIncVat(parsed.data.price_ex_vat, parsed.data.vat_rate)
+    product_id: req.params.id
   };
-
+  
   const data = await sb(supabase.from('product_variants').insert(payload).select().single(), res);
   if (data) res.json(data);
 });
