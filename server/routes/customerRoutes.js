@@ -171,6 +171,597 @@ function normalizeString(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+
+function normalizeUuidList(value) {
+  const entries = Array.isArray(value) ? value : [];
+  return [...new Set(entries.map((entry) => String(entry || '').trim()).filter(Boolean))];
+}
+
+function normalizeAdditionQuantity(value) {
+  const quantity = Number(value ?? 1);
+  if (!Number.isFinite(quantity)) return 1;
+  return Math.max(1, Math.min(MAX_CART_ITEM_QTY, Math.floor(quantity)));
+}
+
+function normalizeRawCustomization(data = {}) {
+  const raw = data.customization && typeof data.customization === 'object'
+    ? data.customization
+    : {};
+
+  const removedRecipeItemIds = normalizeUuidList(
+    raw.removed_recipe_item_ids
+      || raw.remove_recipe_item_ids
+      || raw.removedRecipeItemIds
+      || raw.removeRecipeItemIds
+      || data.removed_recipe_item_ids
+      || data.remove_recipe_item_ids
+      || data.removedRecipeItemIds
+      || data.removeRecipeItemIds
+      || []
+  );
+
+  const rawAdditions = Array.isArray(raw.additions)
+    ? raw.additions
+    : (Array.isArray(data.additions) ? data.additions : []);
+
+  const additions = rawAdditions.map((entry) => {
+    const value = entry && typeof entry === 'object' ? entry : {};
+    return {
+      addonProductId: value.addon_product_id || value.addonProductId || value.product_id || value.productId || null,
+      addonVariantId: value.addon_variant_id || value.addonVariantId || value.variant_id || value.variantId || null,
+      quantity: normalizeAdditionQuantity(value.quantity_per_parent ?? value.quantityPerParent ?? value.quantity ?? 1)
+    };
+  }).filter((entry) => entry.addonVariantId || entry.addonProductId);
+
+  return {
+    removedRecipeItemIds,
+    additions
+  };
+}
+
+function customizationHashFor({ removedRecipeItemIds = [], additions = [] } = {}) {
+  const payload = {
+    removed_recipe_item_ids: [...removedRecipeItemIds].sort(),
+    additions: [...additions]
+      .map((entry) => ({
+        addon_variant_id: entry.addonVariantId || entry.addon_variant_id,
+        quantity: normalizeAdditionQuantity(entry.quantity ?? entry.quantity_per_parent)
+      }))
+      .filter((entry) => entry.addon_variant_id)
+      .sort((a, b) => String(a.addon_variant_id).localeCompare(String(b.addon_variant_id)))
+  };
+
+  if (!payload.removed_recipe_item_ids.length && !payload.additions.length) return 'base';
+
+  return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+}
+
+function joinDisplayNames(names = []) {
+  const cleanNames = names.map((name) => String(name || '').trim()).filter(Boolean);
+  if (!cleanNames.length) return '';
+  if (cleanNames.length === 1) return cleanNames[0];
+  if (cleanNames.length === 2) return `${cleanNames[0]} and ${cleanNames[1]}`;
+  return `${cleanNames.slice(0, -1).join(', ')} and ${cleanNames[cleanNames.length - 1]}`;
+}
+
+function customizationSummary({ removedIngredients = [], additions = [] } = {}) {
+  const parts = [];
+  const removedNames = removedIngredients.map((item) => item.ingredient_name_snapshot || item.name);
+  if (removedNames.length) parts.push(`No ${joinDisplayNames(removedNames)}`);
+
+  const additionLabels = additions.map((item) => {
+    const name = item.product_name_snapshot || item.name;
+    const quantity = Number(item.quantity_per_parent || item.quantity || 1);
+    return quantity > 1 ? `${name} x${quantity}` : name;
+  });
+  if (additionLabels.length) parts.push(`Add ${joinDisplayNames(additionLabels)}`);
+
+  return parts.join('. ') || null;
+}
+
+function additionUnitPrice(addition) {
+  return money(Number(addition.unit_price_inc_vat_snapshot || addition.price_inc_vat || 0) * Number(addition.quantity_per_parent || addition.quantity || 1));
+}
+
+function addonLineTax(addition, parentQuantity = 1) {
+  const lineIncVat = money(
+    Number(addition.unit_price_inc_vat_snapshot || 0)
+    * Number(addition.quantity_per_parent || 1)
+    * Number(parentQuantity || 1)
+  );
+  const vatRate = Number(addition.vat_rate_snapshot || 0);
+  const lineExVat = vatRate > 0 ? money(lineIncVat / (1 + vatRate)) : lineIncVat;
+  return {
+    line_inc_vat: lineIncVat,
+    line_ex_vat: lineExVat,
+    line_vat_amount: money(lineIncVat - lineExVat)
+  };
+}
+
+function configuredLineTax(item, fallbackVatRate = 0) {
+  const quantity = Number(item.quantity || 1);
+  const baseUnitPrice = money(
+    item.base_unit_price_inc_vat_snapshot ??
+    (Number(item.unit_price_inc_vat_snapshot || 0) - Number(item.customization_total_inc_vat_snapshot || 0))
+  );
+  const baseVatRate = Number(item.vat_rate_snapshot ?? fallbackVatRate ?? 0);
+  const baseLineIncVat = money(baseUnitPrice * quantity);
+  const baseLineExVat = baseVatRate > 0 ? money(baseLineIncVat / (1 + baseVatRate)) : baseLineIncVat;
+
+  const addonTotals = (item.cart_item_additions || []).reduce((sum, addition) => {
+    const tax = addonLineTax(addition, quantity);
+    return {
+      line_inc_vat: money(sum.line_inc_vat + tax.line_inc_vat),
+      line_ex_vat: money(sum.line_ex_vat + tax.line_ex_vat),
+      line_vat_amount: money(sum.line_vat_amount + tax.line_vat_amount)
+    };
+  }, { line_inc_vat: 0, line_ex_vat: 0, line_vat_amount: 0 });
+
+  const finalLineIncVat = money(Number(item.unit_price_inc_vat_snapshot || 0) * quantity);
+  const calculatedLineIncVat = money(baseLineIncVat + addonTotals.line_inc_vat);
+  const lineIncVat = Math.abs(finalLineIncVat - calculatedLineIncVat) <= 0.02 ? finalLineIncVat : calculatedLineIncVat;
+  const lineExVat = money(baseLineExVat + addonTotals.line_ex_vat);
+
+  return {
+    line_inc_vat: lineIncVat,
+    line_ex_vat: lineExVat,
+    line_vat_amount: money(lineIncVat - lineExVat)
+  };
+}
+
+function publicRemovedIngredient(row) {
+  return {
+    id: row.id || null,
+    recipe_item_id: row.recipe_item_id || null,
+    ingredient_id: row.ingredient_id || null,
+    name: row.ingredient_name_snapshot || row.name || null,
+    quantity: row.quantity_snapshot ?? row.quantity ?? null,
+    unit: row.unit_snapshot || row.unit || null
+  };
+}
+
+function publicCartAddition(row) {
+  return {
+    id: row.id || null,
+    product_id: row.addon_product_id || null,
+    variant_id: row.addon_variant_id || null,
+    recipe_id: row.addon_recipe_id || null,
+    name: row.product_name_snapshot || null,
+    variant_name: row.variant_name_snapshot || null,
+    quantity_per_parent: Number(row.quantity_per_parent || 1),
+    unit_price_inc_vat: money(row.unit_price_inc_vat_snapshot || 0),
+    line_unit_price_inc_vat: additionUnitPrice(row),
+    vat_rate: Number(row.vat_rate_snapshot || 0),
+    currency: CURRENCY
+  };
+}
+
+function buildCustomizationPayloadForCartItem(item) {
+  const removedIngredients = item.cart_item_removed_ingredients || [];
+  const additions = item.cart_item_additions || [];
+
+  return {
+    hash: item.customization_hash || 'base',
+    summary: item.customization_summary || customizationSummary({ removedIngredients, additions }),
+    base_unit_price_inc_vat: money(item.base_unit_price_inc_vat_snapshot ?? item.unit_price_inc_vat_snapshot),
+    customization_total_inc_vat: money(item.customization_total_inc_vat_snapshot || 0),
+    removed_ingredients: removedIngredients.map(publicRemovedIngredient),
+    additions: additions.map(publicCartAddition)
+  };
+}
+
+function recipeIngredientIsStocked(recipeItem) {
+  const ingredient = recipeItem?.ingredients || recipeItem?.ingredient || {};
+  return !recipeItem?.is_customer_supplied
+    && !ingredient.is_customer_supplied
+    && Number(recipeItem?.quantity || 0) > 0;
+}
+
+function inventoryComponentsForConfiguredItem({
+  item,
+  variant,
+  recipe,
+  recipeItems = [],
+  recipeById = new Map(),
+  recipeItemsByRecipeId = new Map()
+}) {
+  const components = [];
+  const removedRecipeItemIds = new Set(
+    (item.cart_item_removed_ingredients || []).map((row) => row.recipe_item_id)
+  );
+
+  const parentServingCount = Number(variant?.serving_count || item.product_variants?.serving_count || 1);
+  const parentYieldServings = Math.max(Number(recipe?.yield_servings || 1), 1);
+
+  for (const recipeItem of recipeItems || []) {
+    if (removedRecipeItemIds.has(recipeItem.id)) continue;
+    if (!recipeIngredientIsStocked(recipeItem)) continue;
+
+    components.push({
+      ingredient_id: recipeItem.ingredient_id,
+      ingredient_name_snapshot: recipeItem.ingredients?.name || recipeItem.ingredient?.name || 'Ingredient',
+      source_type: 'base_recipe',
+      source_ref_id: recipeItem.id,
+      quantity_per_order_item_unit: parentServingCount * (Number(recipeItem.quantity || 0) / parentYieldServings),
+      unit_snapshot: recipeItem.unit || recipeItem.ingredients?.base_unit || recipeItem.ingredient?.base_unit || null
+    });
+  }
+
+  for (const addition of item.cart_item_additions || []) {
+    const addonRecipe = recipeById.get(addition.addon_recipe_id);
+    const addonRecipeItems = recipeItemsByRecipeId.get(addition.addon_recipe_id) || [];
+    const addonYieldServings = Math.max(Number(addonRecipe?.yield_servings || 1), 1);
+    const addonServingCount = Number(addition.serving_count_snapshot || 1);
+    const addonQuantity = Number(addition.quantity_per_parent || 1);
+
+    for (const recipeItem of addonRecipeItems) {
+      if (!recipeIngredientIsStocked(recipeItem)) continue;
+
+      components.push({
+        ingredient_id: recipeItem.ingredient_id,
+        ingredient_name_snapshot: recipeItem.ingredients?.name || recipeItem.ingredient?.name || 'Ingredient',
+        source_type: 'addon_recipe',
+        source_ref_id: recipeItem.id,
+        quantity_per_order_item_unit: addonQuantity * addonServingCount * (Number(recipeItem.quantity || 0) / addonYieldServings),
+        unit_snapshot: recipeItem.unit || recipeItem.ingredients?.base_unit || recipeItem.ingredient?.base_unit || null
+      });
+    }
+  }
+
+  return components.filter((component) => Number(component.quantity_per_order_item_unit || 0) > 0);
+}
+
+function buildAvailabilityForComponents({ locationId, variant, recipe, components = [], balancesByIngredientId, cartQuantity = 1 }) {
+  if (!locationId) {
+    return {
+      is_orderable: false,
+      reason: 'Choose a beach cart to check availability.'
+    };
+  }
+
+  if (!variant?.is_active) {
+    return {
+      is_orderable: false,
+      reason: 'This serving size is currently unavailable.'
+    };
+  }
+
+  if (!recipe) {
+    return {
+      is_orderable: false,
+      reason: 'This item is not ready for ordering yet.'
+    };
+  }
+
+  const requiredByIngredientId = new Map();
+  for (const component of components) {
+    requiredByIngredientId.set(
+      component.ingredient_id,
+      Number(requiredByIngredientId.get(component.ingredient_id) || 0)
+        + Number(cartQuantity || 1) * Number(component.quantity_per_order_item_unit || 0)
+    );
+  }
+
+  for (const [ingredientId, requiredQty] of requiredByIngredientId.entries()) {
+    const balance = balancesByIngredientId.get(ingredientId);
+    const availableQty = Number(balance?.quantity_on_hand || 0) - Number(balance?.reserved_quantity || 0);
+
+    if (availableQty + 1e-9 < requiredQty) {
+      return {
+        is_orderable: false,
+        reason: 'Currently unavailable at this beach cart.'
+      };
+    }
+  }
+
+  return {
+    is_orderable: true,
+    reason: null
+  };
+}
+
+async function loadCartConfigurationContext({ cartItems = [], locationId = null }) {
+  const itemRows = cartItems || [];
+  const parentProductIds = itemRows.map((item) => item.product_id).filter(Boolean);
+  const addonProductIds = itemRows.flatMap((item) => {
+    return (item.cart_item_additions || []).map((addition) => addition.addon_product_id).filter(Boolean);
+  });
+  const productIds = [...new Set([...parentProductIds, ...addonProductIds])];
+
+  const catalog = productIds.length
+    ? await loadCatalog({ locationId, productIds })
+    : {
+        data: {
+          cards: [],
+          raw: {
+            products: [],
+            variants: [],
+            recipes: [],
+            recipeItems: [],
+            balances: []
+          }
+        }
+      };
+
+  if (catalog.error) return { error: catalog.error };
+
+  const raw = catalog.data.raw || {};
+  const productById = new Map((raw.products || []).map((product) => [product.id, product]));
+  const cardByProductId = new Map((catalog.data.cards || []).map((card) => [card.id, card]));
+  const variantById = new Map((raw.variants || []).map((variant) => [variant.id, variant]));
+
+  const currentRecipeByProductId = new Map();
+  for (const productId of productIds) {
+    currentRecipeByProductId.set(
+      productId,
+      pickCurrentRecipe((raw.recipes || []).filter((recipe) => recipe.product_id === productId))
+    );
+  }
+
+  const recipeIds = [...new Set(itemRows.flatMap((item) => {
+    const parentRecipeId = item.recipe_id || currentRecipeByProductId.get(item.product_id)?.id || null;
+    const addonRecipeIds = (item.cart_item_additions || []).map((addition) => {
+      return addition.addon_recipe_id || currentRecipeByProductId.get(addition.addon_product_id)?.id || null;
+    });
+    return [parentRecipeId, ...addonRecipeIds].filter(Boolean);
+  }))];
+
+  const [recipesResult, recipeItemsResult] = recipeIds.length
+    ? await Promise.all([
+        supabase.from('recipes').select('*').in('id', recipeIds),
+        supabase
+          .from('recipe_items')
+          .select('*, ingredients(id,name,category,base_unit,is_customer_supplied,icon_key)')
+          .in('recipe_id', recipeIds)
+      ])
+    : [{ data: [], error: null }, { data: [], error: null }];
+
+  for (const result of [recipesResult, recipeItemsResult]) {
+    if (result.error) return { error: result.error };
+  }
+
+  const recipeById = new Map((recipesResult.data || []).map((recipe) => [recipe.id, recipe]));
+  const recipeItemsByRecipeId = new Map();
+  for (const recipeItem of recipeItemsResult.data || []) {
+    const list = recipeItemsByRecipeId.get(recipeItem.recipe_id) || [];
+    list.push(recipeItem);
+    recipeItemsByRecipeId.set(recipeItem.recipe_id, list);
+  }
+
+  const components = itemRows.flatMap((item) => {
+    const recipe = recipeById.get(item.recipe_id) || currentRecipeByProductId.get(item.product_id) || null;
+    const variant = variantById.get(item.variant_id) || item.product_variants || null;
+    const recipeItems = recipeItemsByRecipeId.get(recipe?.id) || [];
+    return inventoryComponentsForConfiguredItem({
+      item,
+      variant,
+      recipe,
+      recipeItems,
+      recipeById,
+      recipeItemsByRecipeId
+    });
+  });
+
+  const stockedIngredientIds = [...new Set(components.map((component) => component.ingredient_id).filter(Boolean))];
+  const balances = locationId && stockedIngredientIds.length
+    ? await supabase
+        .from('inventory_balances')
+        .select('ingredient_id,location_id,quantity_on_hand,reserved_quantity')
+        .eq('location_id', locationId)
+        .in('ingredient_id', stockedIngredientIds)
+    : { data: [], error: null };
+
+  if (balances.error) return { error: balances.error };
+
+  return {
+    data: {
+      raw,
+      productById,
+      cardByProductId,
+      variantById,
+      currentRecipeByProductId,
+      recipeById,
+      recipeItemsByRecipeId,
+      balancesByIngredientId: new Map((balances.data || []).map((balance) => [balance.ingredient_id, balance]))
+    }
+  };
+}
+
+async function validateCocktailCustomization({ customization, productId, recipe, recipeItems = [] }) {
+  const removedRecipeItemIds = normalizeUuidList(customization.removedRecipeItemIds || []);
+  const recipeItemById = new Map((recipeItems || []).map((item) => [item.id, item]));
+  const removedIngredients = [];
+
+  for (const recipeItemId of removedRecipeItemIds) {
+    const recipeItem = recipeItemById.get(recipeItemId);
+    if (!recipeItem) {
+      return {
+        badRequest: 'One or more removed ingredients do not belong to this cocktail recipe.'
+      };
+    }
+
+    removedIngredients.push({
+      recipe_item_id: recipeItem.id,
+      ingredient_id: recipeItem.ingredient_id,
+      ingredient_name_snapshot: recipeItem.ingredients?.name || recipeItem.ingredient?.name || 'Ingredient',
+      quantity_snapshot: Number(recipeItem.quantity || 0),
+      unit_snapshot: recipeItem.unit || recipeItem.ingredients?.base_unit || recipeItem.ingredient?.base_unit || null
+    });
+  }
+
+  const requestedAdditions = customization.additions || [];
+  const requestedVariantIds = [...new Set(requestedAdditions.map((entry) => entry.addonVariantId).filter(Boolean))];
+  const requestedProductIds = [...new Set(requestedAdditions.map((entry) => entry.addonProductId).filter(Boolean))];
+
+  if (!recipe && (removedRecipeItemIds.length || requestedAdditions.length)) {
+    return {
+      badRequest: 'This cocktail cannot be customized because it does not have an active recipe.'
+    };
+  }
+
+  if (!requestedAdditions.length) {
+    const hash = customizationHashFor({ removedRecipeItemIds, additions: [] });
+    const summary = customizationSummary({ removedIngredients, additions: [] });
+    return {
+      data: {
+        hash,
+        summary,
+        removedIngredients,
+        additions: [],
+        addonTotalIncVat: 0
+      }
+    };
+  }
+
+  if (!requestedVariantIds.length) {
+    return {
+      badRequest: 'Each cocktail addition must include an add-on variant.'
+    };
+  }
+
+  const addonVariants = await supabase
+    .from('product_variants')
+    .select('*, products(*, product_categories(id,name,slug))')
+    .in('id', requestedVariantIds)
+    .eq('is_active', true);
+
+  if (addonVariants.error) return { error: addonVariants.error };
+
+  const addonVariantById = new Map((addonVariants.data || []).map((variant) => [variant.id, variant]));
+  const normalizedAdditions = [];
+
+  for (const request of requestedAdditions) {
+    if (!request.addonVariantId) {
+      return {
+        badRequest: 'Each cocktail addition must include an add-on variant.'
+      };
+    }
+
+    const variant = addonVariantById.get(request.addonVariantId);
+    const addonProduct = variant?.products || null;
+
+    if (!variant || !addonProduct || addonProduct.status !== 'active' || addonProduct.product_type !== 'add_on') {
+      return {
+        badRequest: 'One or more additions are not active add-on products.'
+      };
+    }
+
+    if (request.addonProductId && request.addonProductId !== addonProduct.id) {
+      return {
+        badRequest: 'One or more add-on variants do not match the selected add-on product.'
+      };
+    }
+
+    normalizedAdditions.push({
+      addonProductId: addonProduct.id,
+      addonVariantId: variant.id,
+      quantity: normalizeAdditionQuantity(request.quantity),
+      product: addonProduct,
+      variant
+    });
+  }
+
+  const addonProductIds = [...new Set(normalizedAdditions.map((entry) => entry.addonProductId))];
+  const addonRecipes = addonProductIds.length
+    ? await supabase
+        .from('recipes')
+        .select('*')
+        .in('product_id', addonProductIds)
+        .eq('status', 'active')
+        .order('version', { ascending: false })
+    : { data: [], error: null };
+
+  if (addonRecipes.error) return { error: addonRecipes.error };
+
+  const addonRecipeByProductId = new Map();
+  for (const productId of addonProductIds) {
+    addonRecipeByProductId.set(
+      productId,
+      pickCurrentRecipe((addonRecipes.data || []).filter((entry) => entry.product_id === productId))
+    );
+  }
+
+  const missingRecipe = normalizedAdditions.find((entry) => !addonRecipeByProductId.get(entry.addonProductId));
+  if (missingRecipe) {
+    return {
+      badRequest: `${missingRecipe.product.name} cannot be added because it does not have an active recipe.`
+    };
+  }
+
+  const additions = normalizedAdditions.map((entry) => {
+    const addonRecipe = addonRecipeByProductId.get(entry.addonProductId);
+    return {
+      addon_product_id: entry.addonProductId,
+      addon_variant_id: entry.addonVariantId,
+      addon_recipe_id: addonRecipe.id,
+      quantity_per_parent: entry.quantity,
+      product_name_snapshot: entry.product.name,
+      variant_name_snapshot: entry.variant.name,
+      unit_price_inc_vat_snapshot: variantPriceIncVat(entry.variant),
+      vat_rate_snapshot: Number(entry.variant.vat_rate || 0),
+      serving_count_snapshot: Number(entry.variant.serving_count || 1)
+    };
+  });
+
+  const hash = customizationHashFor({ removedRecipeItemIds, additions: normalizedAdditions });
+  const summary = customizationSummary({ removedIngredients, additions });
+  const addonTotalIncVat = money(additions.reduce((sum, addition) => sum + additionUnitPrice(addition), 0));
+
+  return {
+    data: {
+      hash,
+      summary,
+      removedIngredients,
+      additions,
+      addonTotalIncVat
+    }
+  };
+}
+
+function customizationOptionsPayload({ recipeItems = [], addonCards = [] } = {}) {
+  const removableIngredients = (recipeItems || [])
+    .map((recipeItem) => {
+      const ingredient = recipeItem.ingredients || recipeItem.ingredient || null;
+      if (!ingredient) return null;
+      return {
+        recipe_item_id: recipeItem.id,
+        ingredient_id: recipeItem.ingredient_id,
+        name: ingredient.name,
+        quantity: Number(recipeItem.quantity || 0),
+        unit: recipeItem.unit || ingredient.base_unit || null,
+        icon_key: ingredient.icon_key || null,
+        is_optional: Boolean(recipeItem.is_optional)
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const additions = (addonCards || []).flatMap((card) => {
+    return (card.variants || []).map((variant) => ({
+      product_id: card.id,
+      variant_id: variant.id,
+      name: card.name,
+      short_description: card.short_description || null,
+      image_url: card.image_url || null,
+      variant_name: variant.name,
+      price_inc_vat: money(variant.price_inc_vat || 0),
+      currency: CURRENCY,
+      availability: variant.availability || card.availability
+    }));
+  });
+
+  return {
+    can_customize: Boolean(removableIngredients.length || additions.length),
+    rules: {
+      removals_are_free: true,
+      additions_are_paid: true,
+      substitutions_allowed: false
+    },
+    removable_ingredients: removableIngredients,
+    additions
+  };
+}
+
 function publicLocation(location) {
   if (!location) return null;
 
@@ -647,7 +1238,8 @@ function cocktailDetailPayload({
   recipe,
   recipeItems,
   balancesByIngredientId,
-  locationId
+  locationId,
+  addonCards = []
 }) {
   const variant = selectedVariantPayload({
     variant: selectedVariant,
@@ -688,6 +1280,11 @@ function cocktailDetailPayload({
     ingredients,
     included_ingredients: ingredients.filter((ingredient) => !ingredient.is_customer_supplied),
     customer_supplied_ingredients: ingredients.filter((ingredient) => ingredient.is_customer_supplied),
+
+    customization: customizationOptionsPayload({
+      recipeItems,
+      addonCards
+    }),
 
     customer_supplies_liquor: true,
     liquor_not_included: true,
@@ -1284,7 +1881,13 @@ async function getActiveCart(customerId, { createIfMissing = true } = {}) {
 async function cartItemsForCart(cartId) {
   return supabase
     .from('cart_items')
-    .select('*, products(id,slug,name,image_url,status), product_variants(id,name,serving_count,is_active,vat_rate,price_inc_vat)')
+    .select(`
+      *,
+      products(id,slug,name,image_url,status,product_type),
+      product_variants(id,name,serving_count,is_active,vat_rate,price_inc_vat),
+      cart_item_removed_ingredients(*),
+      cart_item_additions(*)
+    `)
     .eq('cart_id', cartId)
     .order('created_at');
 }
@@ -1306,10 +1909,8 @@ function cartTotals(items = [], {
 
   const estimatedVatAmount = money(items.reduce((sum, item) => {
     const vatRate = Number(item.vat_rate_snapshot ?? item.product_variants?.vat_rate ?? 0);
-    const lineIncVat = Number(item.unit_price_inc_vat_snapshot || 0) * Number(item.quantity || 0);
-    const lineExVat = vatRate > 0 ? lineIncVat / (1 + vatRate) : lineIncVat;
-
-    return sum + (lineIncVat - lineExVat);
+    const tax = configuredLineTax(item, vatRate);
+    return sum + tax.line_vat_amount;
   }, 0));
 
   const appliedDeliveryFee = fulfillmentType === 'delivery_to_unit' ? money(deliveryFee) : 0;
@@ -1600,13 +2201,23 @@ async function loadProductDetail({ slug, locationId = null, liquorTypeId = null 
     notFound: true
   };
 
-  const catalog = await loadCatalog({
-    locationId,
-    productIds: [product.data.id]
-  });
+  const [catalog, addonCatalog] = await Promise.all([
+    loadCatalog({
+      locationId,
+      productIds: [product.data.id]
+    }),
+    loadCatalog({
+      locationId,
+      productTypes: ['add_on']
+    })
+  ]);
 
   if (catalog.error) return {
     error: catalog.error
+  };
+
+  if (addonCatalog.error) return {
+    error: addonCatalog.error
   };
 
   const card = catalog.data.cards.find((entry) => entry.id === product.data.id);
@@ -1647,7 +2258,8 @@ async function loadProductDetail({ slug, locationId = null, liquorTypeId = null 
       selectedLiquor: publicSelectedLiquor(selectedCompatibility),
       recipe,
       recipeItems,
-      balancesByIngredientId
+      balancesByIngredientId,
+      addonCards: addonCatalog.data.cards || []
     }
   };
 }
@@ -1694,86 +2306,71 @@ async function buildCartResponse(customerId, {
     error: items.error
   };
 
-  const productIds = [...new Set((items.data || []).map((item) => item.product_id))];
-  const catalog = productIds.length
-    ? await loadCatalog({
-        locationId,
-        productIds
-      })
-    : {
-        data: {
-          cards: [],
-          raw: {
-            products: [],
-            variants: [],
-            recipes: [],
-            recipeItems: [],
-            balances: []
-          }
-        }
-      };
+  const context = await loadCartConfigurationContext({
+    cartItems: items.data || [],
+    locationId
+  });
 
-  if (catalog.error) return {
-    error: catalog.error
+  if (context.error) return {
+    error: context.error
   };
 
-  const cardByProductId = new Map((catalog.data.cards || []).map((card) => [card.id, card]));
-  const raw = catalog.data.raw || {};
-  const variantById = new Map((raw.variants || []).map((variant) => [variant.id, variant]));
-  const recipeByProductId = new Map();
-
-  for (const productId of productIds) {
-    recipeByProductId.set(
-      productId,
-      pickCurrentRecipe((raw.recipes || []).filter((recipe) => recipe.product_id === productId))
-    );
-  }
-
-  const recipeItemsByRecipeId = new Map();
-
-  for (const recipeItem of raw.recipeItems || []) {
-    if (!recipeItemsByRecipeId.has(recipeItem.recipe_id)) {
-      recipeItemsByRecipeId.set(recipeItem.recipe_id, []);
-    }
-
-    recipeItemsByRecipeId.get(recipeItem.recipe_id).push(recipeItem);
-  }
-
-  const balancesByIngredientId = new Map(
-    (raw.balances || []).map((balance) => [balance.ingredient_id, balance])
-  );
+  const {
+    productById,
+    cardByProductId,
+    variantById,
+    currentRecipeByProductId,
+    recipeById,
+    recipeItemsByRecipeId,
+    balancesByIngredientId
+  } = context.data;
 
   const responseItems = (items.data || []).map((item) => {
     const card = cardByProductId.get(item.product_id);
-    const variant = variantById.get(item.variant_id);
-    const recipe = recipeByProductId.get(item.product_id);
+    const product = productById.get(item.product_id);
+    const variant = variantById.get(item.variant_id) || item.product_variants;
+    const recipe = recipeById.get(item.recipe_id) || currentRecipeByProductId.get(item.product_id) || null;
     const recipeItems = recipeItemsByRecipeId.get(recipe?.id) || [];
-    const variantAvailability = buildAvailability({
-      locationId,
+    const inventoryComponents = inventoryComponentsForConfiguredItem({
+      item,
+      variant,
       recipe,
       recipeItems,
+      recipeById,
+      recipeItemsByRecipeId
+    });
+    const variantAvailability = buildAvailabilityForComponents({
+      locationId,
+      recipe,
+      components: inventoryComponents,
       balancesByIngredientId,
       variant,
       cartQuantity: item.quantity
     });
     const lineTotal = money(Number(item.unit_price_inc_vat_snapshot || 0) * Number(item.quantity || 0));
+    const customization = buildCustomizationPayloadForCartItem(item);
+
     return {
       id: item.id,
       product_id: item.product_id,
       variant_id: item.variant_id,
+      recipe_id: recipe?.id || item.recipe_id || null,
       quantity: item.quantity,
       product: {
-        slug: item.products?.slug,
-        name: item.products?.name,
-        image_url: item.products?.image_url,
-        status: item.products?.status
+        slug: item.products?.slug || product?.slug,
+        name: item.products?.name || product?.name,
+        image_url: item.products?.image_url || product?.image_url,
+        status: item.products?.status || product?.status
       },
       variant: {
-        name: item.product_variants?.name,
-        serving_count: item.product_variants?.serving_count,
-        is_active: item.product_variants?.is_active
+        name: item.product_variants?.name || variant?.name,
+        serving_count: item.product_variants?.serving_count || variant?.serving_count,
+        is_active: item.product_variants?.is_active ?? variant?.is_active
       },
+      customization,
       pricing: {
+        base_unit_price_inc_vat: customization.base_unit_price_inc_vat,
+        customization_total_inc_vat: customization.customization_total_inc_vat,
         unit_price_inc_vat: money(item.unit_price_inc_vat_snapshot),
         line_total_inc_vat: lineTotal,
         currency: CURRENCY
@@ -2055,56 +2652,44 @@ async function buildCheckoutQuote({
     badRequest: 'Cart is empty.'
   };
 
-  const productIds = [...new Set(cartItems.data.map((item) => item.product_id))];
-
-  const productCatalog = await loadCatalog({
-    locationId,
-    productIds
+  const context = await loadCartConfigurationContext({
+    cartItems: cartItems.data,
+    locationId
   });
-  
-  if (productCatalog.error) return {
-    error: productCatalog.error
+
+  if (context.error) return {
+    error: context.error
   };
 
-  const raw = productCatalog.data.raw || {};
-  const productById = new Map((raw.products || []).map((product) => [product.id, product]));
-  const variantById = new Map((raw.variants || []).map((variant) => [variant.id, variant]));
-
-  const recipesByProductId = new Map();
-
-  for (const productId of productIds) {
-    recipesByProductId.set(
-      productId,
-      pickCurrentRecipe((raw.recipes || []).filter((recipe) => recipe.product_id === productId))
-    );
-  }
-
-  const recipeItemsByRecipeId = new Map();
-
-  for (const item of raw.recipeItems || []) {
-    if (!recipeItemsByRecipeId.has(item.recipe_id)) {
-      recipeItemsByRecipeId.set(item.recipe_id, []);
-    }
-
-    recipeItemsByRecipeId.get(item.recipe_id).push(item);
-  }
-
-  const balancesByIngredientId = new Map(
-    (raw.balances || []).map((balance) => [balance.ingredient_id, balance])
-  );
+  const {
+    productById,
+    variantById,
+    currentRecipeByProductId,
+    recipeById,
+    recipeItemsByRecipeId,
+    balancesByIngredientId
+  } = context.data;
 
   const blockingReasons = [];
 
   const quoteItems = cartItems.data.map((item) => {
     const product = productById.get(item.product_id);
-    const variant = variantById.get(item.variant_id);
-    const recipe = recipesByProductId.get(item.product_id);
+    const variant = variantById.get(item.variant_id) || item.product_variants;
+    const recipe = recipeById.get(item.recipe_id) || currentRecipeByProductId.get(item.product_id) || null;
     const recipeItems = recipeItemsByRecipeId.get(recipe?.id) || [];
-
-    const availability = buildAvailability({
-      locationId,
+    const inventoryComponents = inventoryComponentsForConfiguredItem({
+      item,
+      variant,
       recipe,
       recipeItems,
+      recipeById,
+      recipeItemsByRecipeId
+    });
+
+    const availability = buildAvailabilityForComponents({
+      locationId,
+      recipe,
+      components: inventoryComponents,
       balancesByIngredientId,
       variant,
       cartQuantity: item.quantity
@@ -2119,24 +2704,30 @@ async function buildCheckoutQuote({
     }
 
     const vatRate = Number(item.vat_rate_snapshot ?? variant?.vat_rate ?? 0);
-    const lineTotalIncVat = money(Number(item.unit_price_inc_vat_snapshot || 0) * Number(item.quantity || 0));
-    const lineSubtotalExVat = vatRate > 0 ? money(lineTotalIncVat / (1 + vatRate)) : lineTotalIncVat;
-    const lineVatAmount = money(lineTotalIncVat - lineSubtotalExVat);
+    const tax = configuredLineTax(item, vatRate);
+    const customization = buildCustomizationPayloadForCartItem(item);
 
     return {
       cart_item_id: item.id,
       product_id: item.product_id,
       variant_id: item.variant_id,
-      recipe_id: recipe?.id || null,
+      recipe_id: recipe?.id || item.recipe_id || null,
       product_name: product?.name || item.products?.name,
       variant_name: variant?.name || item.product_variants?.name,
       quantity: item.quantity,
       serving_count: variant?.serving_count || item.product_variants?.serving_count,
+      base_unit_price_inc_vat: customization.base_unit_price_inc_vat,
+      customization_total_inc_vat: customization.customization_total_inc_vat,
+      customization_summary: customization.summary,
+      customization,
+      removed_ingredients: item.cart_item_removed_ingredients || [],
+      additions: item.cart_item_additions || [],
+      inventory_components: inventoryComponents,
       unit_price_inc_vat: money(item.unit_price_inc_vat_snapshot),
       vat_rate: vatRate,
-      line_subtotal_ex_vat: lineSubtotalExVat,
-      line_vat_amount: lineVatAmount,
-      line_total: lineTotalIncVat,
+      line_subtotal_ex_vat: tax.line_ex_vat,
+      line_vat_amount: tax.line_vat_amount,
+      line_total: tax.line_inc_vat,
       is_available: availability.is_orderable,
       blocking_reason: availability.reason
     };
@@ -2192,178 +2783,6 @@ async function buildCheckoutQuote({
       address
     }
   };
-}
-
-function createGeideaPaymentPayload({
-  order,
-  payment,
-  sessionId = null,
-  paymentMethod = null
-}) {
-  const config = geideaCheckoutConfig();
-  const resolvedSessionId = sessionId || payment.raw_payload?.geidea_session_id || null;
-
-  return {
-    required: true,
-    provider: 'geidea',
-    payment_id: payment.id,
-    payment_method: paymentMethod || payment.raw_payload?.payment_method || null,
-    status: payment.status,
-    amount: money(payment.amount),
-    currency: payment.currency || CURRENCY,
-
-    // Flutter SDK should use this object.
-    sdk: {
-      session_id: resolvedSessionId,
-      region: config.region,
-      language: config.language,
-      is_sandbox: config.is_sandbox,
-      apple_pay_merchant_id: config.apple_pay_merchant_id,
-      theme: {
-        primaryColor: '#F35F4B',
-        secondaryColor: '#0E2238',
-        merchantLogoPath: 'assets/logo.png'
-      }
-    },
-
-    // Kept for backward compatibility with previous customer app handoffs.
-    geidea: {
-      configured: config.configured,
-      is_sandbox: config.is_sandbox,
-      region: config.region,
-      language: config.language,
-      session_id: resolvedSessionId,
-      apple_pay_merchant_id: config.apple_pay_merchant_id
-    },
-
-    order_reference: order.order_number || order.id
-  };
-}
-
-async function recordPromotionRedemptionIfNeeded({ order, payment }) {
-  const promotion = payment?.raw_payload?.promotion;
-
-  if (!promotion?.id || !Number(payment?.raw_payload?.promotion?.discount_amount || order.discount_amount || 0)) {
-    return;
-  }
-
-  const existing = await supabase
-    .from('promotion_redemptions')
-    .select('id')
-    .eq('promotion_id', promotion.id)
-    .eq('order_id', order.id)
-    .maybeSingle();
-
-  if (existing.error || existing.data) return;
-
-  await supabase
-    .from('promotion_redemptions')
-    .insert({
-      promotion_id: promotion.id,
-      customer_id: order.customer_id || null,
-      order_id: order.id,
-      discount_amount: money(payment.raw_payload.promotion.discount_amount || order.discount_amount || 0)
-    });
-}
-
-async function recordGeideaSavedCardIfNeeded({ customerId, payload }) {
-  const savedCard = extractGeideaSavedCard(payload);
-  if (!savedCard?.token_id) return null;
-
-  const existingCards = await supabase
-    .from('customer_payment_methods')
-    .select('id')
-    .eq('customer_id', customerId)
-    .eq('is_active', true)
-    .limit(1);
-
-  const shouldBeDefault = !existingCards.error && !existingCards.data?.length;
-
-  const upsert = await supabase
-    .from('customer_payment_methods')
-    .upsert({
-      customer_id: customerId,
-      provider: 'geidea',
-      provider_token_id: savedCard.token_id,
-      provider_agreement_id: savedCard.agreement_id || null,
-      agreement_type: savedCard.agreement_type || 'Unscheduled',
-      card_brand: savedCard.card_brand || null,
-      cardholder_name: savedCard.cardholder_name || null,
-      masked_card_number: savedCard.masked_card_number || null,
-      expiry_month: savedCard.expiry_month || null,
-      expiry_year: savedCard.expiry_year || null,
-      is_default: shouldBeDefault,
-      is_active: true,
-      last_used_at: new Date().toISOString(),
-      raw_payload: payload
-    }, {
-      onConflict: 'provider,provider_token_id'
-    })
-    .select()
-    .single();
-
-  if (upsert.error) {
-    console.error('Failed to save Geidea card token:', upsert.error.message);
-    return null;
-  }
-
-  return upsert.data;
-}
-
-async function loadShopSettings() {
-  const settings = await supabase
-    .from('shop_settings')
-    .select('*')
-    .eq('id', true)
-    .maybeSingle();
-
-  if (settings.error) return { error: settings.error };
-  return { data: settings.data || { id: true, banner_image_url: null } };
-}
-
-async function loadVisibleShopCategories() {
-  const [categories, products] = await Promise.all([
-    supabase
-      .from('product_categories')
-      .select('*')
-      .eq('is_active', true)
-      .order('sort_order')
-      .order('name'),
-
-    supabase
-      .from('products')
-      .select('category_id')
-      .eq('status', 'active')
-      .not('category_id', 'is', null)
-  ]);
-
-  if (categories.error) return { error: categories.error };
-  if (products.error) return { error: products.error };
-
-  const countsByCategoryId = new Map();
-  for (const product of products.data || []) {
-    countsByCategoryId.set(product.category_id, (countsByCategoryId.get(product.category_id) || 0) + 1);
-  }
-
-  return {
-    data: (categories.data || [])
-      .filter((category) => countsByCategoryId.has(category.id))
-      .map((category) => ({
-        ...publicCategory(category),
-        product_count: countsByCategoryId.get(category.id) || 0
-      }))
-  };
-}
-
-async function loadCategoryByIdentifier(identifier) {
-  if (!identifier) return { data: null };
-
-  const byId = uuid.safeParse(identifier);
-  let query = supabase.from('product_categories').select('*').eq('is_active', true);
-
-  query = byId.success ? query.eq('id', identifier) : query.eq('slug', identifier);
-
-  return query.maybeSingle();
 }
 
 customerRouter.post('/customer/session', async (req, res) => {
@@ -2781,9 +3200,10 @@ customerRouter.get('/customer/cocktails/:slug', async (req, res) => {
         error: items.error.message
       });
 
-      const quantitiesByVariant = Object.fromEntries(
-        (items.data || []).map((item) => [item.variant_id, item.quantity])
-      );
+      const quantitiesByVariant = (items.data || []).reduce((acc, item) => {
+        acc[item.variant_id] = Number(acc[item.variant_id] || 0) + Number(item.quantity || 0);
+        return acc;
+      }, {});
 
       cartContext = {
         cart_id: cart.data.id,
@@ -2829,7 +3249,8 @@ customerRouter.get('/customer/cocktails/:slug', async (req, res) => {
     recipe: detail.data.recipe,
     recipeItems: detail.data.recipeItems,
     balancesByIngredientId: detail.data.balancesByIngredientId,
-    locationId
+    locationId,
+    addonCards: detail.data.addonCards
   });
 
   res.json({
@@ -3046,6 +3467,14 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
     location_id: uuid.optional(),
     selected_liquor_type_id: uuid.nullable().optional(),
 
+    // Customization payload. Removals are recipe item IDs. Additions are active add-on variants.
+    customization: z.any().optional(),
+    removed_recipe_item_ids: z.array(uuid).optional(),
+    remove_recipe_item_ids: z.array(uuid).optional(),
+    removedRecipeItemIds: z.array(uuid).optional(),
+    removeRecipeItemIds: z.array(uuid).optional(),
+    additions: z.array(z.any()).optional(),
+
     // Backwards-compatible aliases used by the current API and by camelCase Flutter code.
     product_id: uuid.optional(),
     cocktailId: uuid.optional(),
@@ -3122,7 +3551,8 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
     variantId: data.variant_id || data.variantId,
     selectedQuantity: data.selected_quantity ?? data.selectedQuantity ?? data.quantity ?? 1,
     locationId: data.location_id || data.locationId,
-    selectedLiquorTypeId: data.selected_liquor_type_id || data.selectedLiquorTypeId || null
+    selectedLiquorTypeId: data.selected_liquor_type_id || data.selectedLiquorTypeId || null,
+    customization: normalizeRawCustomization(data)
   })).safeParse(req.body);
 
   if (!parsed.success) return res.status(400).json({
@@ -3147,27 +3577,6 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
     error: cart.error.message
   });
 
-  const existingItem = await supabase
-    .from('cart_items')
-    .select('*')
-    .eq('cart_id', cart.data.id)
-    .eq('variant_id', parsed.data.variantId)
-    .maybeSingle();
-
-  if (existingItem.error) return res.status(400).json({
-    error: existingItem.error.message
-  });
-
-  const nextQuantity = existingItem.data
-    ? Number(existingItem.data.quantity || 0) + parsed.data.selectedQuantity
-    : parsed.data.selectedQuantity;
-
-  if (nextQuantity > MAX_CART_ITEM_QTY) {
-    return res.status(400).json({
-      error: `You can add up to ${MAX_CART_ITEM_QTY} of the same item.`
-    });
-  }
-
   const catalog = await loadCatalog({
     locationId: parsed.data.locationId,
     productIds: [parsed.data.productId]
@@ -3182,9 +3591,6 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
   const variant = (raw.variants || []).find((entry) => entry.id === parsed.data.variantId);
   const recipe = pickCurrentRecipe((raw.recipes || []).filter((entry) => entry.product_id === parsed.data.productId));
   const recipeItems = (raw.recipeItems || []).filter((entry) => entry.recipe_id === recipe?.id);
-  const balancesByIngredientId = new Map(
-    (raw.balances || []).map((balance) => [balance.ingredient_id, balance])
-  );
 
   if (!product || product.status !== 'active' || product.product_type !== 'cocktail') {
     return res.status(400).json({
@@ -3212,11 +3618,104 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
     }
   }
 
-  const availability = buildAvailability({
-    locationId: parsed.data.locationId,
+  const validatedCustomization = await validateCocktailCustomization({
+    customization: parsed.data.customization,
+    productId: parsed.data.productId,
+    recipe,
+    recipeItems
+  });
+
+  if (validatedCustomization.error) return res.status(400).json({
+    error: validatedCustomization.error.message
+  });
+
+  if (validatedCustomization.badRequest) return res.status(400).json({
+    error: validatedCustomization.badRequest
+  });
+
+  const customization = validatedCustomization.data;
+
+  const existingItem = await supabase
+    .from('cart_items')
+    .select('*')
+    .eq('cart_id', cart.data.id)
+    .eq('variant_id', parsed.data.variantId)
+    .eq('customization_hash', customization.hash)
+    .maybeSingle();
+
+  if (existingItem.error) return res.status(400).json({
+    error: existingItem.error.message
+  });
+
+  const nextQuantity = existingItem.data
+    ? Number(existingItem.data.quantity || 0) + parsed.data.selectedQuantity
+    : parsed.data.selectedQuantity;
+
+  if (nextQuantity > MAX_CART_ITEM_QTY) {
+    return res.status(400).json({
+      error: `You can add up to ${MAX_CART_ITEM_QTY} of the same item.`
+    });
+  }
+
+  const temporaryItem = {
+    product_id: parsed.data.productId,
+    variant_id: parsed.data.variantId,
+    product_variants: variant,
+    recipe_id: recipe?.id || null,
+    quantity: nextQuantity,
+    cart_item_removed_ingredients: customization.removedIngredients,
+    cart_item_additions: customization.additions
+  };
+
+  const addonRecipeIds = [...new Set(customization.additions.map((addition) => addition.addon_recipe_id).filter(Boolean))];
+  const addonRecipeRows = addonRecipeIds.length
+    ? await supabase.from('recipes').select('*').in('id', addonRecipeIds)
+    : { data: [], error: null };
+  if (addonRecipeRows.error) return res.status(400).json({ error: addonRecipeRows.error.message });
+
+  const addonRecipeItemRows = addonRecipeIds.length
+    ? await supabase
+        .from('recipe_items')
+        .select('*, ingredients(id,name,category,base_unit,is_customer_supplied,icon_key)')
+        .in('recipe_id', addonRecipeIds)
+    : { data: [], error: null };
+  if (addonRecipeItemRows.error) return res.status(400).json({ error: addonRecipeItemRows.error.message });
+
+  const recipeById = new Map([[recipe?.id, recipe], ...(addonRecipeRows.data || []).map((entry) => [entry.id, entry])].filter(([id]) => Boolean(id)));
+  const recipeItemsByRecipeId = new Map([[recipe?.id, recipeItems]].filter(([id]) => Boolean(id)));
+  for (const recipeItem of addonRecipeItemRows.data || []) {
+    const list = recipeItemsByRecipeId.get(recipeItem.recipe_id) || [];
+    list.push(recipeItem);
+    recipeItemsByRecipeId.set(recipeItem.recipe_id, list);
+  }
+
+  const inventoryComponents = inventoryComponentsForConfiguredItem({
+    item: temporaryItem,
+    variant,
     recipe,
     recipeItems,
-    balancesByIngredientId,
+    recipeById,
+    recipeItemsByRecipeId
+  });
+
+  const stockedIngredientIds = [...new Set(inventoryComponents.map((component) => component.ingredient_id).filter(Boolean))];
+  const balances = stockedIngredientIds.length
+    ? await supabase
+        .from('inventory_balances')
+        .select('ingredient_id,location_id,quantity_on_hand,reserved_quantity')
+        .eq('location_id', parsed.data.locationId)
+        .in('ingredient_id', stockedIngredientIds)
+    : { data: [], error: null };
+
+  if (balances.error) return res.status(400).json({
+    error: balances.error.message
+  });
+
+  const availability = buildAvailabilityForComponents({
+    locationId: parsed.data.locationId,
+    recipe,
+    components: inventoryComponents,
+    balancesByIngredientId: new Map((balances.data || []).map((balance) => [balance.ingredient_id, balance])),
     variant,
     cartQuantity: nextQuantity
   });
@@ -3248,7 +3747,8 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
     }
   }
 
-  const unitPrice = variantPriceIncVat(variant);
+  const baseUnitPrice = variantPriceIncVat(variant);
+  const unitPrice = money(baseUnitPrice + customization.addonTotalIncVat);
   const vatRate = Number(variant.vat_rate || 0);
 
   const saved = existingItem.data
@@ -3259,7 +3759,7 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
         })
         .eq('id', existingItem.data.id)
         .eq('cart_id', cart.data.id)
-        .select('*, products(name,slug,image_url), product_variants(name,serving_count)')
+        .select('*, products(name,slug,image_url), product_variants(name,serving_count), cart_item_removed_ingredients(*), cart_item_additions(*)')
         .single()
     : await supabase
         .from('cart_items')
@@ -3267,16 +3767,47 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
           cart_id: cart.data.id,
           product_id: parsed.data.productId,
           variant_id: parsed.data.variantId,
+          recipe_id: recipe?.id || null,
           quantity: parsed.data.selectedQuantity,
+          base_unit_price_inc_vat_snapshot: baseUnitPrice,
+          customization_total_inc_vat_snapshot: customization.addonTotalIncVat,
+          customization_hash: customization.hash,
+          customization_summary: customization.summary,
           unit_price_inc_vat_snapshot: unitPrice,
           vat_rate_snapshot: vatRate
         })
-        .select('*, products(name,slug,image_url), product_variants(name,serving_count)')
+        .select('*, products(name,slug,image_url), product_variants(name,serving_count), cart_item_removed_ingredients(*), cart_item_additions(*)')
         .single();
 
   if (saved.error) return res.status(400).json({
     error: saved.error.message
   });
+
+  if (!existingItem.data) {
+    const removedPayload = customization.removedIngredients.map((removed) => ({
+      ...removed,
+      cart_item_id: saved.data.id
+    }));
+
+    const additionsPayload = customization.additions.map((addition) => ({
+      ...addition,
+      cart_item_id: saved.data.id
+    }));
+
+    const childInserts = [];
+    if (removedPayload.length) childInserts.push(supabase.from('cart_item_removed_ingredients').insert(removedPayload));
+    if (additionsPayload.length) childInserts.push(supabase.from('cart_item_additions').insert(additionsPayload));
+
+    const childResults = await Promise.all(childInserts);
+    const childError = childResults.find((result) => result.error)?.error;
+
+    if (childError) {
+      await supabase.from('cart_items').delete().eq('id', saved.data.id);
+      return res.status(400).json({
+        error: childError.message
+      });
+    }
+  }
 
   const refreshedCart = await buildCartResponse(ensured.customer.id, {
     createIfMissing: false,
@@ -3287,6 +3818,8 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
     error: refreshedCart.error.message
   });
 
+  const refreshedItem = refreshedCart.data.items.find((entry) => entry.id === saved.data.id) || null;
+
   res.json({
     session: sessionPayload(ensured.customer.id, ensured.token),
     action: {
@@ -3295,12 +3828,13 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
       final_quantity: saved.data.quantity,
       location: publicLocation(location)
     },
-    addedItem: {
+    addedItem: refreshedItem || {
       id: saved.data.id,
       product_id: saved.data.product_id,
       cocktail_id: saved.data.product_id,
       variant_id: saved.data.variant_id,
       quantity: saved.data.quantity,
+      customization: buildCustomizationPayloadForCartItem(saved.data),
       unit_price_inc_vat_snapshot: money(saved.data.unit_price_inc_vat_snapshot),
       line_total_inc_vat: money(saved.data.unit_price_inc_vat_snapshot * saved.data.quantity),
       product: {
@@ -3871,6 +4405,9 @@ async function handleCustomerPlaceOrder(req, res) {
     product_name_snapshot: item.product_name,
     variant_name_snapshot: item.variant_name,
     quantity: item.quantity,
+    base_unit_price_inc_vat_snapshot: item.base_unit_price_inc_vat,
+    customization_total_inc_vat_snapshot: item.customization_total_inc_vat,
+    customization_summary: item.customization_summary,
     unit_price_inc_vat_snapshot: item.unit_price_inc_vat,
     vat_rate_snapshot: item.vat_rate,
     line_total: item.line_total
@@ -3886,6 +4423,70 @@ async function handleCustomerPlaceOrder(req, res) {
 
     return res.status(400).json({
       error: orderItems.error.message
+    });
+  }
+
+  const orderItemRows = orderItems.data || [];
+  const orderRemovedPayload = [];
+  const orderAdditionsPayload = [];
+  const orderInventoryPayload = [];
+
+  quote.data.quote.items.forEach((quoteItem, index) => {
+    const orderItem = orderItemRows[index];
+    if (!orderItem) return;
+
+    for (const removed of quoteItem.removed_ingredients || []) {
+      orderRemovedPayload.push({
+        order_item_id: orderItem.id,
+        recipe_item_id: removed.recipe_item_id || null,
+        ingredient_id: removed.ingredient_id || null,
+        ingredient_name_snapshot: removed.ingredient_name_snapshot || removed.name || 'Ingredient',
+        quantity_snapshot: Number(removed.quantity_snapshot ?? removed.quantity ?? 0),
+        unit_snapshot: removed.unit_snapshot || removed.unit || null
+      });
+    }
+
+    for (const addition of quoteItem.additions || []) {
+      orderAdditionsPayload.push({
+        order_item_id: orderItem.id,
+        addon_product_id: addition.addon_product_id || null,
+        addon_variant_id: addition.addon_variant_id || null,
+        addon_recipe_id: addition.addon_recipe_id || null,
+        quantity_per_parent: Number(addition.quantity_per_parent || 1),
+        product_name_snapshot: addition.product_name_snapshot || 'Add-on',
+        variant_name_snapshot: addition.variant_name_snapshot || null,
+        unit_price_inc_vat_snapshot: money(addition.unit_price_inc_vat_snapshot || 0),
+        vat_rate_snapshot: Number(addition.vat_rate_snapshot || 0),
+        serving_count_snapshot: Number(addition.serving_count_snapshot || 1)
+      });
+    }
+
+    for (const component of quoteItem.inventory_components || []) {
+      orderInventoryPayload.push({
+        order_item_id: orderItem.id,
+        ingredient_id: component.ingredient_id,
+        ingredient_name_snapshot: component.ingredient_name_snapshot || 'Ingredient',
+        source_type: component.source_type,
+        source_ref_id: component.source_ref_id || null,
+        quantity_per_order_item_unit: Number(component.quantity_per_order_item_unit || 0),
+        unit_snapshot: component.unit_snapshot || null
+      });
+    }
+  });
+
+  const customizationInserts = [];
+  if (orderRemovedPayload.length) customizationInserts.push(supabase.from('order_item_removed_ingredients').insert(orderRemovedPayload));
+  if (orderAdditionsPayload.length) customizationInserts.push(supabase.from('order_item_additions').insert(orderAdditionsPayload));
+  if (orderInventoryPayload.length) customizationInserts.push(supabase.from('order_item_inventory_components').insert(orderInventoryPayload));
+
+  const customizationResults = await Promise.all(customizationInserts);
+  const customizationError = customizationResults.find((result) => result.error)?.error;
+
+  if (customizationError) {
+    await supabase.from('orders').delete().eq('id', orderInsert.data.id);
+
+    return res.status(400).json({
+      error: customizationError.message
     });
   }
 

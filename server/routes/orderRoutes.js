@@ -9,13 +9,21 @@ import { supabase } from '../lib/supabase.js';
 export const orderRouter = Router();
 
 orderRouter.get('/orders', requireArea('orders'), async (_req, res) => {
-  const [orders, items, locations] = await Promise.all([
+  const [orders, items, removedIngredients, additions, locations] = await Promise.all([
     supabase.from('orders').select('*, customers(full_name,phone), locations(name,type,compound_name)').order('created_at', { ascending: false }).limit(100),
     supabase.from('order_items').select('*').order('id'),
+    supabase.from('order_item_removed_ingredients').select('*').order('created_at'),
+    supabase.from('order_item_additions').select('*').order('created_at'),
     supabase.from('locations').select('*').order('name')
   ]);
-  for (const result of [orders, items, locations]) if (result.error) return res.status(400).json({ error: result.error.message });
-  res.json({ orders: orders.data, items: items.data, locations: locations.data });
+  for (const result of [orders, items, removedIngredients, additions, locations]) if (result.error) return res.status(400).json({ error: result.error.message });
+  res.json({
+    orders: orders.data,
+    items: items.data,
+    removedIngredients: removedIngredients.data,
+    additions: additions.data,
+    locations: locations.data
+  });
 });
 
 orderRouter.patch('/orders/:id', requireArea('orders'), async (req, res) => {

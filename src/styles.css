@@ -365,6 +365,16 @@ tr:last-child td {
   max-width: 220px;
 }
 
+.mutedStack {
+  margin-top: 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.mutedStack small {
+  display: block;
+}
+
 /* Forms */
 
 .miniForm {
