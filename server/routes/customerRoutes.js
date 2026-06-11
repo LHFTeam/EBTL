@@ -1972,6 +1972,87 @@ async function loadServiceLocations() {
   return result;
 }
 
+async function loadShopSettings() {
+  const settings = await supabase
+    .from('shop_settings')
+    .select('*')
+    .eq('id', true)
+    .maybeSingle();
+
+  if (settings.error) return { error: settings.error };
+
+  return {
+    data: settings.data || { banner_image_url: null }
+  };
+}
+
+async function loadVisibleShopCategories() {
+  const [categories, products] = await Promise.all([
+    supabase
+      .from('product_categories')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order')
+      .order('name'),
+    supabase
+      .from('products')
+      .select('category_id')
+      .eq('status', 'active')
+      .not('category_id', 'is', null)
+  ]);
+
+  if (categories.error) return { error: categories.error };
+  if (products.error) return { error: products.error };
+
+  const productCountsByCategoryId = new Map();
+
+  for (const product of products.data || []) {
+    productCountsByCategoryId.set(
+      product.category_id,
+      (productCountsByCategoryId.get(product.category_id) || 0) + 1
+    );
+  }
+
+  return {
+    data: (categories.data || []).map((category) => ({
+      ...publicCategory(category),
+      product_count: productCountsByCategoryId.get(category.id) || 0
+    }))
+  };
+}
+
+function categoryIdentifierMatches(category, identifier) {
+  const cleanIdentifier = normalizeString(identifier);
+  if (!cleanIdentifier) return false;
+
+  const candidates = [
+    category.id,
+    category.slug,
+    category.name
+  ]
+    .map(normalizeString)
+    .filter(Boolean);
+
+  return candidates.includes(cleanIdentifier);
+}
+
+async function loadCategoryByIdentifier(identifier) {
+  const categories = await supabase
+    .from('product_categories')
+    .select('*')
+    .eq('is_active', true)
+    .order('sort_order')
+    .order('name');
+
+  if (categories.error) return { error: categories.error };
+
+  const category = (categories.data || []).find((entry) => {
+    return categoryIdentifierMatches(entry, identifier);
+  });
+
+  return { data: category || null };
+}
+
 async function loadCatalog({
   locationId = null,
   onlyFeatured = false,
@@ -3592,19 +3673,37 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
   const recipe = pickCurrentRecipe((raw.recipes || []).filter((entry) => entry.product_id === parsed.data.productId));
   const recipeItems = (raw.recipeItems || []).filter((entry) => entry.recipe_id === recipe?.id);
 
-  if (!product || product.status !== 'active' || product.product_type !== 'cocktail') {
+  if (!product || product.status !== 'active') {
     return res.status(400).json({
-      error: 'This cocktail is not available.'
+      error: 'This item is not available.'
     });
   }
 
   if (!variant || variant.product_id !== parsed.data.productId || !variant.is_active) {
     return res.status(400).json({
-      error: 'This cocktail serving size is not available.'
+      error: 'This serving size is not available.'
     });
   }
 
-  if (parsed.data.selectedLiquorTypeId) {
+  const isCocktail = product.product_type === 'cocktail';
+  const hasCustomization = Boolean(
+    parsed.data.customization.removedRecipeItemIds.length
+    || parsed.data.customization.additions.length
+  );
+
+  if (!isCocktail && parsed.data.selectedLiquorTypeId) {
+    return res.status(400).json({
+      error: 'Selected liquor can only be sent for cocktails.'
+    });
+  }
+
+  if (!isCocktail && hasCustomization) {
+    return res.status(400).json({
+      error: 'Only cocktails can be customized.'
+    });
+  }
+
+  if (isCocktail && parsed.data.selectedLiquorTypeId) {
     const selectedLiquorCompatibility = (raw.compatibility || []).find((entry) => {
       return entry.product_id === parsed.data.productId
         && entry.liquor_type_id === parsed.data.selectedLiquorTypeId
@@ -3618,12 +3717,22 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
     }
   }
 
-  const validatedCustomization = await validateCocktailCustomization({
-    customization: parsed.data.customization,
-    productId: parsed.data.productId,
-    recipe,
-    recipeItems
-  });
+  const validatedCustomization = isCocktail
+    ? await validateCocktailCustomization({
+        customization: parsed.data.customization,
+        productId: parsed.data.productId,
+        recipe,
+        recipeItems
+      })
+    : {
+        data: {
+          hash: 'base',
+          summary: null,
+          removedIngredients: [],
+          additions: [],
+          addonTotalIncVat: 0
+        }
+      };
 
   if (validatedCustomization.error) return res.status(400).json({
     error: validatedCustomization.error.message
