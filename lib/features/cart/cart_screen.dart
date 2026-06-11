@@ -331,14 +331,7 @@ class CartLoadingState extends StatelessWidget {
         SliverToBoxAdapter(
           child: CartScreenHeader(totalQuantity: 0, onClear: null),
         ),
-        const SliverToBoxAdapter(
-          child: Padding(
-            padding: EdgeInsets.all(28),
-            child: Center(
-              child: CircularProgressIndicator(color: EbtlColors.coral),
-            ),
-          ),
-        ),
+        const EbtlLoadingSliver(label: 'Loading your cart...'),
       ],
     );
   }

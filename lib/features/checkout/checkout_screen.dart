@@ -436,8 +436,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           future: checkoutFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(color: EbtlColors.coral),
+              return const EbtlLoadingSection(
+                label: 'Preparing checkout...',
               );
             }
 

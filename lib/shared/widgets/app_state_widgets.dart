@@ -2,14 +2,69 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme/ebtl_colors.dart';
+import 'ebtl_loading_graphic.dart';
 
 Widget theLoadingScaffold() {
   return const Scaffold(
     backgroundColor: EbtlColors.cream,
     body: SafeArea(
-      child: Center(child: CircularProgressIndicator(color: EbtlColors.coral)),
+      child: EbtlLoadingGraphic(label: 'Mixing things up...'),
     ),
   );
+}
+
+class EbtlLoadingSection extends StatelessWidget {
+  const EbtlLoadingSection({
+    super.key,
+    this.padding = const EdgeInsets.all(28),
+    this.size = 86,
+    this.label = 'Mixing things up...',
+    this.showLabel = true,
+  });
+
+  final EdgeInsetsGeometry padding;
+  final double size;
+  final String label;
+  final bool showLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: padding,
+      child: EbtlLoadingGraphic(
+        size: size,
+        label: label,
+        showLabel: showLabel,
+      ),
+    );
+  }
+}
+
+class EbtlLoadingSliver extends StatelessWidget {
+  const EbtlLoadingSliver({
+    super.key,
+    this.padding = const EdgeInsets.all(28),
+    this.size = 86,
+    this.label = 'Mixing things up...',
+    this.showLabel = true,
+  });
+
+  final EdgeInsetsGeometry padding;
+  final double size;
+  final String label;
+  final bool showLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: EbtlLoadingSection(
+        padding: padding,
+        size: size,
+        label: label,
+        showLabel: showLabel,
+      ),
+    );
+  }
 }
 
 class EmptyStateCard extends StatelessWidget {

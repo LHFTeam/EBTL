@@ -11,6 +11,7 @@ import '../../services/api_service.dart';
 import '../../shared/widgets/bottle_widgets.dart';
 import '../../shared/widgets/brand_widgets.dart';
 import '../../shared/widgets/ebtl_bottom_nav.dart';
+import '../../shared/widgets/ebtl_loading_graphic.dart';
 import '../../shared/widgets/ingredient_svg_icon.dart';
 import '../../shared/widgets/network_or_asset_image.dart';
 import '../../shared/widgets/product_tag_widgets.dart';
@@ -236,9 +237,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const SafeArea(
-              child: Center(
-                child: CircularProgressIndicator(color: EbtlColors.coral),
-              ),
+              child: EbtlLoadingGraphic(label: 'Mixing your cocktail...'),
             );
           }
 

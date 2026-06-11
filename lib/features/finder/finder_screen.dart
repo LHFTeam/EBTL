@@ -180,11 +180,8 @@ class _FinderScreenState extends State<FinderScreen> {
               future: resultsFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Padding(
-                    padding: EdgeInsets.all(28),
-                    child: Center(
-                      child: CircularProgressIndicator(color: EbtlColors.coral),
-                    ),
+                  return const EbtlLoadingSection(
+                    label: 'Finding cocktails...',
                   );
                 }
 

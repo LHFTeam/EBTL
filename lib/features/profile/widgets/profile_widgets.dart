@@ -6,6 +6,7 @@ import '../../../core/theme/ebtl_colors.dart';
 import '../../../models/profile_models.dart';
 import '../../../shared/widgets/brand_widgets.dart';
 import '../../../shared/widgets/detail_card.dart';
+import '../../../shared/widgets/ebtl_loading_graphic.dart';
 import '../../../shared/widgets/network_or_asset_image.dart';
 
 class ProfileLoadingState extends StatelessWidget {
@@ -19,9 +20,7 @@ class ProfileLoadingState extends StatelessWidget {
         SliverToBoxAdapter(
           child: Padding(
             padding: EdgeInsets.all(28),
-            child: Center(
-              child: CircularProgressIndicator(color: EbtlColors.coral),
-            ),
+            child: EbtlLoadingGraphic(label: 'Loading your profile...'),
           ),
         ),
       ],

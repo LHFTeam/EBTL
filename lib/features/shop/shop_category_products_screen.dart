@@ -222,14 +222,7 @@ class _ShopCategoryProductsScreenState
                   ),
                 )
               else if (!hasLoadedInitial)
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.all(28),
-                    child: Center(
-                      child: CircularProgressIndicator(color: EbtlColors.coral),
-                    ),
-                  ),
-                )
+                const EbtlLoadingSliver(label: 'Loading products...')
               else if (products.isEmpty)
                 const SliverToBoxAdapter(
                   child: EmptyStateCard(
@@ -267,13 +260,10 @@ class _ShopCategoryProductsScreenState
                   ),
                 ),
               if (isLoading && products.isNotEmpty)
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.all(22),
-                    child: Center(
-                      child: CircularProgressIndicator(color: EbtlColors.coral),
-                    ),
-                  ),
+                const EbtlLoadingSliver(
+                  padding: EdgeInsets.all(22),
+                  size: 56,
+                  showLabel: false,
                 ),
               const SliverToBoxAdapter(child: SizedBox(height: 24)),
             ],

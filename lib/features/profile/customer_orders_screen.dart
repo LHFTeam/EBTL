@@ -45,16 +45,7 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                   ),
                 ),
                 if (snapshot.connectionState == ConnectionState.waiting)
-                  const SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.all(28),
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          color: EbtlColors.coral,
-                        ),
-                      ),
-                    ),
-                  )
+                  const EbtlLoadingSliver(label: 'Loading your orders...')
                 else if (snapshot.hasError)
                   SliverToBoxAdapter(
                     child: InlineErrorCard(

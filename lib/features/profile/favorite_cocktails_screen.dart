@@ -119,16 +119,7 @@ class _FavoriteCocktailsScreenState extends State<FavoriteCocktailsScreen> {
                 ),
                 if (snapshot.connectionState == ConnectionState.waiting &&
                     items.isEmpty)
-                  const SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.all(28),
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          color: EbtlColors.coral,
-                        ),
-                      ),
-                    ),
-                  )
+                  const EbtlLoadingSliver(label: 'Loading favorites...')
                 else if (snapshot.hasError && items.isEmpty)
                   SliverToBoxAdapter(
                     child: InlineErrorCard(
