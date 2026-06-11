@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">grapefruit ingredient icon</title>
+  <desc id="desc">A premium filled badge style SVG icon for grapefruit using EBTL brand colors.</desc>
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="#FFF8EE"/>
+  <ellipse cx="32" cy="50" rx="18" ry="5" fill="#0E2238" opacity="0.12"/>
+  
+  <circle cx="32" cy="34" r="18" fill="#C9E3DD" stroke="#0E2238" stroke-width="2.6"/>
+  <circle cx="32" cy="34" r="13" fill="#F35F4B"/>
+  <path d="M32 21v26M19 34h26M23 25l18 18M41 25 23 43" stroke="#FFF8EE" stroke-width="2.4" stroke-linecap="round" opacity="0.92"/>
+  <circle cx="32" cy="34" r="3" fill="#E7BD68"/>
+
+</svg>

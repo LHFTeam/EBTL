@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">mint ingredient icon</title>
+  <desc id="desc">A premium filled badge style SVG icon for mint using EBTL brand colors.</desc>
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="#FFF8EE"/>
+  <ellipse cx="32" cy="50" rx="18" ry="5" fill="#0E2238" opacity="0.12"/>
+  
+  <path d="M31 51c1-12 1-23-1-33" stroke="#0E2238" stroke-width="3" stroke-linecap="round"/>
+  <path d="M31 27c-10-5-17-3-20 4 8 6 16 4 20-4Z" fill="#C9E3DD" stroke="#0E2238" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M32 25c8-7 16-7 21-1-5 8-14 10-21 1Z" fill="#1F6F68" stroke="#0E2238" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M31 39c-8-4-14-3-17 3 6 5 13 4 17-3Z" fill="#1F6F68" stroke="#0E2238" stroke-width="2.2" stroke-linejoin="round"/>
+  <path d="M33 37c7-4 13-3 16 2-5 5-11 5-16-2Z" fill="#C9E3DD" stroke="#0E2238" stroke-width="2.2" stroke-linejoin="round"/>
+
+</svg>

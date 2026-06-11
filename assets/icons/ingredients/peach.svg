@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">peach ingredient icon</title>
+  <desc id="desc">A premium filled badge style SVG icon for peach using EBTL brand colors.</desc>
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="#FFF8EE"/>
+  <ellipse cx="32" cy="50" rx="18" ry="5" fill="#0E2238" opacity="0.12"/>
+  
+  <path d="M31 20c-9 0-15 7-15 16 0 10 7 17 16 17s16-7 16-17c0-9-6-16-15-16h-2Z" fill="#F35F4B" stroke="#0E2238" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M32 21c6 7 5 20-1 31" fill="none" stroke="#E7BD68" stroke-width="3" stroke-linecap="round" opacity="0.9"/>
+  <path d="M31 19c3-6 9-8 15-5-3 6-8 8-15 5Z" fill="#1F6F68" stroke="#0E2238" stroke-width="2" stroke-linejoin="round"/>
+  <circle cx="25" cy="31" r="3" fill="#FFF8EE" opacity="0.45"/>
+
+</svg>

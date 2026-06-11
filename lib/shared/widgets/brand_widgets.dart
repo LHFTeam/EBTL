@@ -1,0 +1,93 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+import '../../core/theme/ebtl_colors.dart';
+
+class EbtlLogo extends StatelessWidget {
+  const EbtlLogo({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(Icons.beach_access, color: EbtlColors.coral, size: 30),
+        const SizedBox(width: 10),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'EBTL',
+              style: GoogleFonts.playfairDisplay(
+                fontSize: 38,
+                height: 0.9,
+                letterSpacing: 6,
+                color: EbtlColors.navy,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Text(
+              'EVERYTHING BUT THE LIQUOR',
+              style: GoogleFonts.manrope(
+                fontSize: 7,
+                letterSpacing: 1.7,
+                color: EbtlColors.coral,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class CircleIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const CircleIconButton({super.key, required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: EbtlColors.white.withValues(alpha: 0.78),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 56,
+          height: 56,
+          child: Icon(icon, color: Colors.black, size: 28),
+        ),
+      ),
+    );
+  }
+}
+
+class StepBubble extends StatelessWidget {
+  final int number;
+
+  const StepBubble({super.key, required this.number});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: const BoxDecoration(
+        color: EbtlColors.coral,
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        number.toString(),
+        style: GoogleFonts.manrope(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}

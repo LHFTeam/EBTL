@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">soda ingredient icon</title>
+  <desc id="desc">A premium filled badge style SVG icon for soda using EBTL brand colors.</desc>
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="#FFF8EE"/>
+  <ellipse cx="32" cy="50" rx="18" ry="5" fill="#0E2238" opacity="0.12"/>
+  
+  <path d="M21 19h22l-3 33H24L21 19Z" fill="#C9E3DD" stroke="#0E2238" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M24 27h16l-2 20H26l-2-20Z" fill="#FFF8EE" opacity="0.9"/>
+  <path d="M24 35c5-4 10 4 16 0" fill="none" stroke="#1F6F68" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="30" cy="29" r="2" fill="#F35F4B"/>
+  <circle cx="36" cy="42" r="1.8" fill="#1F6F68"/>
+  <path d="M28 15h17" stroke="#0E2238" stroke-width="3" stroke-linecap="round"/>
+  <path d="M40 14 46 9" stroke="#F35F4B" stroke-width="3" stroke-linecap="round"/>
+
+</svg>
