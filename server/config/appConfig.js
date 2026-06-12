@@ -6,7 +6,17 @@ export const isProd = process.env.NODE_ENV === 'production';
 export const SUPABASE_URL = process.env.SUPABASE_URL;
 export const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 export const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-only-change-me';
-export const PAYMENT_MODE = String(process.env.PAYMENT_MODE || 'live').trim().toLowerCase() === 'demo' ? 'demo' : 'live';
+
+function normalizeEnvValue(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^['"]+|['"]+$/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+export const RAW_PAYMENT_MODE = process.env.PAYMENT_MODE || '';
+export const PAYMENT_MODE = normalizeEnvValue(RAW_PAYMENT_MODE) === 'demo' ? 'demo' : 'live';
 export const isDemoPaymentMode = PAYMENT_MODE === 'demo';
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {

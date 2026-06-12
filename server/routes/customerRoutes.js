@@ -4430,6 +4430,7 @@ customerRouter.get('/customer/checkout', async (req, res) => {
       item_warnings: itemWarnings,
       summary: quote.data.quote.totals,
       promotion: quote.data.quote.promotion,
+      payment_mode: PAYMENT_MODE,
       payment_methods: checkoutPaymentMethods(),
       validation: {
         can_place_order: quote.data.quote.validation.can_place_order && (isDemoPaymentMode || geideaIsConfigured()),
@@ -4490,6 +4491,7 @@ customerRouter.get('/customer/checkout/options', async (req, res) => {
         label: 'Delivery to unit'
       }
     ],
+    paymentMode: PAYMENT_MODE,
     paymentMethods: checkoutPaymentMethods()
   });
 });

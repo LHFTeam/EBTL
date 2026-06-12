@@ -5,7 +5,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { isProd } from './config/appConfig.js';
+import { isProd, PAYMENT_MODE } from './config/appConfig.js';
 import { normalizeEmptyStrings } from './lib/objectUtils.js';
 import { auth } from './middleware/auth.js';
 import { authRouter } from './routes/authRoutes.js';
@@ -57,7 +57,7 @@ export function createApp() {
   });
   
   app.use(auth);
-  app.get('/api/health', (_req, res) => res.json({ ok: true }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, payment_mode: PAYMENT_MODE }));
   app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
   app.post('/api/client-error', (req, res) => {
