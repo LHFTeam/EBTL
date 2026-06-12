@@ -5,6 +5,7 @@ import { requireArea } from '../middleware/auth.js';
 import { clean } from '../lib/objectUtils.js';
 import { sb } from '../lib/supabaseResponse.js';
 import { supabase } from '../lib/supabase.js';
+import { notifyOrderReadyForPickup } from '../lib/notifications.js';
 
 export const orderRouter = Router();
 
@@ -29,6 +30,35 @@ orderRouter.get('/orders', requireArea('orders'), async (_req, res) => {
 orderRouter.patch('/orders/:id', requireArea('orders'), async (req, res) => {
   const parsed = z.object({ status: z.enum(orderStatuses).optional(), payment_status: z.enum(paymentStatuses).optional(), internal_notes: z.string().optional() }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid order update' });
-  const data = await sb(supabase.from('orders').update(clean(parsed.data)).eq('id', req.params.id).select().single(), res);
-  if (data) res.json(data);
+
+  const existing = await sb(
+    supabase
+      .from('orders')
+      .select('id,order_number,status,customer_id')
+      .eq('id', req.params.id)
+      .single(),
+    res
+  );
+  if (!existing) return;
+
+  const data = await sb(
+    supabase
+      .from('orders')
+      .update(clean(parsed.data))
+      .eq('id', req.params.id)
+      .select()
+      .single(),
+    res
+  );
+
+  if (!data) return;
+
+  if (parsed.data.status && parsed.data.status !== existing.status) {
+    await notifyOrderReadyForPickup({
+      order: data,
+      previousStatus: existing.status
+    });
+  }
+
+  res.json(data);
 });

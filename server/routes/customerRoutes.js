@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { Router } from 'express';
 import { z } from 'zod';
-import { isProd, SESSION_SECRET } from '../config/appConfig.js';
+import { isDemoPaymentMode, isProd, PAYMENT_MODE, SESSION_SECRET } from '../config/appConfig.js';
 import { clean } from '../lib/objectUtils.js';
 import { getCookie } from '../lib/session.js';
 import {
@@ -15,6 +15,7 @@ import {
   verifyGeideaCallbackSignature
 } from '../lib/geidea.js';
 import { supabase } from '../lib/supabase.js';
+import { publicNotification, registerCustomerPushToken } from '../lib/notifications.js';
 
 export const customerRouter = Router();
 
@@ -23,6 +24,7 @@ const CUSTOMER_TOKEN_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
 const BUSINESS_TIME_ZONE = 'Africa/Cairo';
 const CURRENCY = 'EGP';
 const PAYMENT_PROVIDER = 'geidea';
+const DEMO_PAYMENT_PROVIDER = 'demo';
 const EGYPT_MOBILE_SIMPLE_RE = /^0\d{10}$/;
 const MAX_CART_ITEM_QTY = 99;
 const FULFILLMENT_TYPES = ['pickup_at_cart', 'delivery_to_unit'];
@@ -1632,7 +1634,7 @@ async function validateFavoriteProduct(productId) {
   return { data: product.data };
 }
 
-function profileQuickLinks({ addressCount = 0, favoriteCount = 0 } = {}) {
+function profileQuickLinks({ addressCount = 0, favoriteCount = 0, unreadNotifications = 0 } = {}) {
   return [
     {
       key: 'addresses',
@@ -1669,10 +1671,11 @@ function profileQuickLinks({ addressCount = 0, favoriteCount = 0 } = {}) {
     {
       key: 'notifications',
       title: 'Notifications',
-      subtitle: 'Manage your preferences',
-      endpoint: null,
-      enabled: false,
-      placeholder: true
+      subtitle: unreadNotifications > 0 ? `${unreadNotifications} unread` : 'Order updates and pickup alerts',
+      endpoint: '/api/customer/notifications',
+      enabled: true,
+      placeholder: false,
+      count: unreadNotifications
     }
   ];
 }
@@ -2632,7 +2635,123 @@ async function resolvePromotion({ promoCode, customerId, subtotalIncVat, deliver
   };
 }
 
+function createGeideaPaymentPayload({ order, payment, sessionId = null, paymentMethod = null }) {
+  const config = geideaCheckoutConfig();
+  const rawPayload = payment?.raw_payload || {};
+
+  return {
+    required: true,
+    provider: payment?.provider || PAYMENT_PROVIDER,
+    payment_id: payment?.id || '',
+    payment_method: paymentMethod || rawPayload.payment_method || 'geidea_card',
+    status: payment?.status || order?.payment_status || 'pending',
+    amount: money(payment?.amount ?? order?.total_amount ?? 0),
+    currency: payment?.currency || CURRENCY,
+    order_reference: order?.order_number || order?.id || '',
+    geidea: {
+      ...config,
+      session_id: sessionId || rawPayload.geidea_session_id || ''
+    }
+  };
+}
+
+function createDemoPaymentPayload({ order, payment }) {
+  return {
+    required: false,
+    provider: DEMO_PAYMENT_PROVIDER,
+    payment_id: payment?.id || '',
+    payment_method: 'demo_checkout',
+    status: payment?.status || order?.payment_status || 'paid',
+    amount: money(payment?.amount ?? order?.total_amount ?? 0),
+    currency: payment?.currency || CURRENCY,
+    order_reference: order?.order_number || order?.id || '',
+    geidea: {
+      ...geideaCheckoutConfig(),
+      configured: false,
+      session_id: ''
+    }
+  };
+}
+
+function createCheckoutPaymentPayload({ order, payment, sessionId = null, paymentMethod = null }) {
+  if (payment?.provider === DEMO_PAYMENT_PROVIDER || PAYMENT_MODE === 'demo') {
+    return createDemoPaymentPayload({ order, payment });
+  }
+
+  return createGeideaPaymentPayload({ order, payment, sessionId, paymentMethod });
+}
+
+async function recordPromotionRedemptionIfNeeded({ order, payment }) {
+  const promotion = payment?.raw_payload?.promotion;
+  if (!promotion?.id || !order?.id) return null;
+
+  const existing = await supabase
+    .from('promotion_redemptions')
+    .select('id')
+    .eq('promotion_id', promotion.id)
+    .eq('order_id', order.id)
+    .maybeSingle();
+
+  if (existing.error) throw existing.error;
+  if (existing.data) return existing.data;
+
+  const inserted = await supabase
+    .from('promotion_redemptions')
+    .insert({
+      promotion_id: promotion.id,
+      customer_id: order.customer_id || null,
+      order_id: order.id,
+      discount_amount: money(promotion.discount_amount || order.discount_amount || 0)
+    })
+    .select()
+    .single();
+
+  if (inserted.error) throw inserted.error;
+  return inserted.data;
+}
+
+async function recordGeideaSavedCardIfNeeded({ customerId, payload }) {
+  const savedCard = extractGeideaSavedCard(payload);
+  if (!customerId || !savedCard?.token_id) return null;
+
+  const upserted = await supabase
+    .from('customer_payment_methods')
+    .upsert({
+      customer_id: customerId,
+      provider: PAYMENT_PROVIDER,
+      provider_token_id: savedCard.token_id,
+      provider_agreement_id: savedCard.agreement_id || null,
+      agreement_type: savedCard.agreement_type || 'Unscheduled',
+      card_brand: savedCard.card_brand || null,
+      cardholder_name: savedCard.cardholder_name || null,
+      masked_card_number: savedCard.masked_card_number || null,
+      expiry_month: savedCard.expiry_month || null,
+      expiry_year: savedCard.expiry_year || null,
+      is_active: true,
+      raw_payload: savedCard
+    }, { onConflict: 'provider,provider_token_id' })
+    .select()
+    .single();
+
+  if (upserted.error) throw upserted.error;
+  return upserted.data;
+}
+
 function checkoutPaymentMethods() {
+  if (isDemoPaymentMode) {
+    return [
+      {
+        key: 'demo_checkout',
+        label: 'Demo Checkout',
+        provider: DEMO_PAYMENT_PROVIDER,
+        enabled: true,
+        setup_required: false,
+        mode: 'demo',
+        message: 'Demo mode skips Geidea and confirms the order immediately.'
+      }
+    ];
+  }
+
   const config = geideaCheckoutConfig();
 
   return [
@@ -3351,18 +3470,24 @@ customerRouter.get('/customer/profile', async (req, res) => {
   const ensured = await ensureCustomer(req, res);
   if (!ensured) return;
 
-  const [ordersPreview, addressesCount, favoritesCount] = await Promise.all([
+  const [ordersPreview, addressesCount, favoritesCount, unreadNotificationsCount] = await Promise.all([
     loadCustomerOrdersPreview(ensured.customer.id, { limit: CUSTOMER_PROFILE_ORDER_LIMIT }),
     countRows('customer_addresses', ensured.customer.id),
-    countRows('customer_favorite_products', ensured.customer.id)
+    countRows('customer_favorite_products', ensured.customer.id),
+    supabase
+      .from('customer_notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('customer_id', ensured.customer.id)
+      .is('read_at', null)
   ]);
 
-  for (const result of [ordersPreview, addressesCount, favoritesCount]) {
+  for (const result of [ordersPreview, addressesCount, favoritesCount, unreadNotificationsCount]) {
     if (result.error) return res.status(400).json({ error: result.error.message });
   }
 
   const addressCount = Number(addressesCount.count || 0);
   const favoriteCount = Number(favoritesCount.count || 0);
+  const unreadNotifications = Number(unreadNotificationsCount.count || 0);
 
   res.json({
     session: sessionPayload(ensured.customer.id, ensured.token),
@@ -3374,7 +3499,7 @@ customerRouter.get('/customer/profile', async (req, res) => {
       view_all_endpoint: '/api/customer/orders',
       items: ordersPreview.data.items
     },
-    quick_links: profileQuickLinks({ addressCount, favoriteCount }),
+    quick_links: profileQuickLinks({ addressCount, favoriteCount, unreadNotifications }),
     payment_methods: {
       enabled: false,
       placeholder: true,
@@ -3393,9 +3518,11 @@ customerRouter.get('/customer/profile', async (req, res) => {
       placeholder: true
     },
     notifications: {
-      enabled: false,
+      enabled: true,
       navigation_only: true,
-      placeholder: true
+      placeholder: false,
+      unread_count: unreadNotifications,
+      endpoint: '/api/customer/notifications'
     },
     brand_message: {
       title: 'You bring the bottle.',
@@ -3436,6 +3563,96 @@ customerRouter.get('/customer/orders', async (req, res) => {
       offset: orders.data.offset,
       has_more: orders.data.has_more
     }
+  });
+});
+
+
+customerRouter.get('/customer/notifications', async (req, res) => {
+  const parsed = z.object({
+    limit: z.coerce.number().int().positive().max(100).optional(),
+    unread_only: z.preprocess((value) => value === 'true' || value === true, z.boolean().optional())
+  }).safeParse(req.query);
+
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid notifications request.' });
+
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  let query = supabase
+    .from('customer_notifications')
+    .select('*, orders(order_number)')
+    .eq('customer_id', ensured.customer.id)
+    .order('created_at', { ascending: false })
+    .limit(parsed.data.limit || 50);
+
+  if (parsed.data.unread_only) query = query.is('read_at', null);
+
+  const notifications = await query;
+  if (notifications.error) return res.status(400).json({ error: notifications.error.message });
+
+  const unreadCount = await supabase
+    .from('customer_notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('customer_id', ensured.customer.id)
+    .is('read_at', null);
+
+  if (unreadCount.error) return res.status(400).json({ error: unreadCount.error.message });
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    notifications: (notifications.data || []).map(publicNotification),
+    unread_count: Number(unreadCount.count || 0)
+  });
+});
+
+customerRouter.patch('/customer/notifications/:notificationId/read', async (req, res) => {
+  const parsed = z.object({ notificationId: uuid }).safeParse(req.params);
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid notification request.' });
+
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const updated = await supabase
+    .from('customer_notifications')
+    .update({ read_at: new Date().toISOString() })
+    .eq('id', parsed.data.notificationId)
+    .eq('customer_id', ensured.customer.id)
+    .select('*, orders(order_number)')
+    .maybeSingle();
+
+  if (updated.error) return res.status(400).json({ error: updated.error.message });
+  if (!updated.data) return res.status(404).json({ error: 'Notification not found.' });
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    notification: publicNotification(updated.data)
+  });
+});
+
+customerRouter.post('/customer/push-tokens', async (req, res) => {
+  const parsed = z.object({
+    token: z.string().trim().min(10).max(4096),
+    platform: z.string().trim().max(40).optional(),
+    device_id: z.string().trim().max(120).nullable().optional()
+  }).safeParse(req.body);
+
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid push token request.' });
+
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const registered = await registerCustomerPushToken({
+    customerId: ensured.customer.id,
+    token: parsed.data.token,
+    platform: parsed.data.platform || 'unknown',
+    deviceId: parsed.data.device_id || null
+  });
+
+  if (registered.error) return res.status(400).json({ error: registered.error.message });
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    push_token: registered.data
   });
 });
 
@@ -4215,10 +4432,10 @@ customerRouter.get('/customer/checkout', async (req, res) => {
       promotion: quote.data.quote.promotion,
       payment_methods: checkoutPaymentMethods(),
       validation: {
-        can_place_order: quote.data.quote.validation.can_place_order && geideaIsConfigured(),
+        can_place_order: quote.data.quote.validation.can_place_order && (isDemoPaymentMode || geideaIsConfigured()),
         blocking_reasons: [
           ...quote.data.quote.validation.blocking_reasons,
-          ...(geideaIsConfigured() ? [] : ['Geidea payment gateway is not configured yet.'])
+          ...(isDemoPaymentMode || geideaIsConfigured() ? [] : ['Geidea payment gateway is not configured yet.'])
         ]
       }
     }
@@ -4335,13 +4552,13 @@ async function handleCustomerPlaceOrder(req, res) {
     requested_fulfillment_at: z.string().nullable().optional(),
     promo_code: z.string().nullable().optional(),
     customer_notes: z.string().nullable().optional(),
-    payment_method: z.enum(['geidea_card', 'geidea_apple_pay', 'payment_gateway']),
+    payment_method: z.enum(['geidea_card', 'geidea_apple_pay', 'payment_gateway', 'demo_checkout']),
     save_card: z.boolean().optional().default(false),
     idempotency_key: z.string().min(8).max(120)
   }).transform((data) => ({
     ...data,
     customer_phone: data.customer_phone || data.mobile_phone || data.phone || '',
-    payment_method: data.payment_method === 'payment_gateway' ? 'geidea_card' : data.payment_method
+    payment_method: isDemoPaymentMode ? 'demo_checkout' : (data.payment_method === 'payment_gateway' ? 'geidea_card' : data.payment_method)
   })).safeParse(req.body);
 
   if (!parsed.success) return res.status(400).json({
@@ -4358,7 +4575,7 @@ async function handleCustomerPlaceOrder(req, res) {
     });
   }
 
-  if (!geideaIsConfigured()) {
+  if (!isDemoPaymentMode && !geideaIsConfigured()) {
     return res.status(503).json({
       error: 'Geidea payment gateway is not configured yet.'
     });
@@ -4406,11 +4623,11 @@ async function handleCustomerPlaceOrder(req, res) {
       session: sessionPayload(ensured.customer.id, ensured.token),
       order: existingPayment.data.orders,
       items: existingItems.data || [],
-      payment: createGeideaPaymentPayload({
+      payment: createCheckoutPaymentPayload({
         order: existingPayment.data.orders,
         payment: existingPayment.data
       }),
-      nextScreen: 'geidea_payment'
+      nextScreen: existingPayment.data.provider === DEMO_PAYMENT_PROVIDER ? 'order_confirmed' : 'geidea_payment'
     });
   }
 
@@ -4489,8 +4706,8 @@ async function handleCustomerPlaceOrder(req, res) {
       customer_address_snapshot: customerAddressSnapshot,
       order_channel: 'app',
       fulfillment_type: parsed.data.fulfillment_type,
-      status: 'pending_payment',
-      payment_status: 'pending',
+      status: isDemoPaymentMode ? 'confirmed' : 'pending_payment',
+      payment_status: isDemoPaymentMode ? 'paid' : 'pending',
       requested_fulfillment_at: parsed.data.requested_fulfillment_at || null,
       subtotal_ex_vat: quote.data.quote.totals.subtotal_ex_vat,
       vat_amount: quote.data.quote.totals.vat_amount,
@@ -4603,13 +4820,15 @@ async function handleCustomerPlaceOrder(req, res) {
     .from('payments')
     .insert({
       order_id: orderInsert.data.id,
-      provider: PAYMENT_PROVIDER,
+      provider: isDemoPaymentMode ? DEMO_PAYMENT_PROVIDER : PAYMENT_PROVIDER,
       amount: quote.data.quote.totals.total_amount,
       currency: CURRENCY,
-      status: 'pending',
+      status: isDemoPaymentMode ? 'paid' : 'pending',
       idempotency_key: parsed.data.idempotency_key,
       raw_payload: {
         payment_method: parsed.data.payment_method,
+        payment_mode: PAYMENT_MODE,
+        demo_confirmed_at: isDemoPaymentMode ? new Date().toISOString() : null,
         save_card: Boolean(parsed.data.save_card),
         promotion: quote.data.quote.promotion
           ? {
@@ -4628,6 +4847,49 @@ async function handleCustomerPlaceOrder(req, res) {
 
     return res.status(400).json({
       error: payment.error.message
+    });
+  }
+
+  if (isDemoPaymentMode) {
+    if (quote.data.quote.promotion) {
+      await recordPromotionRedemptionIfNeeded({
+        order: orderInsert.data,
+        payment: payment.data
+      });
+    }
+
+    await supabase
+      .from('cart_items')
+      .delete()
+      .eq('cart_id', parsed.data.cart_id);
+
+    await supabase
+      .from('carts')
+      .update({ status: 'converted' })
+      .eq('id', parsed.data.cart_id);
+
+    return res.json({
+      session: sessionPayload(ensured.customer.id, ensured.token),
+      order: {
+        id: orderInsert.data.id,
+        order_number: orderInsert.data.order_number,
+        status: orderInsert.data.status,
+        payment_status: orderInsert.data.payment_status,
+        fulfillment_type: orderInsert.data.fulfillment_type,
+        requested_fulfillment_at: orderInsert.data.requested_fulfillment_at,
+        created_at: orderInsert.data.created_at,
+        customer_phone: orderInsert.data.customer_phone_snapshot,
+        address: orderInsert.data.customer_address_snapshot,
+        location: publicLocation(orderInsert.data.locations),
+        totals: quote.data.quote.totals,
+        promotion: quote.data.quote.promotion
+      },
+      items: orderItems.data,
+      payment: createDemoPaymentPayload({
+        order: orderInsert.data,
+        payment: payment.data
+      }),
+      nextScreen: 'order_confirmed'
     });
   }
 
@@ -4698,7 +4960,7 @@ async function handleCustomerPlaceOrder(req, res) {
       promotion: quote.data.quote.promotion
     },
     items: orderItems.data,
-    payment: createGeideaPaymentPayload({
+    payment: createCheckoutPaymentPayload({
       order: orderInsert.data,
       payment: updatedPayment.data,
       sessionId: geideaSession.session_id,
@@ -4829,7 +5091,7 @@ customerRouter.post('/customer/orders/:orderId/payment-result', async (req, res)
       : 'SDK result was recorded.',
     order_status: order.data.status,
     payment_status: order.data.payment_status,
-    payment: createGeideaPaymentPayload({
+    payment: createCheckoutPaymentPayload({
       order: order.data,
       payment: updatedPayment.data
     })
@@ -5060,7 +5322,7 @@ customerRouter.get('/customer/orders/:orderId', async (req, res) => {
       }
     },
     items: items.data || [],
-    payment: payment.data ? createGeideaPaymentPayload({
+    payment: payment.data ? createCheckoutPaymentPayload({
       order: order.data,
       payment: payment.data
     }) : null,
@@ -5150,7 +5412,7 @@ customerRouter.get('/customer/orders/:orderId/payment-status', async (req, res) 
     order_status: order.data.status,
     payment_status: order.data.payment_status,
     updated_at: order.data.updated_at,
-    payment: payment.data ? createGeideaPaymentPayload({
+    payment: payment.data ? createCheckoutPaymentPayload({
       order: order.data,
       payment: payment.data
     }) : null
