@@ -4,128 +4,165 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>EBTL | Everything But The Liquor</title>
-  <meta name="description" content="EBTL delivers premium cocktail mixers, garnishes, syrups, and ingredients to your beach day. You bring the bottle. We bring the magic." />
+  <meta name="description" content="EBTL delivers premium mixers, garnishes, syrups and cocktail ingredients beachside when you need them. You bring the bottle. We bring the magic." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./landing-assets/style.css" />
 </head>
 <body>
-  <div class="page">
-    <nav class="nav" aria-label="Main navigation">
-      <div class="shell nav-inner">
-        <a class="brand" href="#top" aria-label="EBTL home">
-          <span class="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 64 64" fill="none"><path d="M32 9c-7 8-7 18-7 31" stroke="#F35F4B" stroke-width="4" stroke-linecap="round"/><path d="M30 15c-8-5-15-4-21 4 9-1 16 1 21 6" stroke="#F35F4B" stroke-width="4" stroke-linecap="round"/><path d="M34 14c6-7 13-8 21-3-8 3-14 8-18 16" stroke="#F35F4B" stroke-width="4" stroke-linecap="round"/><path d="M10 47c7-5 15-5 23 0s15 5 21 0" stroke="#1F6F68" stroke-width="4" stroke-linecap="round"/></svg>
-          </span>
-          <span class="brand-name"><strong>EBTL</strong><span>Everything But The Liquor</span></span>
-        </a>
-        <div class="nav-actions">
-          <a class="nav-link" href="#features">Features</a>
-          <a class="nav-link" href="#how-it-works">How it works</a>
-          <a class="nav-link" href="#locations">Locations</a>
-          <a class="download-pill app-link" href="APP_LINK_PLACEHOLDER">Download app</a>
-        </div>
-      </div>
+  <div class="page" id="top">
+    <nav class="site-nav" aria-label="Main navigation">
+      <a class="nav-icon" href="#top" aria-label="Open menu">
+        <span></span>
+        <span></span>
+        <span></span>
+      </a>
+      <a class="wordmark" href="#top" aria-label="EBTL home">EBTL</a>
+      <a class="wave-mark" href="#download-app" aria-label="Download the app">
+        <svg viewBox="0 0 64 32" aria-hidden="true">
+          <path d="M6 10c5.4-5 11.7-5 18.9 0s13.5 5 19 0 10.9-5 16.1 0" />
+          <path d="M6 20c5.4-5 11.7-5 18.9 0s13.5 5 19 0 10.9-5 16.1 0" />
+        </svg>
+      </a>
     </nav>
 
-    <main id="top">
-      <section class="hero">
-        <div class="shell hero-grid">
-          <div class="hero-copy-block">
-            <span class="eyebrow">🌴 Now serving North Coast beach days</span>
-            <h1>You bring the bottle. <em>We bring the magic.</em></h1>
-            <p class="hero-copy">EBTL helps you turn the liquor you already have into polished, beach-ready cocktails by delivering premium mixers, syrups, garnishes, tools, and fresh ingredients straight to your resort.</p>
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-background" aria-hidden="true"></div>
+        <div class="hero-wash" aria-hidden="true"></div>
+        <div class="hero-sparkles" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+
+        <div class="hero-content">
+          <div class="hero-copy reveal-on-load">
+            <p class="eyebrow">The magic starts here</p>
+            <h1 id="hero-title">
+              <span>You bring</span>
+              <span>the bottle.</span>
+              <em>We bring<br />the magic.</em>
+            </h1>
+            <p class="hero-subtitle">Premium mixers, garnishes, syrups and cocktail ingredients delivered beachside when you need them.</p>
             <div class="hero-actions">
-              <a class="primary-btn app-link" href="APP_LINK_PLACEHOLDER">Download the app <span aria-hidden="true">→</span></a>
-              <a class="secondary-btn" href="#how-it-works">See how it works</a>
+              <a class="primary-cta app-link" href="APP_LINK_PLACEHOLDER">Download the App</a>
+              <a class="secondary-cta" href="#explore-cocktails">Explore Cocktails</a>
             </div>
-            <div class="availability-card" id="locations">
-              <span class="pin" aria-hidden="true">⌖</span>
-              <div>
-                <strong>Currently available in the North Coast</strong>
-                <p>Order from EBTL while you are at one of our launch locations.</p>
-                <div class="location-chips"><span>Hacienda White</span><span>Almaza Bay</span><span>Diplo 3</span><span>Ghazala</span></div>
+            <p class="trust-line">
+              <span class="trust-icon" aria-hidden="true">⌖</span>
+              Now serving Egypt’s favorite beach communities.
+            </p>
+          </div>
+
+          <div class="hero-art" aria-label="EBTL mobile app preview">
+            <img class="floating-asset asset-strawberry" src="./landing-assets/images/ebtl-hero-strawberry.webp" alt="" aria-hidden="true" />
+            <img class="floating-asset asset-cocktail" src="./landing-assets/images/ebtl-hero-cocktail.webp" alt="" aria-hidden="true" />
+            <img class="floating-asset asset-shot" src="./landing-assets/images/ebtl-hero-shot-measure.webp" alt="" aria-hidden="true" />
+            <span class="floating-asset lime-slice" aria-hidden="true"></span>
+            <span class="floating-asset mint-leaf leaf-one" aria-hidden="true"></span>
+            <span class="floating-asset mint-leaf leaf-two" aria-hidden="true"></span>
+
+            <div class="phone-orbit reveal-on-load">
+              <div class="phone-shell">
+                <div class="phone-notch"></div>
+                <div class="phone-screen">
+                  <header class="app-topbar">
+                    <button aria-label="Menu"><span></span><span></span></button>
+                    <strong>EBTL</strong>
+                    <span class="app-pill"></span>
+                  </header>
+                  <section class="app-hero-card">
+                    <p>Good afternoon,</p>
+                    <h2>Beach lover 🍹</h2>
+                  </section>
+                  <section class="app-section-header">
+                    <strong>Featured Cocktails</strong>
+                    <span>See all</span>
+                  </section>
+                  <article class="feature-drink-card mango-card">
+                    <div>
+                      <span>Beach Favorite</span>
+                      <h3>Mango Passion Spritz</h3>
+                      <p>Tropical • Refreshing</p>
+                    </div>
+                    <div class="drink-cup" aria-hidden="true"></div>
+                  </article>
+                  <section class="app-section-header compact">
+                    <strong>Popular Right Now</strong>
+                    <span>Shop</span>
+                  </section>
+                  <article class="mini-drink-card">
+                    <div class="espresso-art" aria-hidden="true"></div>
+                    <div>
+                      <h3>Espresso Martini</h3>
+                      <p>Bold, smooth and beach-night ready.</p>
+                    </div>
+                  </article>
+                  <nav class="app-tabbar" aria-label="Preview app tabs">
+                    <span class="active">Home</span><span>Finder</span><span>Shop</span><span>Cart</span>
+                  </nav>
+                </div>
               </div>
             </div>
           </div>
+        </div>
 
-          <div class="phone-stage" aria-label="EBTL app preview">
-            <div class="sun-orb" aria-hidden="true"></div>
-            <span class="floating-chip chip-one">Beach Favorite ✦</span>
-            <span class="floating-chip chip-two">Mixers + garnish delivered</span>
-            <div class="mock-phone">
-              <div class="screen">
-                <div class="screen-hero">
-                  <div class="mini-logo">EBTL</div>
-                  <h2>Find cocktails from <span>your bottle.</span></h2>
-                  <p>Pick what you have. We recommend what to make and what to order.</p>
-                  <div class="cocktail-visual" aria-hidden="true">🍹</div>
-                </div>
-                <div class="app-content">
-                  <div class="finder-cta">
-                    <strong>Choose your bottle</strong>
-                    <div class="bottle-row"><div class="bottle-card active"><div class="bottle-icon"></div>Gin</div><div class="bottle-card active"><div class="bottle-icon vodka"></div>Vodka</div><div class="bottle-card"><div class="bottle-icon rum"></div>Rum</div><div class="bottle-card"><div class="bottle-icon"></div>Tequila</div></div>
-                  </div>
-                  <div class="screen-section-title"><strong>Cocktails you can make</strong><span>12 matches</span></div>
-                  <div class="cocktail-grid">
-                    <div class="drink-card"><div class="drink-photo mojito"></div><div class="drink-info"><span class="tag">Easy</span><strong>Mojito</strong><p>Cool, minty & beach-ready.</p></div></div>
-                    <div class="drink-card"><div class="drink-photo collins"></div><div class="drink-info"><span class="tag">Popular</span><strong>Tom Collins</strong><p>Crisp, citrusy & refreshing.</p></div></div>
-                    <div class="drink-card"><div class="drink-photo cosmo"></div><div class="drink-info"><span class="tag">Sunset</span><strong>Cosmo</strong><p>Smooth, bright & iconic.</p></div></div>
-                    <div class="drink-card"><div class="drink-photo fizz"></div><div class="drink-info"><span class="tag">Fresh</span><strong>Gin Fizz</strong><p>Light, bubbly & timeless.</p></div></div>
-                  </div>
-                </div>
-                <div class="screen-tabs"><span>Home</span><span>Finder</span><span>Shop</span><span>♡</span><span>Profile</span></div>
-              </div>
-            </div>
+        <a class="scroll-cue" href="#explore-cocktails" aria-label="Scroll to explore cocktails">
+          <span></span>
+        </a>
+      </section>
+
+      <section class="section cocktail-strip" id="explore-cocktails">
+        <div class="section-inner reveal-on-scroll">
+          <p class="section-kicker">Cocktail concierge</p>
+          <h2>Find cocktails around the bottle you already brought.</h2>
+          <p>Choose your liquor, discover beach-ready recipes, then order the mixers, garnishes and ingredients that complete the serve.</p>
+          <div class="cocktail-pills" aria-label="Popular cocktail styles">
+            <span>Gin Spritz</span><span>Paloma</span><span>Mojito</span><span>Espresso Martini</span>
           </div>
         </div>
       </section>
 
-      <section class="section" id="features">
-        <div class="shell">
-          <div class="section-header"><div class="section-kicker">Why EBTL</div><h2>Gourmet cocktails without the packing list.</h2><p>EBTL takes the stress out of beach hosting. No forgotten mixers, no last-minute garnish hunt, no recipe guesswork. Just choose your bottle and order the rest.</p></div>
-          <div class="feature-grid">
-            <article class="feature-card"><div class="feature-icon">🍾</div><h3>Bottle-first cocktail finder</h3><p>Tell the app what liquor you already have and instantly discover cocktails you can make with it.</p></article>
-            <article class="feature-card"><div class="feature-icon">🍋</div><h3>Curated mixers and garnishes</h3><p>From syrups and fresh citrus to herbs, salts, soda, and garnish kits, EBTL recommends exactly what your recipe needs.</p></article>
-            <article class="feature-card"><div class="feature-icon">📦</div><h3>Delivered to your beach day</h3><p>Order the missing ingredients and have them delivered where you are, so the beach day keeps flowing.</p></article>
+      <section class="section steps-section" id="how-it-works">
+        <div class="section-inner">
+          <div class="section-heading reveal-on-scroll">
+            <p class="section-kicker">How it works</p>
+            <h2>Three steps from bottle to beach cocktail.</h2>
           </div>
-        </div>
-      </section>
-
-      <section class="section" id="how-it-works">
-        <div class="shell">
-          <div class="section-header"><div class="section-kicker">How it works</div><h2>Three taps from bottle to cocktail.</h2><p>The app is designed around speed and convenience, especially for mobile users ordering from the beach.</p></div>
-          <div class="steps">
-            <article class="step-card"><div class="step-number">1</div><h3>Pick your bottle</h3><p>Select the liquor you already have at home, in your cooler, or at your beach house.</p><div class="step-art">🍾</div></article>
-            <article class="step-card"><div class="step-number">2</div><h3>Choose your cocktail</h3><p>Browse recipes that match your bottle, from easy beach favorites to more impressive signature serves.</p><div class="step-art">🍸</div></article>
-            <article class="step-card"><div class="step-number">3</div><h3>Order everything else</h3><p>We prepare the recommended mixers, syrups, garnishes, and cocktail ingredients and get them to you.</p><div class="step-art">📦</div></article>
-          </div>
-        </div>
-      </section>
-
-      <section class="location-section">
-        <div class="shell">
-          <div class="location-panel">
-            <div><div class="section-kicker">Launch areas</div><h2>Now available across select North Coast destinations.</h2><p>EBTL is currently serving Hacienda White, Almaza Bay, Diplo 3, and Ghazala. Choose your location in the app and start building your cocktail order.</p></div>
-            <div class="map-card"><div class="map-line"></div><div class="location-list"><div class="location-item"><span class="location-dot">1</span><div><strong>Hacienda White</strong><span>North Coast</span></div></div><div class="location-item"><span class="location-dot">2</span><div><strong>Almaza Bay</strong><span>North Coast</span></div></div><div class="location-item"><span class="location-dot">3</span><div><strong>Diplo 3</strong><span>North Coast</span></div></div><div class="location-item"><span class="location-dot">4</span><div><strong>Ghazala</strong><span>North Coast</span></div></div></div></div>
+          <div class="steps-grid">
+            <article class="step-card reveal-on-scroll">
+              <span>01</span>
+              <h3>Choose the bottle you have</h3>
+              <p>Tell EBTL whether you brought gin, vodka, tequila, rum, whiskey or wine.</p>
+            </article>
+            <article class="step-card reveal-on-scroll">
+              <span>02</span>
+              <h3>Pick your cocktail</h3>
+              <p>Browse cocktails you can make with real availability at your selected beach cart.</p>
+            </article>
+            <article class="step-card reveal-on-scroll">
+              <span>03</span>
+              <h3>Order everything but the liquor</h3>
+              <p>Pay in the app and get notified when your order is ready for pickup.</p>
+            </article>
           </div>
         </div>
       </section>
 
       <section class="download-section" id="download-app">
-        <div class="shell">
-          <div class="download-card">
-            <div><div class="section-kicker">Download EBTL</div><h2>Your beach cocktail kit starts here.</h2><p>Download the app, pick your bottle, discover cocktails, and order the premium ingredients that complete the experience.</p><div class="store-buttons"><a class="store-btn app-link" href="APP_LINK_PLACEHOLDER"><span><small>Download on the</small><strong>App Store</strong></span></a><a class="store-btn app-link" href="APP_LINK_PLACEHOLDER"><span><small>Get it on</small><strong>Google Play</strong></span></a></div></div>
-            <div class="qr-placeholder"><div>APP LINK<br>PLACEHOLDER</div></div>
+        <div class="download-card reveal-on-scroll">
+          <p class="section-kicker">Download EBTL</p>
+          <h2>Your beach cocktail kit starts here.</h2>
+          <p>Download the app, pick your bottle, discover cocktails and order the premium ingredients that complete the experience.</p>
+          <div class="download-actions">
+            <a class="primary-cta app-link" href="APP_LINK_PLACEHOLDER">Download the App</a>
+            <a class="secondary-cta" href="#top">Back to top</a>
           </div>
         </div>
       </section>
     </main>
-
-    <footer><div class="shell footer-inner"><div class="brand"><span class="brand-mark"><svg viewBox="0 0 64 64" fill="none"><path d="M32 9c-7 8-7 18-7 31" stroke="#F35F4B" stroke-width="4" stroke-linecap="round"/><path d="M10 47c7-5 15-5 23 0s15 5 21 0" stroke="#1F6F68" stroke-width="4" stroke-linecap="round"/></svg></span><span class="brand-name"><strong>EBTL</strong><span>Everything But The Liquor</span></span></div><p class="legal-note">EBTL sells cocktail ingredients, mixers, garnishes, and related products. Liquor is not included and must be supplied by the customer.</p></div></footer>
-    <a class="mobile-sticky-download app-link" href="APP_LINK_PLACEHOLDER">Download the app</a>
   </div>
+
   <script src="./landing-assets/script.js"></script>
 </body>
 </html>
