@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/ebtl_colors.dart';
 import '../../models/app_data.dart';
 import '../../models/cocktail_models.dart';
 import '../../services/api_service.dart';

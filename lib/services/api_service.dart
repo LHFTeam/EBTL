@@ -26,6 +26,7 @@ class ApiService {
   static const _customerIdKey = 'customer_id';
   static const _selectedLocationIdKey = 'selected_location_id';
   static const _selectedLocationNameKey = 'selected_location_name';
+  static const _onboardingCompletedKey = 'onboarding_completed_v1';
 
   static const Duration _defaultRequestTimeout = Duration(seconds: 45);
   static const Duration _sessionRequestTimeout = Duration(seconds: 90);
@@ -515,6 +516,15 @@ class ApiService {
 
   static Future<String?> getCustomerToken() async {
     return _storage.read(key: _tokenKey);
+  }
+
+  static Future<bool> hasCompletedOnboarding() async {
+    final value = await _storage.read(key: _onboardingCompletedKey);
+    return value == 'true';
+  }
+
+  static Future<void> markOnboardingCompleted() async {
+    await _storage.write(key: _onboardingCompletedKey, value: 'true');
   }
 
   static Future<String?> getSelectedLocationId() async {

@@ -18,6 +18,7 @@ import 'features/cocktail_detail/cocktail_detail_screen.dart';
 import 'features/cart/cart_screen.dart';
 import 'features/checkout/checkout_screen.dart';
 import 'features/profile/profile_screen.dart';
+import 'features/onboarding/onboarding_screen.dart';
 
 /* -------------------------------- SHARED WIDGETS -------------------------------- */
 import 'shared/widgets/ebtl_bottom_nav.dart';
@@ -80,7 +81,51 @@ class EbtlApp extends StatelessWidget {
           displayColor: EbtlColors.navy,
         ),
       ),
-      home: const RootShell(),
+      home: const AppStartupGate(),
+    );
+  }
+}
+
+class AppStartupGate extends StatefulWidget {
+  const AppStartupGate({super.key});
+
+  @override
+  State<AppStartupGate> createState() => _AppStartupGateState();
+}
+
+class _AppStartupGateState extends State<AppStartupGate> {
+  late Future<bool> _hasCompletedOnboardingFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _hasCompletedOnboardingFuture = ApiService.hasCompletedOnboarding();
+  }
+
+  Future<void> _completeOnboarding() async {
+    await ApiService.markOnboardingCompleted();
+    if (!mounted) return;
+
+    setState(() {
+      _hasCompletedOnboardingFuture = Future.value(true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: _hasCompletedOnboardingFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return theLoadingScaffold();
+        }
+
+        if (snapshot.data == true) {
+          return const RootShell();
+        }
+
+        return OnboardingScreen(onCompleted: _completeOnboarding);
+      },
     );
   }
 }
@@ -243,6 +288,12 @@ class _RootShellState extends State<RootShell> {
                         fulfillmentType: fulfillmentType,
                         onEditCart: () => Navigator.of(context).pop(),
                         onCartChanged: onCartChanged,
+                        onOrderCompleted: () {
+                          Navigator.of(context).pop();
+                          if (!mounted) return;
+                          setState(() => selectedIndex = 0);
+                          reloadAppData();
+                        },
                       ),
                     ),
                   );

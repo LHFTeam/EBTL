@@ -96,3 +96,5 @@ flutter:
     - assets/banners/
     - assets/images/filters/
     - assets/animations/ebtl_loader.webp
+    - assets/images/onboarding/
+    - assets/images/order_confirmation/

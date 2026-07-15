@@ -407,9 +407,10 @@ class CheckoutPaymentMethod {
 
   bool get isCard => key == 'geidea_card';
   bool get isApplePay => key == 'geidea_apple_pay';
+  bool get isDemoCheckout => key == 'demo_checkout';
 
   bool get isAllowedCheckoutMethod {
-    return isCard || isApplePay;
+    return isCard || isApplePay || isDemoCheckout;
   }
 }
 
@@ -556,6 +557,7 @@ class CheckoutOrder {
   final String? customerPhone;
   final String? address;
   final CheckoutSummary totals;
+  final bool hasTotals;
   final CheckoutPromotion? promotion;
 
   const CheckoutOrder({
@@ -568,11 +570,13 @@ class CheckoutOrder {
     required this.customerPhone,
     required this.address,
     required this.totals,
+    required this.hasTotals,
     required this.promotion,
   });
 
   factory CheckoutOrder.fromJson(Map<String, dynamic> json) {
     final promotionMap = asMap(json['promotion']);
+    final totalsMap = asMap(json['totals']);
 
     return CheckoutOrder(
       id: readString(json['id']),
@@ -583,7 +587,8 @@ class CheckoutOrder {
       createdAt: nullableString(json['created_at']),
       customerPhone: nullableString(json['customer_phone']),
       address: nullableString(json['address']),
-      totals: CheckoutSummary.fromJson(asMap(json['totals'])),
+      totals: CheckoutSummary.fromJson(totalsMap),
+      hasTotals: totalsMap.isNotEmpty,
       promotion: promotionMap.isEmpty
           ? null
           : CheckoutPromotion.fromJson(promotionMap),
