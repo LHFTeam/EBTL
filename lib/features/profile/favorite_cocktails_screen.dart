@@ -71,9 +71,7 @@ class _FavoriteCocktailsScreenState extends State<FavoriteCocktailsScreen> {
         localFavorites = previous;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not remove this favorite.')),
-      );
+      showAppSnackBar(context, 'Could not remove this favorite.');
     }
   }
 

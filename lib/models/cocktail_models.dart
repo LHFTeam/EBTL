@@ -182,9 +182,5 @@ class Cocktail {
         : names.join(', ');
   }
 
-  String get priceLabel {
-    final price = startingPriceIncVat;
-    if (price == null) return currency;
-    return formatMoney(price, currency);
-  }
+  String get priceLabel => formatOptionalPrice(startingPriceIncVat, currency);
 }

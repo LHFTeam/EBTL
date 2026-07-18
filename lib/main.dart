@@ -23,8 +23,6 @@ import 'features/onboarding/onboarding_screen.dart';
 /* -------------------------------- SHARED WIDGETS -------------------------------- */
 import 'shared/widgets/ebtl_bottom_nav.dart';
 
-/* --------------------------------- FEATURE WIDGETS --------------------------------- */
-
 /* --------------------------------- SERVICES --------------------------------- */
 import 'services/api_service.dart';
 
@@ -36,18 +34,10 @@ void main() {
 /*
   EBTL CUSTOMER APP - CUSTOMER API VERSION
 
-  Screens included in this file:
-  1. Home
-  2. Cocktail Finder
-  3. Cart
-
-  Backend customer API namespace:
-  - /api/customer/session
-  - /api/customer/home
-  - /api/customer/cocktail-finder/options
-  - /api/customer/cocktails
-  - /api/customer/cart
-  - /api/customer/cart/items
+  This file holds the app shell: EbtlApp (theme), AppStartupGate
+  (onboarding gate), and RootShell (bottom-nav tab host). Screens live
+  in lib/features/; all backend access goes through ApiService
+  (the /api/customer namespace).
 
   Important:
   - No demo fallback data.
@@ -193,11 +183,7 @@ class _RootShellState extends State<RootShell> {
     String? liquorTypeId,
   }) {
     if (cocktail.slug.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('This cocktail is missing a detail link.'),
-        ),
-      );
+      showAppSnackBar(context, 'This cocktail is missing a detail link.');
       return;
     }
 

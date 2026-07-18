@@ -117,9 +117,7 @@ class _ShopCategoryProductsScreenState
   }
 
   void showMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    showAppSnackBar(context, message);
   }
 
   Future<void> quickAddProduct(ShopProduct product) async {
@@ -167,15 +165,12 @@ class _ShopCategoryProductsScreenState
 
       setState(() => addingProductId = null);
 
-      if (error is ApiException) {
-        showMessage(
-          error.blockingReasons.isEmpty
-              ? error.message
-              : [error.message, ...error.blockingReasons].join('\n'),
-        );
-      } else {
-        showMessage('Could not add this item to your cart.');
-      }
+      showMessage(
+        apiErrorMessage(
+          error,
+          fallback: 'Could not add this item to your cart.',
+        ),
+      );
     }
   }
 

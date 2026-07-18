@@ -2,7 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme/ebtl_colors.dart';
+import 'brand_widgets.dart';
 import 'ebtl_loading_graphic.dart';
+
+/// The app's standard lightweight feedback: a plain text snackbar.
+void showAppSnackBar(BuildContext context, String message) {
+  ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text(message)));
+}
 
 Widget theLoadingScaffold() {
   return const Scaffold(
@@ -150,14 +158,7 @@ class InlineErrorCard extends StatelessWidget {
             const SizedBox(height: 14),
             ElevatedButton(
               onPressed: onRetry,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: EbtlColors.coral,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
+              style: ebtlCoralButtonStyle(radius: 16),
               child: Text(
                 'Try Again',
                 style: GoogleFonts.manrope(fontWeight: FontWeight.w900),
@@ -241,14 +242,7 @@ class AppErrorScreen extends StatelessWidget {
                     height: 54,
                     child: ElevatedButton(
                       onPressed: onRetry,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: EbtlColors.coral,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                      ),
+                      style: ebtlCoralButtonStyle(),
                       child: Text(
                         'Try Again',
                         style: GoogleFonts.manrope(
@@ -261,28 +255,6 @@ class AppErrorScreen extends StatelessWidget {
                 ],
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class ComingSoonScreen extends StatelessWidget {
-  final String title;
-
-  const ComingSoonScreen({super.key, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Center(
-        child: Text(
-          '$title coming soon',
-          style: GoogleFonts.playfairDisplay(
-            color: EbtlColors.navy,
-            fontSize: 32,
-            fontWeight: FontWeight.w800,
           ),
         ),
       ),

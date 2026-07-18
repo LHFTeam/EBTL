@@ -1,3 +1,4 @@
+import '../core/utils/formatters.dart';
 import '../core/utils/json_helpers.dart';
 
 class CustomerSession {
@@ -89,13 +90,11 @@ class ServiceLocation {
     );
   }
 
-  String get subtitle {
-    final parts = [
-      compoundName,
-      beachName,
-    ].whereType<String>().where((part) => part.trim().isNotEmpty).toList();
-    return parts.isEmpty ? 'Available service area' : parts.join(' • ');
-  }
+  String get subtitle => locationSubtitle(
+    compoundName,
+    beachName,
+    fallback: 'Available service area',
+  );
 }
 
 class ProductTag {

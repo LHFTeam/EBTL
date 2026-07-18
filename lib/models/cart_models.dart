@@ -110,14 +110,11 @@ class CartLocation {
     );
   }
 
-  String get subtitle {
-    final parts = [
-      compoundName,
-      beachName,
-    ].whereType<String>().where((part) => part.trim().isNotEmpty).toList();
-
-    return parts.isEmpty ? 'Selected beach cart' : parts.join(' • ');
-  }
+  String get subtitle => locationSubtitle(
+    compoundName,
+    beachName,
+    fallback: 'Selected beach cart',
+  );
 }
 
 class LocationCurrentStatus {

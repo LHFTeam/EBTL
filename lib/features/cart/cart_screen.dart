@@ -80,9 +80,7 @@ class _CartScreenState extends State<CartScreen> {
 
   void setFulfillmentType(String value) {
     if (value == FulfillmentTypes.deliveryToUnit) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Delivery is coming soon.')));
+      showAppSnackBar(context, 'Delivery is coming soon.');
       return;
     }
 
@@ -95,12 +93,7 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   String mutationErrorMessage(Object error) {
-    if (error is ApiException) {
-      if (error.blockingReasons.isEmpty) return error.message;
-      return [error.message, ...error.blockingReasons].join('\n');
-    }
-
-    return 'Could not update your cart.';
+    return apiErrorMessage(error, fallback: 'Could not update your cart.');
   }
 
   Future<void> updateQuantity(CartPageItem item, int quantity) async {
@@ -120,9 +113,7 @@ class _CartScreenState extends State<CartScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() => mutatingItemIds.remove(item.id));
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(mutationErrorMessage(error))));
+      showAppSnackBar(context, mutationErrorMessage(error));
     }
   }
 
@@ -140,9 +131,7 @@ class _CartScreenState extends State<CartScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() => mutatingItemIds.remove(item.id));
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(mutationErrorMessage(error))));
+      showAppSnackBar(context, mutationErrorMessage(error));
     }
   }
 
@@ -160,9 +149,7 @@ class _CartScreenState extends State<CartScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() => isClearing = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(mutationErrorMessage(error))));
+      showAppSnackBar(context, mutationErrorMessage(error));
     }
   }
 
@@ -173,9 +160,7 @@ class _CartScreenState extends State<CartScreen> {
     if (cartId == null || cartId.isEmpty) return;
 
     if (locationId == null || locationId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Choose a beach cart first.')),
-      );
+      showAppSnackBar(context, 'Choose a beach cart first.');
       return;
     }
 
@@ -1033,13 +1018,7 @@ class CartEmptyState extends StatelessWidget {
                 onPressed: onOpenFinder,
                 icon: const Icon(Icons.local_bar_outlined),
                 label: const Text('Find Cocktails'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: EbtlColors.coral,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                  ),
+                style: ebtlCoralButtonStyle(
                   textStyle: GoogleFonts.manrope(
                     fontSize: 15,
                     fontWeight: FontWeight.w900,
@@ -1157,15 +1136,8 @@ class CartOrderSummaryCard extends StatelessWidget {
                 onPressed: onCheckout,
                 icon: const Icon(Icons.lock_outline),
                 label: const Text('Proceed to Checkout'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: EbtlColors.coral,
-                  disabledBackgroundColor: EbtlColors.sand,
-                  foregroundColor: Colors.white,
-                  disabledForegroundColor: EbtlColors.muted,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                  ),
+                style: ebtlCoralButtonStyle(
+                  withDisabledColors: true,
                   textStyle: GoogleFonts.manrope(
                     fontSize: 16,
                     fontWeight: FontWeight.w900,

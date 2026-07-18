@@ -69,16 +69,7 @@ class ShopCategory {
 }
 
 List<ShopCategory> sortShopCategories(List<ShopCategory> categories) {
-  final sorted = [...categories];
-
-  sorted.sort((a, b) {
-    final orderCompare = a.sortOrder.compareTo(b.sortOrder);
-    if (orderCompare != 0) return orderCompare;
-
-    return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-  });
-
-  return sorted;
+  return sortByOrderThenName(categories, (c) => c.sortOrder, (c) => c.name);
 }
 
 class ShopResponse {
@@ -354,11 +345,8 @@ class ShopProduct {
     }
   }
 
-  String get priceLabel {
-    final price = startingPriceIncVat;
-    if (price == null) return currency;
-    return formatMoney(price, currency);
-  }
+  String get priceLabel =>
+      formatOptionalPrice(startingPriceIncVat, currency);
 
   String get unavailableReason {
     final reason = availability.reason?.trim();

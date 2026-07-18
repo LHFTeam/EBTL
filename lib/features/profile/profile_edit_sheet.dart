@@ -5,6 +5,7 @@ import '../../core/network/api_exception.dart';
 import '../../core/theme/ebtl_colors.dart';
 import '../../models/profile_models.dart';
 import '../../services/api_service.dart';
+import '../../shared/widgets/app_state_widgets.dart';
 import '../../shared/widgets/checkout_input_field.dart';
 import 'widgets/profile_widgets.dart';
 
@@ -98,12 +99,9 @@ class _ProfileEditSheetState extends State<ProfileEditSheet> {
 
       setState(() => isSaving = false);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            error is ApiException ? error.message : error.toString(),
-          ),
-        ),
+      showAppSnackBar(
+        context,
+        error is ApiException ? error.message : error.toString(),
       );
     }
   }

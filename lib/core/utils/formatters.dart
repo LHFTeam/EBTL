@@ -6,6 +6,28 @@ String formatMoney(double value, String currency) {
   return '$currency $amount';
 }
 
+/// Formats an optional price, falling back to the bare [currency] label when
+/// no price is available (used by product/cocktail `priceLabel` getters).
+String formatOptionalPrice(double? price, String currency) {
+  if (price == null) return currency;
+  return formatMoney(price, currency);
+}
+
+/// Builds a beach-cart location subtitle from its compound and beach names,
+/// joined with ' • ', falling back to [fallback] when both are blank.
+String locationSubtitle(
+  String? compoundName,
+  String? beachName, {
+  required String fallback,
+}) {
+  final parts = [
+    compoundName,
+    beachName,
+  ].whereType<String>().where((part) => part.trim().isNotEmpty).toList();
+
+  return parts.isEmpty ? fallback : parts.join(' • ');
+}
+
 String formatProfileDateTime(String? isoValue) {
   if (isoValue == null || isoValue.trim().isEmpty) return 'Time unavailable';
 

@@ -547,9 +547,5 @@ class RelatedCocktail {
 
   double? get priceIncVat => variant?.priceIncVat ?? startingPriceIncVat;
 
-  String get priceLabel {
-    final price = priceIncVat;
-    if (price == null) return currency;
-    return formatMoney(price, currency);
-  }
+  String get priceLabel => formatOptionalPrice(priceIncVat, currency);
 }

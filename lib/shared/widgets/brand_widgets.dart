@@ -3,6 +3,30 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme/ebtl_colors.dart';
 
+/// The app's primary coral filled-button style: white foreground, no
+/// elevation, rounded corners of [radius]. Set [withDisabledColors] to add
+/// the sand/muted disabled palette. [textStyle] and [shadowColor] are passed
+/// through when provided so call sites keep their exact appearance.
+ButtonStyle ebtlCoralButtonStyle({
+  double radius = 18,
+  bool withDisabledColors = false,
+  TextStyle? textStyle,
+  Color? shadowColor,
+}) {
+  return ElevatedButton.styleFrom(
+    backgroundColor: EbtlColors.coral,
+    disabledBackgroundColor: withDisabledColors ? EbtlColors.sand : null,
+    foregroundColor: Colors.white,
+    disabledForegroundColor: withDisabledColors ? EbtlColors.muted : null,
+    elevation: 0,
+    shadowColor: shadowColor,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(radius),
+    ),
+    textStyle: textStyle,
+  );
+}
+
 class EbtlLogo extends StatelessWidget {
   const EbtlLogo({super.key});
 

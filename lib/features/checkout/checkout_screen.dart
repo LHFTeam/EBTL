@@ -198,14 +198,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return 'checkout-${DateTime.now().microsecondsSinceEpoch}';
   }
 
-  String errorMessage(Object error) {
-    if (error is ApiException) {
-      if (error.blockingReasons.isEmpty) return error.message;
-      return [error.message, ...error.blockingReasons].join('\n');
-    }
-
-    return error.toString();
-  }
+  String errorMessage(Object error) => apiErrorMessage(error);
 
   Future<void> applyPromo(CheckoutData checkout) async {
     if (isApplyingPromo) return;
@@ -374,14 +367,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   height: 52,
                   child: ElevatedButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: EbtlColors.coral,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                    ),
+                    style: ebtlCoralButtonStyle(),
                     child: Text(
                       'Check Payment Status',
                       style: GoogleFonts.manrope(fontWeight: FontWeight.w900),
@@ -427,9 +413,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     final localReason = firstLocalBlockingReason(checkout);
     if (localReason != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(localReason)));
+      showAppSnackBar(context, localReason);
       return;
     }
 
@@ -470,9 +454,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       setState(() => isPlacingOrder = false);
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(errorMessage(error))));
+      showAppSnackBar(context, errorMessage(error));
     }
   }
 
@@ -1544,16 +1526,7 @@ class CheckoutSummaryCard extends StatelessWidget {
                     onPressed: canPlaceOrder && !isPlacingOrder
                         ? onPlaceOrder
                         : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: EbtlColors.coral,
-                      disabledBackgroundColor: EbtlColors.sand,
-                      foregroundColor: Colors.white,
-                      disabledForegroundColor: EbtlColors.muted,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                    ),
+                    style: ebtlCoralButtonStyle(withDisabledColors: true),
                     child: isPlacingOrder
                         ? const SizedBox(
                             width: 22,
@@ -1920,14 +1893,9 @@ class OrderConfirmedScreen extends StatelessWidget {
                           height: 58,
                           child: ElevatedButton(
                             onPressed: onDone,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: EbtlColors.coral,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
+                            style: ebtlCoralButtonStyle(
+                              radius: 30,
                               shadowColor: Colors.transparent,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(30),
-                              ),
                             ),
                             child: Text(
                               'Ok',
@@ -2344,14 +2312,7 @@ class CheckoutResultScreen extends StatelessWidget {
                     height: 54,
                     child: ElevatedButton(
                       onPressed: onDone,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: EbtlColors.coral,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                      ),
+                      style: ebtlCoralButtonStyle(),
                       child: Text(
                         'Done',
                         style: GoogleFonts.manrope(fontWeight: FontWeight.w900),

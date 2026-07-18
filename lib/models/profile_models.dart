@@ -87,12 +87,6 @@ class CustomerProfile {
     return null;
   }
 
-  bool get isIncomplete {
-    return !completion.hasFullName ||
-        !completion.hasPhone ||
-        !completion.hasEmail;
-  }
-
   String get displayName =>
       fullName?.trim().isNotEmpty == true ? fullName!.trim() : 'Add your name';
 
@@ -101,17 +95,6 @@ class CustomerProfile {
 
   String get displayPhone =>
       phone?.trim().isNotEmpty == true ? phone!.trim() : 'Add your phone';
-
-  String get displayGenderLabel {
-    switch (gender) {
-      case 'male':
-        return 'Male';
-      case 'female':
-        return 'Female';
-      default:
-        return 'Not selected';
-    }
-  }
 }
 
 class CustomerAvatar {

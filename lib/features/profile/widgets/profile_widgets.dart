@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/ebtl_colors.dart';
-//import '../../../core/utils/formatters.dart';
 import '../../../models/profile_models.dart';
 import '../../../shared/widgets/brand_widgets.dart';
 import '../../../shared/widgets/detail_card.dart';

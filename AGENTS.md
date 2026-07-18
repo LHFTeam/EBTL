@@ -95,11 +95,14 @@ assets/                     # images, ingredient SVGs, banners, onboarding,
 test/                       # widget_test.dart (stale template — see above)
 ```
 
-Root-level `*.patch` files (`ebtl_app_demo_order_confirmed_notifications.patch`,
-`ebtl_customer_app_customization_update.patch`) are **historical artifacts of
-already-applied changes**. Never apply, regenerate, or edit them; ignore them
-when searching for the current implementation (they contain stale copies of
-screen code).
+The root `*.patch` files that used to live here
+(`ebtl_app_demo_order_confirmed_notifications.patch`,
+`ebtl_customer_app_customization_update.patch`) were stale artifacts and have
+been removed: the customization patch's changes were already applied to the
+code, and the notifications patch (customer notifications screen + push
+service) was never applied — no notification/push code exists in `lib/`. If
+that feature is wanted, implement it fresh against the current code rather
+than resurrecting the patch from git history.
 
 ## Runtime architecture
 
@@ -226,9 +229,9 @@ an endpoint, copy the existing shape:
    explicit request.
 2. **Run `flutter analyze` before committing** (and `flutter test` when tests
    exist for what you touched). Report honestly if the SDK is unavailable.
-3. **Don't touch** the root `*.patch` files, `pubspec.lock` (unless changing
-   dependencies), `.metadata`, or generated platform template files unless
-   the task is specifically about them.
+3. **Don't touch** `pubspec.lock` (unless changing dependencies),
+   `.metadata`, or generated platform template files unless the task is
+   specifically about them.
 4. Backend contract changes originate in the admin-dashboard repo — this app
    only consumes `/api/customer/*`. If a task implies a backend change,
    flag it instead of faking the data client-side.

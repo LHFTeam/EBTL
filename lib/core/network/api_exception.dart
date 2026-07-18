@@ -1,3 +1,15 @@
+/// User-facing message for a failed API call: the ApiException message plus
+/// its blocking reasons when present, else [fallback] (or `error.toString()`
+/// when no fallback is given) for non-API errors.
+String apiErrorMessage(Object error, {String? fallback}) {
+  if (error is ApiException) {
+    if (error.blockingReasons.isEmpty) return error.message;
+    return [error.message, ...error.blockingReasons].join('\n');
+  }
+
+  return fallback ?? error.toString();
+}
+
 class ApiException implements Exception {
   final String message;
   final String endpoint;

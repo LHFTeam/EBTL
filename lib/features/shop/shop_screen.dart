@@ -226,9 +226,7 @@ class _ShopScreenState extends State<ShopScreen> {
   }
 
   void showMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    showAppSnackBar(context, message);
   }
 
   ProductVariant? orderableVariantFor(ShopProduct product) {
@@ -295,15 +293,12 @@ class _ShopScreenState extends State<ShopScreen> {
 
       setState(() => addingProductId = null);
 
-      if (error is ApiException) {
-        showMessage(
-          error.blockingReasons.isEmpty
-              ? error.message
-              : [error.message, ...error.blockingReasons].join('\n'),
-        );
-      } else {
-        showMessage('Could not add this item to your cart.');
-      }
+      showMessage(
+        apiErrorMessage(
+          error,
+          fallback: 'Could not add this item to your cart.',
+        ),
+      );
     }
   }
 

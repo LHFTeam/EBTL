@@ -46,9 +46,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void showComingSoon(String title) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('$title coming soon.')));
+    showAppSnackBar(context, '$title coming soon.');
   }
 
   Future<void> openEditProfile(CustomerProfile profile) async {
@@ -106,9 +104,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() => isLoggingOut = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not log out: $error')));
+      showAppSnackBar(context, 'Could not log out: $error');
     }
   }
 

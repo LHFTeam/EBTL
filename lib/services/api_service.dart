@@ -444,12 +444,6 @@ class ApiService {
     return CustomerProfileUpdateResponse.fromJson(json);
   }
 
-  static Future<CustomerProfileUpdateResponse> updateCustomerGender(
-    String? gender,
-  ) async {
-    return updateCustomerProfile(gender: gender, includeGender: true);
-  }
-
   static Future<CustomerOrdersResponse> fetchCustomerOrders({
     int limit = 20,
     int offset = 0,

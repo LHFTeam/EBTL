@@ -8,6 +8,7 @@ import '../../core/theme/ebtl_text_styles.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/cocktail_detail_models.dart';
 import '../../services/api_service.dart';
+import '../../shared/widgets/app_state_widgets.dart';
 import '../../shared/widgets/bottle_widgets.dart';
 import '../../shared/widgets/brand_widgets.dart';
 import '../../shared/widgets/ebtl_bottom_nav.dart';
@@ -143,13 +144,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
   }
 
   String addToCartErrorMessage(Object error) {
-    if (error is ApiException) {
-      if (error.blockingReasons.isEmpty) return error.message;
-
-      return [error.message, ...error.blockingReasons].join('\n');
-    }
-
-    return 'Could not add item to cart.';
+    return apiErrorMessage(error, fallback: 'Could not add item to cart.');
   }
 
   Future<void> addToCart(CocktailDetail cocktail) async {
@@ -159,30 +154,22 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
     final variant = cocktail.variant;
 
     if (locationId == null || locationId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Choose a beach cart first.')),
-      );
+      showAppSnackBar(context, 'Choose a beach cart first.');
       return;
     }
 
     if (variant == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No serving size is available.')),
-      );
+      showAppSnackBar(context, 'No serving size is available.');
       return;
     }
 
     if (selectedQuantity < 1) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Choose at least 1 item.')));
+      showAppSnackBar(context, 'Choose at least 1 item.');
       return;
     }
 
     if (!cocktail.canAddToCart) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(cocktail.availabilityMessage)));
+      showAppSnackBar(context, cocktail.availabilityMessage);
       return;
     }
 
@@ -210,17 +197,13 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
 
       widget.onCartChanged();
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(result.successMessage)));
+      showAppSnackBar(context, result.successMessage);
     } catch (error) {
       if (!mounted) return;
 
       setState(() => isAddingToCart = false);
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(addToCartErrorMessage(error))));
+      showAppSnackBar(context, addToCartErrorMessage(error));
     }
   }
 
@@ -275,10 +258,9 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                       cartCount: cartCount,
                       onBack: () => Navigator.of(context).pop(),
                       onFavorite: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Favorites are coming soon.'),
-                          ),
+                        showAppSnackBar(
+                          context,
+                          'Favorites are coming soon.',
                         );
                       },
                       onCart: () => widget.onBottomNavTap(3),
@@ -1613,15 +1595,8 @@ class CocktailDetailAddBar extends StatelessWidget {
                           )
                         : const Icon(Icons.shopping_bag_outlined),
                     label: Text(label),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: EbtlColors.coral,
-                      disabledBackgroundColor: EbtlColors.sand,
-                      foregroundColor: Colors.white,
-                      disabledForegroundColor: EbtlColors.muted,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
+                    style: ebtlCoralButtonStyle(
+                      withDisabledColors: true,
                       textStyle: GoogleFonts.manrope(
                         fontSize: 16,
                         fontWeight: FontWeight.w900,
@@ -1748,14 +1723,7 @@ class CocktailDetailErrorState extends StatelessWidget {
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: onRetry,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: EbtlColors.coral,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                    ),
+                    style: ebtlCoralButtonStyle(),
                     child: Text(
                       'Try Again',
                       style: GoogleFonts.manrope(fontWeight: FontWeight.w900),
