@@ -6,11 +6,13 @@ import '../../core/theme/ebtl_colors.dart';
 class EbtlBottomNav extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onTap;
+  final bool showProfileDot;
 
   const EbtlBottomNav({
     super.key,
     required this.selectedIndex,
     required this.onTap,
+    this.showProfileDot = false,
   });
 
   @override
@@ -40,10 +42,32 @@ class EbtlBottomNav extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    active ? item.$2 : item.$1,
-                    color: active ? EbtlColors.coral : Colors.black87,
-                    size: 27,
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Icon(
+                        active ? item.$2 : item.$1,
+                        color: active ? EbtlColors.coral : Colors.black87,
+                        size: 27,
+                      ),
+                      if (index == 4 && showProfileDot)
+                        Positioned(
+                          top: -1,
+                          right: -5,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: EbtlColors.coral,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: EbtlColors.white,
+                                width: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(

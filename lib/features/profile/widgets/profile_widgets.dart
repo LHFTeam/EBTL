@@ -39,11 +39,13 @@ class ProfileHeaderSkeleton extends StatelessWidget {
 class ProfileHeader extends StatelessWidget {
   final VoidCallback onNotifications;
   final VoidCallback onSettings;
+  final int unreadCount;
 
   const ProfileHeader({
     super.key,
     required this.onNotifications,
     required this.onSettings,
+    this.unreadCount = 0,
   });
 
   @override
@@ -64,9 +66,44 @@ class ProfileHeader extends StatelessWidget {
               ),
             ),
           ),
-          ProfileCircleIconButton(
-            icon: Icons.notifications_none,
-            onTap: onNotifications,
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ProfileCircleIconButton(
+                icon: Icons.notifications_none,
+                onTap: onNotifications,
+              ),
+              if (unreadCount > 0)
+                Positioned(
+                  top: -2,
+                  right: -2,
+                  child: IgnorePointer(
+                    child: Container(
+                      constraints: const BoxConstraints(minWidth: 18),
+                      height: 18,
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: EbtlColors.coral,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: EbtlColors.white,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Text(
+                        unreadCount > 9 ? '9+' : '$unreadCount',
+                        style: GoogleFonts.manrope(
+                          fontSize: 10,
+                          height: 1,
+                          fontWeight: FontWeight.w900,
+                          color: EbtlColors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(width: 12),
           ProfileCircleIconButton(

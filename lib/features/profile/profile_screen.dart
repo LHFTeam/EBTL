@@ -12,11 +12,15 @@ import 'widgets/profile_widgets.dart';
 class ProfileScreen extends StatefulWidget {
   final String? selectedLocationId;
   final VoidCallback onLoggedOut;
+  final int unreadNotificationCount;
+  final VoidCallback onOpenNotifications;
 
   const ProfileScreen({
     super.key,
     required this.selectedLocationId,
     required this.onLoggedOut,
+    required this.unreadNotificationCount,
+    required this.onOpenNotifications,
   });
 
   @override
@@ -83,9 +87,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         );
         return;
+      case 'notifications':
+        widget.onOpenNotifications();
+        return;
       case 'payment_methods':
       case 'promo_codes':
-      case 'notifications':
       default:
         showComingSoon(link.title);
         return;
@@ -155,8 +161,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               slivers: [
                 SliverToBoxAdapter(
                   child: ProfileHeader(
-                    onNotifications: () => showComingSoon('Notifications'),
+                    onNotifications: widget.onOpenNotifications,
                     onSettings: () => openEditProfile(profile.customer),
+                    unreadCount: widget.unreadNotificationCount,
                   ),
                 ),
                 SliverToBoxAdapter(

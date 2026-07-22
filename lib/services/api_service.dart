@@ -16,6 +16,7 @@ import '../models/cocktail_detail_models.dart';
 import '../models/cocktail_models.dart';
 import '../models/common_models.dart';
 import '../models/favorite_models.dart';
+import '../models/notification_models.dart';
 import '../models/profile_models.dart';
 import '../models/shop_models.dart';
 
@@ -384,6 +385,59 @@ class ApiService {
     );
 
     return PaymentStatusResponse.fromJson(json);
+  }
+
+  static Future<CustomerNotificationsResponse> fetchCustomerNotifications({
+    int limit = 50,
+    bool unreadOnly = false,
+  }) async {
+    await ensureSession();
+
+    final json = await _request(
+      method: 'GET',
+      path: '/api/customer/notifications',
+      query: {
+        'limit': limit.toString(),
+        'unread_only': unreadOnly ? 'true' : null,
+      },
+      attachToken: true,
+    );
+
+    return CustomerNotificationsResponse.fromJson(json);
+  }
+
+  static Future<CustomerNotification> markCustomerNotificationRead({
+    required String notificationId,
+  }) async {
+    await ensureSession();
+
+    final json = await _request(
+      method: 'PATCH',
+      path:
+          '/api/customer/notifications/${Uri.encodeComponent(notificationId)}/read',
+      attachToken: true,
+    );
+
+    return CustomerNotification.fromJson(asMap(json['notification']));
+  }
+
+  static Future<void> registerCustomerPushToken({
+    required String token,
+    required String platform,
+    String? deviceId,
+  }) async {
+    await ensureSession();
+
+    await _request(
+      method: 'POST',
+      path: '/api/customer/push-tokens',
+      body: {
+        'token': token,
+        'platform': platform,
+        if (deviceId?.trim().isNotEmpty == true) 'device_id': deviceId!.trim(),
+      },
+      attachToken: true,
+    );
   }
 
   static Future<CustomerProfileResponse> fetchCustomerProfile() async {
