@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { isProd, PAYMENT_MODE } from './config/appConfig.js';
 import { normalizeEmptyStrings } from './lib/objectUtils.js';
 import { auth } from './middleware/auth.js';
+import { customerRateLimiter } from './middleware/rateLimit.js';
 import { authRouter } from './routes/authRoutes.js';
 import { cocktailRouter } from './routes/cocktailRoutes.js';
 import { dashboardRouter } from './routes/dashboardRoutes.js';
@@ -64,6 +65,9 @@ export function createApp() {
     console.error('Browser client error:', JSON.stringify(req.body || {}));
     res.json({ ok: true });
   });
+
+  // Abuse protection for the public customer API (session creation + writes).
+  app.use('/api/customer', customerRateLimiter);
 
   app.use('/api', authRouter);
   app.use('/api', dashboardRouter);
