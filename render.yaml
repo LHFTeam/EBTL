@@ -1,0 +1,68 @@
+# Render Blueprint for the EBTL backend + admin dashboard.
+# Docs: https://render.com/docs/blueprint-spec
+#
+# This provisions the `admin-dashboard` service (Express API + built React SPA).
+# Secrets are marked `sync: false` so Render prompts for them on first deploy
+# and never stores them in the repo. Fill them from admin-dashboard/.env.example.
+services:
+  - type: web
+    name: ebtl-admin-dashboard
+    runtime: node
+    rootDir: admin-dashboard
+    plan: starter
+    branch: main
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      # 12h admin/customer token signing key. Generated once by Render.
+      - key: SESSION_SECRET
+        generateValue: true
+      # `live` uses Geidea; `demo` confirms orders without a real payment.
+      - key: PAYMENT_MODE
+        value: live
+      # --- Supabase (required; server refuses to boot without these) ---
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # --- Seed/break-glass dashboard logins (JSON array) ---
+      - key: ADMIN_USERS
+        sync: false
+      # --- Geidea payment gateway ---
+      - key: GEIDEA_IS_SANDBOX
+        value: "true"
+      - key: GEIDEA_REGION
+        value: egy
+      - key: GEIDEA_LANGUAGE
+        value: en
+      - key: GEIDEA_MERCHANT_PUBLIC_KEY
+        sync: false
+      - key: GEIDEA_API_PASSWORD
+        sync: false
+      - key: GEIDEA_BASE_URL
+        value: https://api.merchant.geidea.net
+      - key: GEIDEA_CALLBACK_URL
+        sync: false
+      - key: GEIDEA_RETURN_URL
+        value: ebtl://payment-return
+      - key: GEIDEA_APPLE_PAY_MERCHANT_ID
+        sync: false
+      # --- Push notifications (optional; disabled by default) ---
+      - key: PUSH_NOTIFICATIONS_ENABLED
+        value: "false"
+      - key: PUSH_PROVIDER
+        value: none
+      - key: FCM_PROJECT_ID
+        sync: false
+      - key: FCM_SERVICE_ACCOUNT_CLIENT_EMAIL
+        sync: false
+      - key: FCM_SERVICE_ACCOUNT_PRIVATE_KEY
+        sync: false
+      - key: EXPO_ACCESS_TOKEN
+        sync: false
