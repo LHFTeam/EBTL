@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">cherry ingredient icon</title>
+  <desc id="desc">A premium filled badge style SVG icon for cherry using EBTL brand colors.</desc>
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="#FFF8EE"/>
+  <ellipse cx="32" cy="50" rx="18" ry="5" fill="#0E2238" opacity="0.12"/>
+  
+  <path d="M31 29c2-11 9-16 17-17" fill="none" stroke="#0E2238" stroke-width="3" stroke-linecap="round"/>
+  <path d="M43 31c-1-9 2-15 7-19" fill="none" stroke="#0E2238" stroke-width="3" stroke-linecap="round"/>
+  <path d="M40 14c5-5 10-6 15-3-3 5-8 7-15 3Z" fill="#1F6F68" stroke="#0E2238" stroke-width="2" stroke-linejoin="round"/>
+  <circle cx="24" cy="42" r="10" fill="#F35F4B" stroke="#0E2238" stroke-width="2.6"/>
+  <circle cx="43" cy="40" r="10" fill="#F35F4B" stroke="#0E2238" stroke-width="2.6"/>
+  <circle cx="21" cy="38" r="2.4" fill="#FFF8EE" opacity="0.85"/>
+  <circle cx="40" cy="36" r="2.4" fill="#FFF8EE" opacity="0.85"/>
+
+</svg>

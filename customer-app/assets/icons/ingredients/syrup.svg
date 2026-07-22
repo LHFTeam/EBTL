@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">syrup ingredient icon</title>
+  <desc id="desc">A premium filled badge style SVG icon for syrup using EBTL brand colors.</desc>
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="#FFF8EE"/>
+  <ellipse cx="32" cy="50" rx="18" ry="5" fill="#0E2238" opacity="0.12"/>
+  
+  <path d="M25 15h14v9l4 5v17c0 5-4 8-9 8h-4c-5 0-9-3-9-8V29l4-5v-9Z" fill="#E7BD68" stroke="#0E2238" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M26 10h12v7H26z" fill="#1F6F68" stroke="#0E2238" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M25 34c4 4 10-4 18 0v12c0 5-4 8-9 8h-4c-5 0-9-3-9-8V34Z" fill="#F35F4B" opacity="0.45"/>
+  <path d="M32 27c5 6 7 9 7 13a7 7 0 1 1-14 0c0-4 2-7 7-13Z" fill="#FFF8EE" stroke="#0E2238" stroke-width="2.2" stroke-linejoin="round" opacity="0.93"/>
+
+</svg>

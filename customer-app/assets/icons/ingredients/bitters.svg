@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">bitters ingredient icon</title>
+  <desc id="desc">A premium filled badge style SVG icon for bitters using EBTL brand colors.</desc>
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="#FFF8EE"/>
+  <ellipse cx="32" cy="50" rx="18" ry="5" fill="#0E2238" opacity="0.12"/>
+  
+  <path d="M26 13h12l2 8v25c0 5-3 8-8 8s-8-3-8-8V21l2-8Z" fill="#0E2238" stroke="#0E2238" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M27 9h10v7H27z" fill="#E7BD68" stroke="#0E2238" stroke-width="2.2" stroke-linejoin="round"/>
+  <rect x="25" y="27" width="14" height="14" rx="4" fill="#FFF8EE"/>
+  <path d="M32 31c3 3 4 5 4 7a4 4 0 0 1-8 0c0-2 1-4 4-7Z" fill="#F35F4B"/>
+  <circle cx="45" cy="23" r="2.5" fill="#F35F4B"/>
+  <circle cx="48" cy="31" r="2" fill="#E7BD68"/>
+  <circle cx="20" cy="27" r="2" fill="#C9E3DD"/>
+
+</svg>

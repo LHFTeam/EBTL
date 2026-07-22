@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">cranberry ingredient icon</title>
+  <desc id="desc">A premium filled badge style SVG icon for cranberry using EBTL brand colors.</desc>
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="#FFF8EE"/>
+  <ellipse cx="32" cy="50" rx="18" ry="5" fill="#0E2238" opacity="0.12"/>
+  
+  <path d="M18 36c6-12 18-17 31-14-3 13-13 22-27 22" fill="none" stroke="#1F6F68" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="23" cy="40" r="7" fill="#F35F4B" stroke="#0E2238" stroke-width="2.4"/>
+  <circle cx="34" cy="34" r="8" fill="#F35F4B" stroke="#0E2238" stroke-width="2.4"/>
+  <circle cx="45" cy="28" r="6.5" fill="#F35F4B" stroke="#0E2238" stroke-width="2.4"/>
+  <circle cx="31" cy="31" r="2" fill="#FFF8EE" opacity="0.85"/>
+  <circle cx="43" cy="26" r="1.7" fill="#FFF8EE" opacity="0.85"/>
+
+</svg>

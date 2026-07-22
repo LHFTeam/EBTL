@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">coconut ingredient icon</title>
+  <desc id="desc">A premium filled badge style SVG icon for coconut using EBTL brand colors.</desc>
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="#FFF8EE"/>
+  <ellipse cx="32" cy="50" rx="18" ry="5" fill="#0E2238" opacity="0.12"/>
+  
+  <path d="M15 37c0-10 8-18 17-18s17 8 17 18-8 17-17 17-17-7-17-17Z" fill="#0E2238" stroke="#0E2238" stroke-width="2.6"/>
+  <path d="M20 39c0-7 5-13 12-13s12 6 12 13-5 12-12 12-12-5-12-12Z" fill="#FFF8EE"/>
+  <path d="M24 39c0-5 3-9 8-9s8 4 8 9-3 8-8 8-8-3-8-8Z" fill="#C9E3DD"/>
+  <circle cx="26" cy="25" r="2" fill="#FFF8EE" opacity="0.75"/>
+  <circle cx="33" cy="23" r="2" fill="#FFF8EE" opacity="0.75"/>
+  <circle cx="39" cy="27" r="2" fill="#FFF8EE" opacity="0.75"/>
+
+</svg>
