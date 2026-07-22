@@ -68,8 +68,14 @@ class EbtlLogo extends StatelessWidget {
 class CircleIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
+  final Color iconColor;
 
-  const CircleIconButton({super.key, required this.icon, required this.onTap});
+  const CircleIconButton({
+    super.key,
+    required this.icon,
+    required this.onTap,
+    this.iconColor = Colors.black,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +88,7 @@ class CircleIconButton extends StatelessWidget {
         child: SizedBox(
           width: 56,
           height: 56,
-          child: Icon(icon, color: Colors.black, size: 28),
+          child: Icon(icon, color: iconColor, size: 28),
         ),
       ),
     );

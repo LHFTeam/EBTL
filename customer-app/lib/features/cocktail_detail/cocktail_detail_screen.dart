@@ -52,6 +52,11 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
   int? cartQuantityOverride;
   bool isAddingToCart = false;
 
+  // Local override so the heart reacts immediately; null means "use the value
+  // from the loaded detail response".
+  bool? favoriteOverride;
+  bool isTogglingFavorite = false;
+
   final Set<String> selectedRemovedRecipeItemIds = <String>{};
   final Map<String, SelectedAddition> selectedAdditionsByVariantId =
       <String, SelectedAddition>{};
@@ -83,10 +88,51 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
     setState(() {
       activeSlug = slug;
       selectedQuantity = 1;
+      favoriteOverride = null;
       selectedRemovedRecipeItemIds.clear();
       selectedAdditionsByVariantId.clear();
       detailFuture = loadDetail();
     });
+  }
+
+  Future<void> toggleFavorite(CocktailDetail cocktail) async {
+    if (isTogglingFavorite) return;
+
+    final productId = cocktail.id.trim();
+    if (productId.isEmpty) return;
+
+    final current = favoriteOverride ?? cocktail.isFavorite;
+    final next = !current;
+
+    setState(() {
+      isTogglingFavorite = true;
+      favoriteOverride = next;
+    });
+
+    try {
+      if (next) {
+        await ApiService.addFavoriteCocktail(productId: productId);
+      } else {
+        await ApiService.removeFavoriteCocktail(productId: productId);
+      }
+
+      if (!mounted) return;
+      setState(() => isTogglingFavorite = false);
+      showAppSnackBar(
+        context,
+        next ? 'Added to favorites.' : 'Removed from favorites.',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        isTogglingFavorite = false;
+        favoriteOverride = current;
+      });
+      showAppSnackBar(
+        context,
+        apiErrorMessage(error, fallback: 'Could not update favorites.'),
+      );
+    }
   }
 
   void toggleRemovedIngredient(RemovableIngredient ingredient) {
@@ -256,13 +302,9 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                     child: CocktailDetailHero(
                       cocktail: cocktail,
                       cartCount: cartCount,
+                      isFavorite: favoriteOverride ?? cocktail.isFavorite,
                       onBack: () => Navigator.of(context).pop(),
-                      onFavorite: () {
-                        showAppSnackBar(
-                          context,
-                          'Favorites are coming soon.',
-                        );
-                      },
+                      onFavorite: () => toggleFavorite(cocktail),
                       onCart: () => widget.onBottomNavTap(3),
                     ),
                   ),
@@ -319,6 +361,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
 class CocktailDetailHero extends StatelessWidget {
   final CocktailDetail cocktail;
   final int cartCount;
+  final bool isFavorite;
   final VoidCallback onBack;
   final VoidCallback onFavorite;
   final VoidCallback onCart;
@@ -327,6 +370,7 @@ class CocktailDetailHero extends StatelessWidget {
     super.key,
     required this.cocktail,
     required this.cartCount,
+    required this.isFavorite,
     required this.onBack,
     required this.onFavorite,
     required this.onCart,
@@ -378,7 +422,8 @@ class CocktailDetailHero extends StatelessWidget {
                 CircleIconButton(icon: Icons.arrow_back, onTap: onBack),
                 const Spacer(),
                 CircleIconButton(
-                  icon: Icons.favorite_border,
+                  icon: isFavorite ? Icons.favorite : Icons.favorite_border,
+                  iconColor: isFavorite ? EbtlColors.coral : Colors.black,
                   onTap: onFavorite,
                 ),
                 const SizedBox(width: 12),
