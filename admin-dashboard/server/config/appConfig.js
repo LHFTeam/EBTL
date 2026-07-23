@@ -19,11 +19,11 @@ export const RAW_PAYMENT_MODE = process.env.PAYMENT_MODE || '';
 export const PAYMENT_MODE = normalizeEnvValue(RAW_PAYMENT_MODE) === 'demo' ? 'demo' : 'live';
 export const isDemoPaymentMode = PAYMENT_MODE === 'demo';
 
-// Which live gateway backs the customer checkout. Defaults to geidea so existing
-// deployments are unaffected; set PAYMENT_PROVIDER=stripe to switch to Stripe.
-export const ACTIVE_PAYMENT_PROVIDER = normalizeEnvValue(process.env.PAYMENT_PROVIDER) === 'stripe'
-  ? 'stripe'
-  : 'geidea';
+// Stripe is the primary checkout gateway. Geidea remains available as an
+// explicit rollback option.
+export const ACTIVE_PAYMENT_PROVIDER = normalizeEnvValue(process.env.PAYMENT_PROVIDER) === 'geidea'
+  ? 'geidea'
+  : 'stripe';
 
 // Marketing/analytics pixel IDs for the public landing page. Each is null when
 // unset; the client only initializes the platforms that have an ID. Served via

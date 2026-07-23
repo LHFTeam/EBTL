@@ -5,7 +5,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { isProd, LANDING_TRACKING, PAYMENT_MODE } from './config/appConfig.js';
+import { ACTIVE_PAYMENT_PROVIDER, isProd, LANDING_TRACKING, PAYMENT_MODE } from './config/appConfig.js';
 import { normalizeEmptyStrings } from './lib/objectUtils.js';
 import { auth } from './middleware/auth.js';
 import { customerRateLimiter } from './middleware/rateLimit.js';
@@ -64,7 +64,11 @@ export function createApp() {
   });
   
   app.use(auth);
-  app.get('/api/health', (_req, res) => res.json({ ok: true, payment_mode: PAYMENT_MODE }));
+  app.get('/api/health', (_req, res) => res.json({
+    ok: true,
+    payment_mode: PAYMENT_MODE,
+    payment_provider: ACTIVE_PAYMENT_PROVIDER
+  }));
 
   // Public, unauthenticated config for the landing page (marketing pixel IDs).
   app.get('/api/public-config', (_req, res) => {

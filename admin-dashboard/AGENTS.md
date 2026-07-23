@@ -83,8 +83,9 @@ npm start                 # production server (NODE_ENV=production, serves dist/
 - `ADMIN_USERS` — JSON array of env-defined fallback logins
   (`{username,password,role,name}`), checked before the DB `employee_credentials`
   table. Handy for bootstrapping; plaintext, so treat as break-glass.
-- `PAYMENT_MODE` — `live` (Geidea) or `demo` (orders confirm immediately with
-  no real payment). Anything not `demo` normalizes to `live`.
+- `PAYMENT_MODE` — `live` (configured gateway) or `demo` (orders confirm
+  immediately with no real payment). Anything not `demo` normalizes to `live`.
+- `PAYMENT_PROVIDER` — `stripe` (default) or `geidea`.
 - `GEIDEA_*` — payment gateway config; `geideaIsConfigured()` gates real card
   sessions. `GEIDEA_IS_SANDBOX` defaults true.
 - `PUSH_NOTIFICATIONS_ENABLED` + `PUSH_PROVIDER` (`fcm` | `expo` | `none`) and

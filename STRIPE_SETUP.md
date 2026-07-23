@@ -18,6 +18,7 @@ poll /payment-status  ◀── webhook ◀──  /api/payments/stripe/webhook 
 ## 1. Backend env (`admin-dashboard/.env`)
 
 ```
+PAYMENT_MODE=live
 PAYMENT_PROVIDER=stripe          # flip to `geidea` to switch back instantly
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_PUBLISHABLE_KEY=pk_test_...
@@ -30,7 +31,8 @@ STRIPE_GOOGLE_PAY_ENABLED=false  # set true once the Android app is configured
 ```
 
 Secrets stay server-only (delivered to the app per-checkout). Set the same
-values in the Render dashboard for the deployed backend.
+values in the Render dashboard for the deployed backend. In particular, remove
+or replace any existing `PAYMENT_MODE=demo`; demo mode always bypasses Stripe.
 
 ## 2. Create the webhook in the Stripe Dashboard
 
