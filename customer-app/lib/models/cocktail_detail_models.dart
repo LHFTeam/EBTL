@@ -39,6 +39,7 @@ class CocktailDetail {
   final List<String> tags;
   final List<ProductTag> tagDetails;
   final bool isFeatured;
+  final bool isFavorite;
   final Category? category;
   final CocktailLiquor? selectedLiquor;
   final List<LiquorCompatibility> compatibleLiquors;
@@ -66,6 +67,7 @@ class CocktailDetail {
     required this.tags,
     required this.tagDetails,
     required this.isFeatured,
+    required this.isFavorite,
     required this.category,
     required this.selectedLiquor,
     required this.compatibleLiquors,
@@ -110,6 +112,7 @@ class CocktailDetail {
         readMapList(json['tag_details']).map(ProductTag.fromJson).toList(),
       ),
       isFeatured: readBool(json['is_featured']),
+      isFavorite: readBool(json['is_favorite']),
       category: json['category'] is Map<String, dynamic>
           ? Category.fromJson(asMap(json['category']))
           : null,
