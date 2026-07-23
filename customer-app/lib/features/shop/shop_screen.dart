@@ -11,6 +11,7 @@ import 'shop_category_picker_screen.dart';
 import 'shop_category_products_screen.dart';
 import 'shop_search_screen.dart';
 import 'widgets/shop_loading_state.dart';
+import 'widgets/shop_product_detail_sheet.dart';
 import 'widgets/shop_product_widgets.dart';
 import 'widgets/shop_top_widgets.dart';
 
@@ -304,7 +305,12 @@ class _ShopScreenState extends State<ShopScreen> {
 
   void openProduct(ShopProduct product) {
     if (!product.isCocktail) {
-      showMessage('Product details are coming soon.');
+      showShopProductDetailSheet(
+        context: context,
+        product: product,
+        locationId: widget.data.selectedLocationId,
+        onCartChanged: widget.onCartChanged,
+      );
       return;
     }
 
