@@ -45,13 +45,19 @@ export function createApp() {
   app.use(helmet({ contentSecurityPolicy: false }));
   app.use(compression());
   app.use(morgan('tiny'));
+
+  // Stripe webhook signature verification needs the raw, unparsed request body,
+  // so capture it as a Buffer before the JSON parser runs on every other route.
+  app.use('/api/payments/stripe/webhook', express.raw({ type: '*/*', limit: '2mb' }));
+
   app.use(express.json({ limit: '8mb' }));
 
   app.use((req, _res, next) => {
     // Keep create payloads tidy, but do not mutate PATCH/PUT payloads.
     // Updates must be allowed to send empty strings so routes can convert them
     // to null and intentionally clear optional database fields.
-    if (req.method === 'POST' && req.body && typeof req.body === 'object') {
+    // Skip raw Buffer bodies (e.g. the Stripe webhook) so they stay verifiable.
+    if (req.method === 'POST' && req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
       req.body = normalizeEmptyStrings(req.body);
     }
     next();

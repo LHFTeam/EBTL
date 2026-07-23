@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { Router } from 'express';
 import { z } from 'zod';
-import { isDemoPaymentMode, isProd, PAYMENT_MODE, SESSION_SECRET } from '../config/appConfig.js';
+import { ACTIVE_PAYMENT_PROVIDER, isDemoPaymentMode, isProd, PAYMENT_MODE, SESSION_SECRET } from '../config/appConfig.js';
 import { clean } from '../lib/objectUtils.js';
 import { getCookie } from '../lib/session.js';
 import {
@@ -14,6 +14,17 @@ import {
   geideaIsConfigured,
   verifyGeideaCallbackSignature
 } from '../lib/geidea.js';
+import {
+  constructStripeEvent,
+  createStripeEphemeralKey,
+  createStripePaymentIntent,
+  extractStripeAmount,
+  extractStripeSavedCard,
+  resolveStripeCustomerId,
+  stripeCheckoutConfig,
+  stripeIsConfigured,
+  stripeMinorUnits
+} from '../lib/stripe.js';
 import { supabase } from '../lib/supabase.js';
 import { publicNotification, registerCustomerPushToken } from '../lib/notifications.js';
 
@@ -24,7 +35,33 @@ const CUSTOMER_TOKEN_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
 const BUSINESS_TIME_ZONE = 'Africa/Cairo';
 const CURRENCY = 'EGP';
 const PAYMENT_PROVIDER = 'geidea';
+const STRIPE_PAYMENT_PROVIDER = 'stripe';
 const DEMO_PAYMENT_PROVIDER = 'demo';
+
+// The live provider backing this deployment's checkout ('geidea' or 'stripe').
+const LIVE_PAYMENT_PROVIDER = ACTIVE_PAYMENT_PROVIDER;
+const isStripeProvider = LIVE_PAYMENT_PROVIDER === STRIPE_PAYMENT_PROVIDER;
+
+function liveProviderIsConfigured() {
+  return isStripeProvider ? stripeIsConfigured() : geideaIsConfigured();
+}
+
+// Collapse whatever method key the client sent onto the canonical key for the
+// active provider, so a generic 'payment_gateway' works regardless of provider.
+function normalizeCheckoutPaymentMethod(method) {
+  if (isDemoPaymentMode) return 'demo_checkout';
+
+  if (isStripeProvider) return 'stripe_payment_sheet';
+
+  return method === 'payment_gateway' ? 'geidea_card' : method;
+}
+
+// The client routes on nextScreen to decide which payment UI to present.
+function gatewayNextScreen(provider) {
+  if (provider === DEMO_PAYMENT_PROVIDER) return 'order_confirmed';
+  if (provider === STRIPE_PAYMENT_PROVIDER) return 'stripe_payment';
+  return 'geidea_payment';
+}
 const EGYPT_MOBILE_SIMPLE_RE = /^0\d{10}$/;
 const MAX_CART_ITEM_QTY = 99;
 const FULFILLMENT_TYPES = ['pickup_at_cart', 'delivery_to_unit'];
@@ -2655,6 +2692,37 @@ function createGeideaPaymentPayload({ order, payment, sessionId = null, paymentM
   };
 }
 
+function createStripePaymentPayload({ order, payment, stripeSession = null }) {
+  const config = stripeCheckoutConfig();
+  const rawPayload = payment?.raw_payload || {};
+
+  return {
+    required: true,
+    provider: payment?.provider || STRIPE_PAYMENT_PROVIDER,
+    payment_id: payment?.id || '',
+    payment_method: rawPayload.payment_method || 'stripe_payment_sheet',
+    status: payment?.status || order?.payment_status || 'pending',
+    amount: money(payment?.amount ?? order?.total_amount ?? 0),
+    currency: payment?.currency || CURRENCY,
+    order_reference: order?.order_number || order?.id || '',
+    stripe: {
+      configured: config.configured,
+      is_test: config.is_test,
+      publishable_key: config.publishable_key,
+      merchant_display_name: config.merchant_display_name,
+      merchant_country: config.merchant_country,
+      apple_pay_merchant_id: config.apple_pay_merchant_id,
+      google_pay_enabled: config.google_pay_enabled,
+      // Present only on the fresh place-order response; polling responses omit
+      // the secrets because the sheet has already been presented by then.
+      payment_intent_id: stripeSession?.payment_intent_id || rawPayload.stripe_payment_intent_id || '',
+      client_secret: stripeSession?.client_secret || rawPayload.stripe_client_secret || '',
+      customer_id: stripeSession?.customer_id || rawPayload.stripe_customer_id || '',
+      ephemeral_key_secret: stripeSession?.ephemeral_key_secret || rawPayload.stripe_ephemeral_key_secret || ''
+    }
+  };
+}
+
 function createDemoPaymentPayload({ order, payment }) {
   return {
     required: false,
@@ -2673,9 +2741,13 @@ function createDemoPaymentPayload({ order, payment }) {
   };
 }
 
-function createCheckoutPaymentPayload({ order, payment, sessionId = null, paymentMethod = null }) {
+function createCheckoutPaymentPayload({ order, payment, sessionId = null, paymentMethod = null, stripeSession = null }) {
   if (payment?.provider === DEMO_PAYMENT_PROVIDER || PAYMENT_MODE === 'demo') {
     return createDemoPaymentPayload({ order, payment });
+  }
+
+  if (payment?.provider === STRIPE_PAYMENT_PROVIDER || (isStripeProvider && !payment?.provider)) {
+    return createStripePaymentPayload({ order, payment, stripeSession });
   }
 
   return createGeideaPaymentPayload({ order, payment, sessionId, paymentMethod });
@@ -2737,21 +2809,68 @@ async function recordGeideaSavedCardIfNeeded({ customerId, payload }) {
   return upserted.data;
 }
 
-function checkoutPaymentMethods() {
-  if (isDemoPaymentMode) {
-    return [
-      {
-        key: 'demo_checkout',
-        label: 'Demo Checkout',
-        provider: DEMO_PAYMENT_PROVIDER,
-        enabled: true,
-        setup_required: false,
-        mode: 'demo',
-        message: 'Demo mode skips Geidea and confirms the order immediately.'
-      }
-    ];
-  }
+async function recordStripeSavedCardIfNeeded({ customerId, paymentIntent }) {
+  const savedCard = extractStripeSavedCard(paymentIntent);
+  if (!customerId || !savedCard?.payment_method_id) return null;
 
+  const upserted = await supabase
+    .from('customer_payment_methods')
+    .upsert({
+      customer_id: customerId,
+      provider: STRIPE_PAYMENT_PROVIDER,
+      provider_token_id: savedCard.payment_method_id,
+      provider_agreement_id: savedCard.customer_id || null,
+      agreement_type: 'off_session',
+      card_brand: savedCard.card_brand || null,
+      cardholder_name: savedCard.cardholder_name || null,
+      masked_card_number: savedCard.masked_card_number || null,
+      expiry_month: savedCard.expiry_month || null,
+      expiry_year: savedCard.expiry_year || null,
+      is_active: true,
+      raw_payload: savedCard
+    }, { onConflict: 'provider,provider_token_id' })
+    .select()
+    .single();
+
+  if (upserted.error) throw upserted.error;
+  return upserted.data;
+}
+
+// Most recent Stripe customer id we already created for this shopper, so saved
+// cards stay attached to one Stripe customer across orders.
+async function findExistingStripeCustomerId(customerId) {
+  if (!customerId) return null;
+
+  const existing = await supabase
+    .from('customer_payment_methods')
+    .select('provider_agreement_id')
+    .eq('customer_id', customerId)
+    .eq('provider', STRIPE_PAYMENT_PROVIDER)
+    .not('provider_agreement_id', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing.error) return null;
+  return existing.data?.provider_agreement_id || null;
+}
+
+function stripeCheckoutMethods() {
+  const config = stripeCheckoutConfig();
+
+  return [
+    {
+      key: 'stripe_payment_sheet',
+      label: 'Credit / Debit Card',
+      provider: STRIPE_PAYMENT_PROVIDER,
+      enabled: config.configured,
+      setup_required: !config.configured,
+      sdk: config
+    }
+  ];
+}
+
+function geideaCheckoutMethods() {
   const config = geideaCheckoutConfig();
 
   return [
@@ -2772,6 +2891,24 @@ function checkoutPaymentMethods() {
       sdk: config
     }
   ];
+}
+
+function checkoutPaymentMethods() {
+  if (isDemoPaymentMode) {
+    return [
+      {
+        key: 'demo_checkout',
+        label: 'Demo Checkout',
+        provider: DEMO_PAYMENT_PROVIDER,
+        enabled: true,
+        setup_required: false,
+        mode: 'demo',
+        message: 'Demo mode skips the payment gateway and confirms the order immediately.'
+      }
+    ];
+  }
+
+  return isStripeProvider ? stripeCheckoutMethods() : geideaCheckoutMethods();
 }
 
 async function buildCheckoutQuote({
@@ -4433,10 +4570,10 @@ customerRouter.get('/customer/checkout', async (req, res) => {
       payment_mode: PAYMENT_MODE,
       payment_methods: checkoutPaymentMethods(),
       validation: {
-        can_place_order: quote.data.quote.validation.can_place_order && (isDemoPaymentMode || geideaIsConfigured()),
+        can_place_order: quote.data.quote.validation.can_place_order && (isDemoPaymentMode || liveProviderIsConfigured()),
         blocking_reasons: [
           ...quote.data.quote.validation.blocking_reasons,
-          ...(isDemoPaymentMode || geideaIsConfigured() ? [] : ['Geidea payment gateway is not configured yet.'])
+          ...(isDemoPaymentMode || liveProviderIsConfigured() ? [] : ['Payment gateway is not configured yet.'])
         ]
       }
     }
@@ -4554,13 +4691,17 @@ async function handleCustomerPlaceOrder(req, res) {
     requested_fulfillment_at: z.string().nullable().optional(),
     promo_code: z.string().nullable().optional(),
     customer_notes: z.string().nullable().optional(),
-    payment_method: z.enum(['geidea_card', 'geidea_apple_pay', 'payment_gateway', 'demo_checkout']),
+    payment_method: z.enum([
+      'geidea_card', 'geidea_apple_pay',
+      'stripe_payment_sheet', 'stripe_card',
+      'payment_gateway', 'demo_checkout'
+    ]),
     save_card: z.boolean().optional().default(false),
     idempotency_key: z.string().min(8).max(120)
   }).transform((data) => ({
     ...data,
     customer_phone: data.customer_phone || data.mobile_phone || data.phone || '',
-    payment_method: isDemoPaymentMode ? 'demo_checkout' : (data.payment_method === 'payment_gateway' ? 'geidea_card' : data.payment_method)
+    payment_method: normalizeCheckoutPaymentMethod(data.payment_method)
   })).safeParse(req.body);
 
   if (!parsed.success) return res.status(400).json({
@@ -4577,9 +4718,9 @@ async function handleCustomerPlaceOrder(req, res) {
     });
   }
 
-  if (!isDemoPaymentMode && !geideaIsConfigured()) {
+  if (!isDemoPaymentMode && !liveProviderIsConfigured()) {
     return res.status(503).json({
-      error: 'Geidea payment gateway is not configured yet.'
+      error: 'Payment gateway is not configured yet.'
     });
   }
 
@@ -4629,7 +4770,7 @@ async function handleCustomerPlaceOrder(req, res) {
         order: existingPayment.data.orders,
         payment: existingPayment.data
       }),
-      nextScreen: existingPayment.data.provider === DEMO_PAYMENT_PROVIDER ? 'order_confirmed' : 'geidea_payment'
+      nextScreen: gatewayNextScreen(existingPayment.data.provider)
     });
   }
 
@@ -4822,7 +4963,7 @@ async function handleCustomerPlaceOrder(req, res) {
     .from('payments')
     .insert({
       order_id: orderInsert.data.id,
-      provider: isDemoPaymentMode ? DEMO_PAYMENT_PROVIDER : PAYMENT_PROVIDER,
+      provider: isDemoPaymentMode ? DEMO_PAYMENT_PROVIDER : LIVE_PAYMENT_PROVIDER,
       amount: quote.data.quote.totals.total_amount,
       currency: CURRENCY,
       status: isDemoPaymentMode ? 'paid' : 'pending',
@@ -4895,43 +5036,119 @@ async function handleCustomerPlaceOrder(req, res) {
     });
   }
 
-  let geideaSession;
+  let updatedPayment;
+  let paymentPayload;
 
-  try {
-    geideaSession = await createGeideaSession({
+  if (isStripeProvider) {
+    let stripeSession;
+
+    try {
+      const existingCustomerId = await findExistingStripeCustomerId(ensured.customer.id);
+      const customerId = await resolveStripeCustomerId({
+        customer: ensured.customer,
+        existingCustomerId
+      });
+
+      const intent = await createStripePaymentIntent({
+        order: orderInsert.data,
+        payment: payment.data,
+        customer: ensured.customer,
+        customerId,
+        saveCard: Boolean(parsed.data.save_card)
+      });
+
+      const ephemeralKey = await createStripeEphemeralKey(customerId);
+
+      stripeSession = {
+        payment_intent_id: intent.payment_intent_id,
+        client_secret: intent.client_secret,
+        customer_id: customerId,
+        ephemeral_key_secret: ephemeralKey.secret,
+        raw_response: intent.raw_response
+      };
+    } catch (err) {
+      await supabase.from('orders').delete().eq('id', orderInsert.data.id);
+
+      return res.status(502).json({
+        error: err.message || 'Could not create Stripe payment session.'
+      });
+    }
+
+    updatedPayment = await supabase
+      .from('payments')
+      .update({
+        provider_payment_id: stripeSession.payment_intent_id,
+        raw_payload: {
+          ...(payment.data.raw_payload || {}),
+          stripe_payment_intent_id: stripeSession.payment_intent_id,
+          stripe_client_secret: stripeSession.client_secret,
+          stripe_customer_id: stripeSession.customer_id,
+          stripe_ephemeral_key_secret: stripeSession.ephemeral_key_secret
+        }
+      })
+      .eq('id', payment.data.id)
+      .select()
+      .single();
+
+    if (updatedPayment.error) {
+      await supabase.from('orders').delete().eq('id', orderInsert.data.id);
+
+      return res.status(400).json({
+        error: updatedPayment.error.message
+      });
+    }
+
+    paymentPayload = createCheckoutPaymentPayload({
       order: orderInsert.data,
-      payment: payment.data,
-      customer: ensured.customer,
-      paymentMethod: parsed.data.payment_method,
-      saveCard: Boolean(parsed.data.save_card)
+      payment: updatedPayment.data,
+      stripeSession
     });
-  } catch (err) {
-    await supabase.from('orders').delete().eq('id', orderInsert.data.id);
+  } else {
+    let geideaSession;
 
-    return res.status(502).json({
-      error: err.message || 'Could not create Geidea payment session.'
-    });
-  }
+    try {
+      geideaSession = await createGeideaSession({
+        order: orderInsert.data,
+        payment: payment.data,
+        customer: ensured.customer,
+        paymentMethod: parsed.data.payment_method,
+        saveCard: Boolean(parsed.data.save_card)
+      });
+    } catch (err) {
+      await supabase.from('orders').delete().eq('id', orderInsert.data.id);
 
-  const updatedPayment = await supabase
-    .from('payments')
-    .update({
-      raw_payload: {
-        ...(payment.data.raw_payload || {}),
-        geidea_session_id: geideaSession.session_id,
-        geidea_create_session_request: geideaSession.request_payload,
-        geidea_create_session_response: geideaSession.raw_response
-      }
-    })
-    .eq('id', payment.data.id)
-    .select()
-    .single();
+      return res.status(502).json({
+        error: err.message || 'Could not create Geidea payment session.'
+      });
+    }
 
-  if (updatedPayment.error) {
-    await supabase.from('orders').delete().eq('id', orderInsert.data.id);
+    updatedPayment = await supabase
+      .from('payments')
+      .update({
+        raw_payload: {
+          ...(payment.data.raw_payload || {}),
+          geidea_session_id: geideaSession.session_id,
+          geidea_create_session_request: geideaSession.request_payload,
+          geidea_create_session_response: geideaSession.raw_response
+        }
+      })
+      .eq('id', payment.data.id)
+      .select()
+      .single();
 
-    return res.status(400).json({
-      error: updatedPayment.error.message
+    if (updatedPayment.error) {
+      await supabase.from('orders').delete().eq('id', orderInsert.data.id);
+
+      return res.status(400).json({
+        error: updatedPayment.error.message
+      });
+    }
+
+    paymentPayload = createCheckoutPaymentPayload({
+      order: orderInsert.data,
+      payment: updatedPayment.data,
+      sessionId: geideaSession.session_id,
+      paymentMethod: parsed.data.payment_method
     });
   }
 
@@ -4962,13 +5179,8 @@ async function handleCustomerPlaceOrder(req, res) {
       promotion: quote.data.quote.promotion
     },
     items: orderItems.data,
-    payment: createCheckoutPaymentPayload({
-      order: orderInsert.data,
-      payment: updatedPayment.data,
-      sessionId: geideaSession.session_id,
-      paymentMethod: parsed.data.payment_method
-    }),
-    nextScreen: 'geidea_payment'
+    payment: paymentPayload,
+    nextScreen: gatewayNextScreen(LIVE_PAYMENT_PROVIDER)
   });
 }
 
@@ -5231,6 +5443,152 @@ customerRouter.post('/payments/geidea/callback', async (req, res) => {
     .from('payment_events')
     .update({ processed_at: new Date().toISOString() })
     .eq('provider_event_id', providerEventId);
+
+  res.json({
+    ok: true,
+    payment_status: nextPaymentStatus,
+    order_status: nextOrderStatus
+  });
+});
+
+customerRouter.post('/payments/stripe/webhook', async (req, res) => {
+  const verification = constructStripeEvent(req.body, req.headers['stripe-signature']);
+
+  if (!verification.ok) {
+    return res.status(400).json({ ok: false, error: verification.reason });
+  }
+
+  const event = verification.event;
+  const eventId = event?.id;
+
+  // Only PaymentIntent lifecycle events touch order state; acknowledge the rest
+  // with 200 so Stripe stops retrying them.
+  const handledTypes = new Set(['payment_intent.succeeded', 'payment_intent.payment_failed']);
+
+  if (!eventId || !handledTypes.has(event.type)) {
+    return res.json({ ok: true, ignored: true });
+  }
+
+  // Record-and-dedupe: if this event id already landed, skip re-processing.
+  const inserted = await supabase
+    .from('payment_events')
+    .insert({
+      provider: STRIPE_PAYMENT_PROVIDER,
+      provider_event_id: eventId,
+      event_type: event.type,
+      raw_payload: event
+    })
+    .select('id')
+    .maybeSingle();
+
+  if (inserted.error) {
+    // Unique-violation means we've already seen (and processed) this event.
+    if (String(inserted.error.code) === '23505') {
+      return res.json({ ok: true, duplicate: true });
+    }
+    return res.status(400).json({ ok: false, error: inserted.error.message });
+  }
+
+  const paymentIntent = event.data?.object || {};
+  const ebtlPaymentId = paymentIntent.metadata?.ebtl_payment_id;
+
+  if (!ebtlPaymentId) {
+    await supabase
+      .from('payment_events')
+      .update({ processed_at: new Date().toISOString() })
+      .eq('provider_event_id', eventId);
+    return res.json({ ok: true, ignored: 'missing ebtl_payment_id' });
+  }
+
+  const payment = await supabase
+    .from('payments')
+    .select('*, orders(*)')
+    .eq('id', ebtlPaymentId)
+    .maybeSingle();
+
+  if (payment.error) return res.status(400).json({ ok: false, error: payment.error.message });
+
+  if (!payment.data?.orders) {
+    return res.status(404).json({ ok: false, error: 'Payment was not found for this Stripe event.' });
+  }
+
+  // Guard against amount/currency tampering: the PaymentIntent must match the
+  // stored payment record.
+  const received = extractStripeAmount(paymentIntent);
+  const expectedAmount = stripeMinorUnits(payment.data.amount, payment.data.currency);
+
+  if (received.amount !== expectedAmount
+    || received.currency !== String(payment.data.currency || CURRENCY).toLowerCase()) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Stripe event amount or currency does not match the payment record.'
+    });
+  }
+
+  const isSuccess = event.type === 'payment_intent.succeeded';
+  const nextPaymentStatus = isSuccess ? 'paid' : 'failed';
+  const nextOrderPaymentStatus = isSuccess ? 'paid' : 'failed';
+  const nextOrderStatus = isSuccess ? 'confirmed' : payment.data.orders.status;
+
+  const updatedPayment = await supabase
+    .from('payments')
+    .update({
+      provider_payment_id: paymentIntent.id || payment.data.provider_payment_id,
+      status: nextPaymentStatus,
+      raw_payload: {
+        ...(payment.data.raw_payload || {}),
+        stripe_event_type: event.type,
+        stripe_payment_intent: paymentIntent
+      }
+    })
+    .eq('id', payment.data.id)
+    .select()
+    .single();
+
+  if (updatedPayment.error) return res.status(400).json({ ok: false, error: updatedPayment.error.message });
+
+  const updatedOrder = await supabase
+    .from('orders')
+    .update({
+      status: nextOrderStatus,
+      payment_status: nextOrderPaymentStatus
+    })
+    .eq('id', payment.data.order_id)
+    .select()
+    .single();
+
+  if (updatedOrder.error) return res.status(400).json({ ok: false, error: updatedOrder.error.message });
+
+  if (isSuccess) {
+    await recordPromotionRedemptionIfNeeded({
+      order: updatedOrder.data,
+      payment: updatedPayment.data
+    });
+
+    if (payment.data.raw_payload?.save_card) {
+      const savedCard = await recordStripeSavedCardIfNeeded({
+        customerId: payment.data.orders.customer_id,
+        paymentIntent
+      });
+
+      if (savedCard) {
+        await supabase
+          .from('payments')
+          .update({
+            raw_payload: {
+              ...(updatedPayment.data.raw_payload || {}),
+              saved_payment_method_id: savedCard.id
+            }
+          })
+          .eq('id', updatedPayment.data.id);
+      }
+    }
+  }
+
+  await supabase
+    .from('payment_events')
+    .update({ processed_at: new Date().toISOString() })
+    .eq('provider_event_id', eventId);
 
   res.json({
     ok: true,

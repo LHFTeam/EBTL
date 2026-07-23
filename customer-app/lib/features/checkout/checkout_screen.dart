@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_stripe/flutter_stripe.dart' as stripe;
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/constants/fulfillment_types.dart';
@@ -381,6 +382,89 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       },
     );
 
+    await finishPaymentByPolling(response, checkout);
+  }
+
+  // Opens the native Stripe Payment Sheet (cards + Apple Pay / Google Pay when
+  // configured), then reconciles the order via the same webhook-backed polling
+  // the Geidea path uses. The order is only treated as paid once our backend
+  // has processed the Stripe webhook.
+  Future<void> startStripePaymentSheetAndRefresh(
+    PlaceOrderResponse response,
+    CheckoutData checkout,
+  ) async {
+    final session = response.payment.stripe;
+    final publishableKey = session.publishableKey;
+
+    if (!session.hasClientSecret ||
+        publishableKey == null ||
+        publishableKey.isEmpty) {
+      if (!mounted) return;
+      setState(() => isPlacingOrder = false);
+      showAppSnackBar(context, 'Payment could not be started. Please try again.');
+      return;
+    }
+
+    final hasApplePay =
+        session.applePayMerchantId != null &&
+        session.applePayMerchantId!.isNotEmpty;
+
+    try {
+      stripe.Stripe.publishableKey = publishableKey;
+      if (hasApplePay) {
+        stripe.Stripe.merchantIdentifier = session.applePayMerchantId!;
+      }
+      await stripe.Stripe.instance.applySettings();
+
+      await stripe.Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: stripe.SetupPaymentSheetParameters(
+          paymentIntentClientSecret: session.clientSecret,
+          merchantDisplayName: session.merchantDisplayName,
+          customerId: session.hasCustomer ? session.customerId : null,
+          customerEphemeralKeySecret:
+              session.hasCustomer ? session.ephemeralKeySecret : null,
+          applePay: hasApplePay
+              ? stripe.PaymentSheetApplePay(
+                  merchantCountryCode: session.merchantCountry,
+                )
+              : null,
+          googlePay: session.googlePayEnabled
+              ? stripe.PaymentSheetGooglePay(
+                  merchantCountryCode: session.merchantCountry,
+                  testEnv: session.isTest,
+                )
+              : null,
+        ),
+      );
+
+      await stripe.Stripe.instance.presentPaymentSheet();
+    } on stripe.StripeException catch (error) {
+      if (!mounted) return;
+      setState(() => isPlacingOrder = false);
+      // A user cancelling the sheet is not an error worth surfacing.
+      if (error.error.code != stripe.FailureCode.Canceled) {
+        showAppSnackBar(
+          context,
+          error.error.localizedMessage ?? 'Payment was not completed.',
+        );
+      }
+      return;
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => isPlacingOrder = false);
+      showAppSnackBar(context, 'Payment was not completed. Please try again.');
+      return;
+    }
+
+    await finishPaymentByPolling(response, checkout);
+  }
+
+  // Shared confirmation tail: poll the backend until the payment is final, then
+  // route to the confirmed screen or the result screen accordingly.
+  Future<void> finishPaymentByPolling(
+    PlaceOrderResponse response,
+    CheckoutData checkout,
+  ) async {
     final status = await pollPaymentStatus(response.order.id);
 
     if (!mounted) return;
@@ -448,7 +532,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         return;
       }
 
-      await startGeideaSdkAndRefresh(response, checkout);
+      if (response.payment.isStripe || response.nextScreen == 'stripe_payment') {
+        await startStripePaymentSheetAndRefresh(response, checkout);
+      } else {
+        await startGeideaSdkAndRefresh(response, checkout);
+      }
     } catch (error) {
       if (!mounted) return;
 
@@ -1346,7 +1434,7 @@ class CheckoutPaymentMethodTile extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (method.isCard)
+                  if (method.isCard || method.isStripePaymentSheet)
                     Row(
                       children: [
                         Text(

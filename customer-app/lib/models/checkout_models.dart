@@ -405,9 +405,10 @@ class CheckoutPaymentMethod {
   bool get isCard => key == 'geidea_card';
   bool get isApplePay => key == 'geidea_apple_pay';
   bool get isDemoCheckout => key == 'demo_checkout';
+  bool get isStripePaymentSheet => key == 'stripe_payment_sheet';
 
   bool get isAllowedCheckoutMethod {
-    return isCard || isApplePay || isDemoCheckout;
+    return isCard || isApplePay || isDemoCheckout || isStripePaymentSheet;
   }
 }
 
@@ -602,6 +603,7 @@ class CheckoutPayment {
   final double amount;
   final String currency;
   final GeideaPaymentSession geidea;
+  final StripePaymentSession stripe;
   final String orderReference;
 
   const CheckoutPayment({
@@ -613,6 +615,7 @@ class CheckoutPayment {
     required this.amount,
     required this.currency,
     required this.geidea,
+    required this.stripe,
     required this.orderReference,
   });
 
@@ -626,9 +629,12 @@ class CheckoutPayment {
       amount: readDouble(json['amount']) ?? 0,
       currency: readString(json['currency'], fallback: 'EGP'),
       geidea: GeideaPaymentSession.fromJson(asMap(json['geidea'])),
+      stripe: StripePaymentSession.fromJson(asMap(json['stripe'])),
       orderReference: readString(json['order_reference']),
     );
   }
+
+  bool get isStripe => provider == 'stripe';
 }
 
 class GeideaPaymentSession {
@@ -658,6 +664,56 @@ class GeideaPaymentSession {
       applePayMerchantId: nullableString(json['apple_pay_merchant_id']),
     );
   }
+}
+
+class StripePaymentSession {
+  final bool configured;
+  final bool isTest;
+  final String? publishableKey;
+  final String merchantDisplayName;
+  final String merchantCountry;
+  final String? applePayMerchantId;
+  final bool googlePayEnabled;
+  final String paymentIntentId;
+  final String clientSecret;
+  final String customerId;
+  final String ephemeralKeySecret;
+
+  const StripePaymentSession({
+    required this.configured,
+    required this.isTest,
+    required this.publishableKey,
+    required this.merchantDisplayName,
+    required this.merchantCountry,
+    required this.applePayMerchantId,
+    required this.googlePayEnabled,
+    required this.paymentIntentId,
+    required this.clientSecret,
+    required this.customerId,
+    required this.ephemeralKeySecret,
+  });
+
+  factory StripePaymentSession.fromJson(Map<String, dynamic> json) {
+    return StripePaymentSession(
+      configured: readBool(json['configured']),
+      isTest: readBool(json['is_test'], fallback: true),
+      publishableKey: nullableString(json['publishable_key']),
+      merchantDisplayName: readString(
+        json['merchant_display_name'],
+        fallback: 'EBTL',
+      ),
+      merchantCountry: readString(json['merchant_country'], fallback: 'US'),
+      applePayMerchantId: nullableString(json['apple_pay_merchant_id']),
+      googlePayEnabled: readBool(json['google_pay_enabled']),
+      paymentIntentId: readString(json['payment_intent_id']),
+      clientSecret: readString(json['client_secret']),
+      customerId: readString(json['customer_id']),
+      ephemeralKeySecret: readString(json['ephemeral_key_secret']),
+    );
+  }
+
+  bool get hasClientSecret => clientSecret.isNotEmpty;
+  bool get hasCustomer => customerId.isNotEmpty && ephemeralKeySecret.isNotEmpty;
 }
 
 class PaymentStatusResponse {
