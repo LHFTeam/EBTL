@@ -29,11 +29,12 @@ import 'shared/widgets/ebtl_bottom_nav.dart';
 
 /* --------------------------------- SERVICES --------------------------------- */
 import 'services/api_service.dart';
+import 'services/clarity_service.dart';
 import 'services/push_notification_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const EbtlApp());
+  runApp(ClarityService.wrap(const EbtlApp()));
 }
 
 /*

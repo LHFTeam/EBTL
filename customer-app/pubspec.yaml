@@ -79,6 +79,9 @@ dependencies:
   flutter_secure_storage: ^10.3.1
   flutter_markdown: ^0.7.7+1
   flutter_svg: ^2.3.0
+  # Microsoft Clarity session replay + heatmaps. Inert unless a project ID is
+  # supplied at build time (see lib/services/clarity_service.dart).
+  clarity_flutter: ^1.9.0
 
 dev_dependencies:
   flutter_test:
