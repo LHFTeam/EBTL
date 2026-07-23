@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -13,7 +15,7 @@ if (!googleServicesJson.exists()) {
     val base64Config = System.getenv("GOOGLE_SERVICES_JSON_BASE64")
     val appRootCopy = rootProject.file("../google-services.json")
     if (!base64Config.isNullOrBlank()) {
-        googleServicesJson.writeBytes(java.util.Base64.getDecoder().decode(base64Config.trim()))
+        googleServicesJson.writeBytes(Base64.getDecoder().decode(base64Config.trim()))
     } else if (appRootCopy.exists()) {
         appRootCopy.copyTo(googleServicesJson, overwrite = true)
     }
