@@ -1,33 +1,83 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 
 import 'api_service.dart';
 
-/// Best-effort device registration for push notifications.
+/// Background/terminated message handler. The OS renders notification messages
+/// itself; this exists so FCM has a registered background entry point.
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // No-op: order-ready notifications are display messages shown by the OS.
+}
+
+/// Firebase Cloud Messaging integration.
 ///
-/// The native side of `ebtl/push_notifications` is not wired up yet, so
-/// `getToken` throws [MissingPluginException] today and this is a no-op.
-/// Once a platform implementation provides a token, it is registered with
-/// the backend automatically.
+/// [initialize] is safe to call unconditionally and never throws: if Firebase
+/// is not configured for the current platform/build (e.g. no
+/// google-services.json / GoogleService-Info.plist), push is simply disabled
+/// and the rest of the app is unaffected.
 class PushNotificationService {
-  static const MethodChannel _channel = MethodChannel(
-    'ebtl/push_notifications',
-  );
+  static bool _initialized = false;
 
-  static Future<void> registerDeviceIfAvailable() async {
+  static Future<void> initialize() async {
+    if (_initialized) return;
+
     try {
-      final token = await _channel.invokeMethod<String>('getToken');
-      final cleanToken = token?.trim();
-      if (cleanToken == null || cleanToken.isEmpty) return;
+      await Firebase.initializeApp();
 
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
+      final messaging = FirebaseMessaging.instance;
+
+      // iOS/Android 13+ runtime permission. On older Android this is a no-op.
+      await messaging.requestPermission();
+
+      // Show foreground notifications on iOS (Android foreground display would
+      // need a local-notifications plugin; background/terminated already works).
+      await messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
+      await _registerCurrentToken();
+      messaging.onTokenRefresh.listen(_sendToken);
+
+      _initialized = true;
+    } catch (_) {
+      // Firebase not configured for this build/platform — leave push disabled.
+    }
+  }
+
+  static Future<void> _registerCurrentToken() async {
+    final token = await FirebaseMessaging.instance.getToken();
+    await _sendToken(token);
+  }
+
+  static Future<void> _sendToken(String? token) async {
+    final cleanToken = token?.trim();
+    if (cleanToken == null || cleanToken.isEmpty) return;
+
+    try {
       await ApiService.registerCustomerPushToken(
         token: cleanToken,
-        platform: defaultTargetPlatform.name,
+        platform: _platformName(),
       );
-    } on MissingPluginException {
-      // Native push registration has not been wired yet.
     } catch (_) {
-      // Push registration must never block app startup.
+      // Token registration is best-effort; never block startup on it.
+    }
+  }
+
+  static String _platformName() {
+    if (kIsWeb) return 'web';
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'android';
+      case TargetPlatform.iOS:
+        return 'ios';
+      default:
+        return defaultTargetPlatform.name;
     }
   }
 }

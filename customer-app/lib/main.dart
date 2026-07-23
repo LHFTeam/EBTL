@@ -151,7 +151,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     super.initState();
     appDataFuture = ApiService.fetchAppData();
     WidgetsBinding.instance.addObserver(this);
-    PushNotificationService.registerDeviceIfAvailable();
+    PushNotificationService.initialize();
     _startNotificationsPolling(notifyImmediately: false);
   }
 
