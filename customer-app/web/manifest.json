@@ -1,6 +1,6 @@
 {
-    "name": "ebtl_customer_app",
-    "short_name": "ebtl_customer_app",
+    "name": "EBTL",
+    "short_name": "EBTL",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
