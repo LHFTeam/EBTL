@@ -1,5 +1,7 @@
 package com.example.ebtl_customer_app
 
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 
-class MainActivity : FlutterActivity()
+// flutter_stripe requires the host Activity to extend FlutterFragmentActivity so
+// the native Payment Sheet can be presented from a FragmentActivity context.
+class MainActivity : FlutterFragmentActivity()

@@ -19,7 +19,8 @@ android {
         applicationId = "com.example.ebtl_customer_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // flutter_stripe requires a minimum SDK of 21.
+        minSdk = maxOf(21, flutter.minSdkVersion)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

@@ -19,6 +19,12 @@ export const RAW_PAYMENT_MODE = process.env.PAYMENT_MODE || '';
 export const PAYMENT_MODE = normalizeEnvValue(RAW_PAYMENT_MODE) === 'demo' ? 'demo' : 'live';
 export const isDemoPaymentMode = PAYMENT_MODE === 'demo';
 
+// Which live gateway backs the customer checkout. Defaults to geidea so existing
+// deployments are unaffected; set PAYMENT_PROVIDER=stripe to switch to Stripe.
+export const ACTIVE_PAYMENT_PROVIDER = normalizeEnvValue(process.env.PAYMENT_PROVIDER) === 'stripe'
+  ? 'stripe'
+  : 'geidea';
+
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
 }

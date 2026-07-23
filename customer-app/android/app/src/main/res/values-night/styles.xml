@@ -12,7 +12,8 @@
          running.
 
          This Theme is only used starting with V2 of Flutter's Android embedding. -->
-    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+    <!-- MaterialComponents parent is required by flutter_stripe's Payment Sheet. -->
+    <style name="NormalTheme" parent="Theme.MaterialComponents.NoActionBar">
         <item name="android:windowBackground">?android:colorBackground</item>
     </style>
 </resources>
