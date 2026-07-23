@@ -8,6 +8,7 @@ import '../core/constants/fulfillment_types.dart';
 import '../core/network/api_config.dart';
 import '../core/network/api_exception.dart';
 import '../core/utils/json_helpers.dart';
+import '../models/address_models.dart';
 import '../models/app_data.dart';
 import '../models/cart_action_models.dart';
 import '../models/cart_models.dart';
@@ -553,6 +554,74 @@ class ApiService {
     await _request(
       method: 'DELETE',
       path: '/api/customer/favorites/${Uri.encodeComponent(productId)}',
+      attachToken: true,
+    );
+  }
+
+  static Future<CustomerAddressesResponse> fetchCustomerAddresses() async {
+    await ensureSession();
+
+    final json = await _request(
+      method: 'GET',
+      path: '/api/customer/addresses',
+      attachToken: true,
+    );
+
+    return CustomerAddressesResponse.fromJson(json);
+  }
+
+  /// Creates a new address, or updates the one identified by [id]. Empty text
+  /// fields are sent as null so the backend clears the corresponding column.
+  static Future<CustomerAddress> saveCustomerAddress({
+    String? id,
+    String? label,
+    String? compoundName,
+    String? beachName,
+    String? unitNumber,
+    String? building,
+    String? floor,
+    String? deliveryNotes,
+    bool isDefault = false,
+  }) async {
+    await ensureSession();
+
+    String? nullIfBlank(String? value) {
+      final text = value?.trim();
+      return text == null || text.isEmpty ? null : text;
+    }
+
+    final body = <String, dynamic>{
+      'label': nullIfBlank(label),
+      'compound_name': nullIfBlank(compoundName),
+      'beach_name': nullIfBlank(beachName),
+      'unit_number': nullIfBlank(unitNumber),
+      'building': nullIfBlank(building),
+      'floor': nullIfBlank(floor),
+      'delivery_notes': nullIfBlank(deliveryNotes),
+      'is_default': isDefault,
+    };
+
+    final addressId = id?.trim();
+    final isUpdate = addressId != null && addressId.isNotEmpty;
+
+    final json = await _request(
+      method: isUpdate ? 'PATCH' : 'POST',
+      path: isUpdate
+          ? '/api/customer/addresses/${Uri.encodeComponent(addressId)}'
+          : '/api/customer/addresses',
+      body: body,
+      attachToken: true,
+    );
+
+    return CustomerAddress.fromJson(asMap(json['address']));
+  }
+
+  static Future<void> deleteCustomerAddress({required String id}) async {
+    await ensureSession();
+
+    await _request(
+      method: 'DELETE',
+      path: '/api/customer/addresses/${Uri.encodeComponent(id)}',
       attachToken: true,
     );
   }

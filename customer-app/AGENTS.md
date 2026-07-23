@@ -27,7 +27,12 @@ The app is a thin client over the **customer API** of a separate backend
 
 - Flutter (Material 3), Dart SDK `^3.12.0`, stable channel. All platform
   folders exist (android/ios/web/linux/macos/windows) but the product targets
-  mobile; platform IDs are still the template `com.example.*` values.
+  mobile. The shipping platforms (Android/iOS, and web) use the real bundle
+  ID `wtf.ebtl.app` and display name **EBTL**; the non-shipping desktop
+  folders (linux/macos/windows) are still on the template `com.example.*`
+  identity. Note the **Dart package name stays `ebtl_customer_app`** (the
+  `name:` in `pubspec.yaml`, imported as `package:ebtl_customer_app/...`) —
+  that is independent of the store bundle ID and is not renamed.
 - Dependencies are deliberately minimal: `http`, `google_fonts`,
   `flutter_secure_storage`, `flutter_markdown`, `flutter_svg`,
   `cupertino_icons`. **Do not add packages** (state management, DI, routing,

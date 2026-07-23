@@ -25,6 +25,16 @@ export const ACTIVE_PAYMENT_PROVIDER = normalizeEnvValue(process.env.PAYMENT_PRO
   ? 'stripe'
   : 'geidea';
 
+// Marketing/analytics pixel IDs for the public landing page. Each is null when
+// unset; the client only initializes the platforms that have an ID. Served via
+// GET /api/public-config and consumed by public/landing-assets/tracking.js.
+export const LANDING_TRACKING = {
+  metaPixelId: process.env.META_PIXEL_ID || null,
+  tiktokPixelId: process.env.TIKTOK_PIXEL_ID || null,
+  snapchatPixelId: process.env.SNAPCHAT_PIXEL_ID || null,
+  ga4MeasurementId: process.env.GA4_MEASUREMENT_ID || null
+};
+
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
 }

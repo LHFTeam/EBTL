@@ -1,0 +1,23 @@
+{
+  "//": "TEMPLATE ONLY — shows the shape of the real file. Do NOT put real keys here.",
+  "//howto": "Download the real google-services.json from the Firebase console for the wtf.ebtl.app Android app, then place it (gitignored) at android/app/google-services.json or at the customer-app root, or provide it via the GOOGLE_SERVICES_JSON_BASE64 env var at build time.",
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "your-firebase-project-id",
+    "storage_bucket": "your-firebase-project-id.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+        "android_client_info": {
+          "package_name": "wtf.ebtl.app"
+        }
+      },
+      "api_key": [
+        { "current_key": "YOUR_ANDROID_API_KEY" }
+      ]
+    }
+  ],
+  "configuration_version": "1"
+}

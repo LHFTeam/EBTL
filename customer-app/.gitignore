@@ -43,3 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Firebase config — secrets, never commit. Provide locally at one of these
+# paths, or inject via GOOGLE_SERVICES_JSON_BASE64 at build time (see
+# android/app/build.gradle.kts).
+/google-services.json
+/android/app/google-services.json
+/ios/Runner/GoogleService-Info.plist

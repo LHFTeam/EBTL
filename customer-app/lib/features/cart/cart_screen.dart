@@ -79,10 +79,10 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   void setFulfillmentType(String value) {
-    if (value == FulfillmentTypes.deliveryToUnit) {
-      showAppSnackBar(context, 'Delivery is coming soon.');
-      return;
-    }
+    // Delivery is not launched yet: it is shown as "Coming soon" and is not
+    // selectable in the toggle. Guard here as well so it can never become the
+    // active fulfillment type even if this is called with it.
+    if (value == FulfillmentTypes.deliveryToUnit) return;
 
     if (value == fulfillmentType) return;
 
@@ -468,14 +468,25 @@ class CartFulfillmentToggle extends StatelessWidget {
                           ),
                         ),
                         if (disabled) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            '(coming soon)',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.manrope(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              color: EbtlColors.muted,
+                          const SizedBox(height: 5),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: EbtlColors.gold.withValues(alpha: 0.28),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              'Coming soon',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.manrope(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.3,
+                                color: EbtlColors.ink,
+                              ),
                             ),
                           ),
                         ],

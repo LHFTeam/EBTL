@@ -1,4 +1,4 @@
-package com.example.ebtl_customer_app
+package wtf.ebtl.app
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 

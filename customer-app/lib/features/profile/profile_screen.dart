@@ -4,6 +4,7 @@ import '../../core/theme/ebtl_colors.dart';
 import '../../models/profile_models.dart';
 import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
+import 'customer_addresses_screen.dart';
 import 'customer_orders_screen.dart';
 import 'favorite_cocktails_screen.dart';
 import 'profile_edit_sheet.dart';
@@ -79,11 +80,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       case 'addresses':
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => FeaturePlaceholderScreen(
-              title: link.title,
-              message:
-                  'Address management will use ${link.endpoint ?? 'the customer addresses endpoint'} when that screen is added.',
-            ),
+            builder: (_) => const CustomerAddressesScreen(),
           ),
         );
         return;

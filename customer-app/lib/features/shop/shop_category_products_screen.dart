@@ -5,6 +5,7 @@ import '../../core/theme/ebtl_colors.dart';
 import '../../models/shop_models.dart';
 import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
+import 'widgets/shop_product_detail_sheet.dart';
 import 'widgets/shop_product_widgets.dart';
 import 'widgets/shop_simple_header.dart';
 
@@ -176,7 +177,12 @@ class _ShopCategoryProductsScreenState
 
   void openProduct(ShopProduct product) {
     if (!product.isCocktail) {
-      showMessage('Product details are coming soon.');
+      showShopProductDetailSheet(
+        context: context,
+        product: product,
+        locationId: widget.locationId,
+        onCartChanged: widget.onCartChanged,
+      );
       return;
     }
 
