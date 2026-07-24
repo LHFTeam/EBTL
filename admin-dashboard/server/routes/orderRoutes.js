@@ -13,6 +13,7 @@ const CART_OPERATION_ROLES = ['prep', 'cart_operator', 'supervisor', 'manager', 
 const CART_LOCATION_SWITCH_ROLES = ['supervisor', 'manager', 'admin'];
 const CART_OPERATION_STATUSES = ['confirmed', 'preparing', 'ready', 'completed'];
 const ACTIVE_OPERATION_STATUSES = ['confirmed', 'preparing', 'ready'];
+const PREP_VIEWABLE_STATUSES = ['confirmed', 'preparing', 'ready', 'completed'];
 const STATUS_GROUPS = {
   active: ACTIVE_OPERATION_STATUSES,
   confirmed: ['confirmed'],
@@ -327,6 +328,7 @@ function operationTransitionsFor(user, currentStatus) {
   if (user?.role === 'prep') {
     if (currentStatus === 'confirmed') return ['preparing'];
     if (currentStatus === 'preparing') return ['ready'];
+    if (currentStatus === 'ready') return ['completed'];
     return [];
   }
 
@@ -383,18 +385,25 @@ orderRouter.get('/cart-operations/orders', requireArea('orders'), async (req, re
     statuses: parsed.data.statuses
   });
 
-  if (req.user.role === 'prep' && statuses.some((status) => !ACTIVE_OPERATION_STATUSES.includes(status))) {
-    return res.status(403).json({ error: 'Prep employees can only view active orders for their assigned cart.' });
+  if (req.user.role === 'prep' && statuses.some((status) => !PREP_VIEWABLE_STATUSES.includes(status))) {
+    return res.status(403).json({ error: 'Prep employees can only view active and completed orders for their assigned cart.' });
   }
 
-  const orderResult = await supabase
+  // Completed tickets are read newest-first (so the limit captures the most
+  // recent orders for the "Completed" filter); active tickets keep the
+  // received order so cards stay in place as they advance.
+  const completedOnly = statuses.length > 0 && statuses.every((status) => status === 'completed');
+
+  const orderQuery = supabase
     .from('orders')
     .select('id,order_number,customer_id,location_id,order_channel,fulfillment_type,status,payment_status,requested_fulfillment_at,subtotal_ex_vat,vat_amount,discount_amount,delivery_fee,total_amount,customer_notes,internal_notes,customer_address_snapshot,customer_phone_snapshot,created_at,confirmed_at,preparing_at,ready_at,completed_at,updated_at, customers(full_name,phone), locations(id,name,type,compound_name,beach_name,is_active), payments(id,status,created_at,updated_at)')
     .eq('location_id', resolved.selectedLocation.id)
     .eq('payment_status', 'paid')
-    .in('status', statuses)
-    .order('created_at', { ascending: true })
-    .limit(200);
+    .in('status', statuses);
+
+  const orderResult = await (completedOnly
+    ? orderQuery.order('completed_at', { ascending: false, nullsFirst: false }).limit(200)
+    : orderQuery.order('created_at', { ascending: true }).limit(200));
 
   if (orderResult.error) return res.status(400).json({ error: orderResult.error.message });
 

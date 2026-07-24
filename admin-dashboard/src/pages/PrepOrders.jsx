@@ -6,8 +6,7 @@ import {
   Clock3,
   LogOut,
   MapPin,
-  PackageCheck,
-  Play,
+  Power,
   RefreshCw,
   Truck,
   Wifi,
@@ -18,45 +17,37 @@ import { api } from '../api/client.js';
 import { connectPrepOrderSocket } from '../realtime/prepOrderSocket.js';
 
 const ACTIVE_STATUS_GROUP = 'active';
+const COMPLETED_STATUS_GROUP = 'picked_up';
 const DEGRADED_POLL_MS = 15000;
 const INVALIDATION_DEBOUNCE_MS = 250;
-const DEFAULT_TARGET_MINUTES = 15;
 const BUSINESS_TIME_ZONE = 'Africa/Cairo';
 
-const LANE_CONFIG = [
-  {
-    status: 'confirmed',
-    label: 'New',
-    helper: 'Start these first',
-    EmptyIcon: Clock3
-  },
-  {
-    status: 'preparing',
-    label: 'Preparing',
-    helper: 'Being made now',
-    EmptyIcon: ChefHat
-  },
-  {
-    status: 'ready',
-    label: 'Ready',
-    helper: 'Waiting for handoff',
-    EmptyIcon: PackageCheck
-  }
-];
+// Urgency thresholds (from received time): green for the first 2 minutes,
+// yellow for the next 8 minutes (up to 10), red after that.
+const FRESH_MS = 2 * 60 * 1000;
+const WARM_MS = 10 * 60 * 1000;
 
-const cairoTimeFormatter = new Intl.DateTimeFormat('en-GB', {
+const ACTIVE_STATUSES = ['confirmed', 'preparing', 'ready'];
+
+const STAGE_LABEL = {
+  confirmed: 'NEW',
+  preparing: 'PREPARING',
+  ready: 'READY',
+  completed: 'COMPLETED'
+};
+
+const cairoTimeFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: BUSINESS_TIME_ZONE,
   hour: '2-digit',
   minute: '2-digit',
-  second: '2-digit',
-  hour12: false
+  hour12: true
 });
 
-const cairoDateFormatter = new Intl.DateTimeFormat('en-GB', {
+const cairoDayKeyFormatter = new Intl.DateTimeFormat('en-CA', {
   timeZone: BUSINESS_TIME_ZONE,
-  weekday: 'short',
-  day: 'numeric',
-  month: 'short'
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
 });
 
 const cairoOrderTimeFormatter = new Intl.DateTimeFormat('en-GB', {
@@ -68,6 +59,10 @@ const cairoOrderTimeFormatter = new Intl.DateTimeFormat('en-GB', {
 
 function orderStartedAt(order) {
   return order.confirmed_at || order.created_at || null;
+}
+
+function orderCompletedAt(order) {
+  return order.completed_at || order.updated_at || null;
 }
 
 function orderNumber(order) {
@@ -104,6 +99,21 @@ function formatOrderTime(value) {
   if (!value) return '--:--';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '--:--' : cairoOrderTimeFormatter.format(date);
+}
+
+function cairoDayKey(value) {
+  const date = new Date(value || '');
+  return Number.isNaN(date.getTime()) ? '' : cairoDayKeyFormatter.format(date);
+}
+
+function initialsFor(name) {
+  return String(name || '')
+    .split(/\s+/)
+    .map((word) => word[0])
+    .filter(Boolean)
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'EM';
 }
 
 function asStringList(value) {
@@ -171,25 +181,23 @@ function totalAdditionQuantity(item, addition) {
   return parentQuantity * quantityPerParent;
 }
 
-function orderTargetMinutes(order) {
-  const targets = (order.items || [])
-    .map((item) => Number(item.prep_time_minutes || item.products?.prep_time_minutes || 0))
-    .filter((value) => Number.isFinite(value) && value > 0);
-
-  return targets.length ? Math.max(...targets) : DEFAULT_TARGET_MINUTES;
+function elapsedMsFor(order, now) {
+  const start = new Date(orderStartedAt(order) || 0).getTime();
+  return Number.isFinite(start) && start > 0 ? Math.max(0, now - start) : 0;
 }
 
-function orderTiming(order, now) {
-  const start = new Date(orderStartedAt(order) || 0).getTime();
-  const elapsedMs = Number.isFinite(start) && start > 0 ? Math.max(0, now - start) : 0;
-  const targetMs = orderTargetMinutes(order) * 60 * 1000;
-  const ratio = targetMs > 0 ? elapsedMs / targetMs : 0;
+function urgencyFor(order, now) {
+  const elapsed = elapsedMsFor(order, now);
+  if (elapsed < FRESH_MS) return 'fresh';
+  if (elapsed < WARM_MS) return 'warm';
+  return 'urgent';
+}
 
-  return {
-    elapsedMs,
-    targetMinutes: Math.round(targetMs / 60000),
-    urgency: ratio >= 1 ? 'overdue' : (ratio >= 0.7 ? 'warning' : 'onTime')
-  };
+function nextStatusFor(status) {
+  if (status === 'confirmed') return 'preparing';
+  if (status === 'preparing') return 'ready';
+  if (status === 'ready') return 'completed';
+  return null;
 }
 
 function fulfillmentLabel(order) {
@@ -200,18 +208,6 @@ function fulfillmentLabel(order) {
   }
 
   return 'Pickup at cart';
-}
-
-function nextAction(order) {
-  if (order.status === 'confirmed') {
-    return { status: 'preparing', label: 'Start Order', Icon: Play };
-  }
-
-  if (order.status === 'preparing') {
-    return { status: 'ready', label: 'Mark Ready', Icon: Check };
-  }
-
-  return null;
 }
 
 function isRecipeItemRemoved(item, recipeItem) {
@@ -234,159 +230,120 @@ function connectionCopy(state) {
   return 'Reconnecting';
 }
 
-function PrepItem({ item, onOpen }) {
+function TicketItem({ order, item, onOpenRecipe }) {
   const modifications = modificationLines(item);
-  const allergens = itemAllergens(item);
 
   return (
-    <button className="prepKdsItem" type="button" onClick={onOpen}>
-      <span className="prepKdsItemQty">{formatQuantity(item.quantity)}</span>
-      <span className="prepKdsItemCopy">
-        <span className="prepKdsItemName">{item.product_name_snapshot || item.products?.name || 'Item'}</span>
-        <span className="prepKdsItemVariant">{variantLabel(item)}</span>
-        {modifications.length > 0 && (
-          <span className="prepKdsModifications">
-            {modifications.map((line) => <strong key={line}>{line}</strong>)}
-          </span>
-        )}
-        {allergens.length > 0 && (
-          <span className="prepKdsAllergenLine">
-            <AlertTriangle size={15} />
-            ALLERGEN: {allergens.join(', ')}
-          </span>
-        )}
+    <div className="prepKdsTicketItem">
+      <span className="prepKdsTicketQty">&times;{formatQuantity(item.quantity)}</span>
+      <span className="prepKdsTicketItemBody">
+        <span className="prepKdsTicketItemName">{item.product_name_snapshot || item.products?.name || 'Item'}</span>
+        {modifications.map((line) => (
+          <span className="prepKdsTicketMod" key={line}>&#8627; {line}</span>
+        ))}
       </span>
-      <span className="prepKdsItemOpen">Recipe</span>
-    </button>
+      <button
+        className="prepKdsTicketRecipe"
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpenRecipe(order, item);
+        }}
+      >
+        Recipe
+      </button>
+    </div>
   );
 }
 
-function PrepOrderCard({
-  order,
-  now,
-  saving,
-  highlighted,
-  onStatus,
-  onOpenItem
-}) {
-  const action = nextAction(order);
-  const timing = orderTiming(order, now);
+function PrepTicket({ order, now, saving, highlighted, onAdvance, onOpenRecipe }) {
+  const urgency = urgencyFor(order, now);
   const allergens = orderAllergens(order);
-  const ActionIcon = action?.Icon;
+  const nextStatus = nextStatusFor(order.status);
   const FulfillmentIcon = order.fulfillment_type === 'delivery_to_unit' ? Truck : MapPin;
 
   return (
-    <article className={`prepKdsCard prepKdsCard-${order.status} prepKdsCard-${timing.urgency} ${highlighted ? 'prepKdsCard-new' : ''}`}>
-      <div className="prepKdsCardHead">
-        <div>
-          <span className="prepKdsOrderNumber">{orderNumber(order)}</span>
-          <span className="prepKdsStarted">Received {formatOrderTime(orderStartedAt(order))} Cairo</span>
-        </div>
-        <div className={`prepKdsTimer prepKdsTimer-${timing.urgency}`}>
-          <Clock3 size={19} />
-          <span>
-            <strong>{timing.urgency === 'overdue' ? 'OVERDUE' : 'ASAP'}</strong>
-            {formatTimer(timing.elapsedMs)}
-          </span>
-        </div>
+    <article
+      className={`prepKdsTicket prepKdsTicket-${urgency} prepKdsTicket-${order.status} ${highlighted ? 'prepKdsTicket-new' : ''} ${saving ? 'prepKdsTicket-saving' : ''}`}
+      role="button"
+      tabIndex={0}
+      aria-label={`${orderNumber(order)} - ${STAGE_LABEL[order.status]}. Press to advance.`}
+      aria-busy={saving}
+      onClick={() => nextStatus && onAdvance(order, nextStatus)}
+      onKeyDown={(event) => {
+        if ((event.key === 'Enter' || event.key === ' ') && nextStatus) {
+          event.preventDefault();
+          onAdvance(order, nextStatus);
+        }
+      }}
+    >
+      <div className={`prepKdsTicketHead prepKdsTicketHead-${urgency}`}>
+        <span className="prepKdsTicketCode">{orderNumber(order)}</span>
+        <span className="prepKdsTicketTimer">
+          {saving ? <RefreshCw className="spinIcon" size={18} /> : <Clock3 size={17} />}
+          {formatTimer(elapsedMsFor(order, now))}
+        </span>
       </div>
 
-      <div className="prepKdsFulfillment">
-        <FulfillmentIcon size={18} />
-        <span>{fulfillmentLabel(order)}</span>
+      <div className="prepKdsTicketBody">
+        <div className="prepKdsTicketFulfillment">
+          <FulfillmentIcon size={15} />
+          <span>{fulfillmentLabel(order)}</span>
+          <span className="prepKdsTicketReceived">{formatOrderTime(orderStartedAt(order))}</span>
+        </div>
+
+        {allergens.length > 0 && (
+          <div className="prepKdsTicketAllergens" role="alert">
+            <AlertTriangle size={15} />
+            <span><strong>ALLERGEN</strong> {allergens.join(', ')}</span>
+          </div>
+        )}
+
+        <div className="prepKdsTicketItems">
+          {(order.items || []).map((item) => (
+            <TicketItem key={item.id} order={order} item={item} onOpenRecipe={onOpenRecipe} />
+          ))}
+        </div>
+
+        {order.customer_notes && (
+          <div className="prepKdsTicketNote">
+            <strong>NOTE</strong>
+            <span>{order.customer_notes}</span>
+          </div>
+        )}
       </div>
 
-      {allergens.length > 0 && (
-        <div className="prepKdsOrderAllergens" role="alert">
-          <AlertTriangle size={19} />
-          <span><strong>ALLERGY CHECK</strong>{allergens.join(', ')}</span>
-        </div>
-      )}
-
-      <div className="prepKdsItems">
-        {(order.items || []).map((item) => (
-          <PrepItem
-            key={item.id}
-            item={item}
-            onOpen={() => onOpenItem(order, item)}
-          />
-        ))}
+      <div className={`prepKdsTicketStage prepKdsTicketStage-${order.status}`}>
+        {STAGE_LABEL[order.status]}
       </div>
-
-      {order.customer_notes && (
-        <div className="prepKdsNote">
-          <strong>ORDER NOTE</strong>
-          <span>{order.customer_notes}</span>
-        </div>
-      )}
-
-      {action ? (
-        <button
-          className={`prepKdsAction prepKdsAction-${action.status}`}
-          type="button"
-          disabled={saving}
-          onClick={() => onStatus(order, action.status)}
-        >
-          {saving ? <RefreshCw className="spinIcon" size={22} /> : <ActionIcon size={22} />}
-          {action.label}
-        </button>
-      ) : (
-        <div className="prepKdsReadyState">
-          <Check size={22} />
-          Ready for handoff
-        </div>
-      )}
-
-      <span className="prepKdsTarget">Target: {timing.targetMinutes} min</span>
     </article>
   );
 }
 
-function PrepLane({
-  config,
-  orders,
-  now,
-  savingOrderIds,
-  highlightedOrderIds,
-  onStatus,
-  onOpenItem
-}) {
-  const { status, label, helper, EmptyIcon } = config;
-
+function CompletedTicket({ order }) {
   return (
-    <section className={`prepKdsLane prepKdsLane-${status}`} aria-labelledby={`prep-lane-${status}`}>
-      <header className="prepKdsLaneHeader">
-        <div className="prepKdsLaneTitle">
-          <span className="prepKdsLaneCount">{orders.length}</span>
-          <span>
-            <h2 id={`prep-lane-${status}`}>{label}</h2>
-            <small>{helper}</small>
-          </span>
-        </div>
-      </header>
-
-      <div className="prepKdsLaneOrders">
-        {orders.length === 0 && (
-          <div className="prepKdsEmpty">
-            <EmptyIcon size={34} />
-            <strong>No {label.toLowerCase()} orders</strong>
-            <span>New activity will appear here automatically.</span>
-          </div>
-        )}
-
-        {orders.map((order) => (
-          <PrepOrderCard
-            key={order.id}
-            order={order}
-            now={now}
-            saving={savingOrderIds.has(order.id)}
-            highlighted={highlightedOrderIds.has(order.id)}
-            onStatus={onStatus}
-            onOpenItem={onOpenItem}
-          />
-        ))}
+    <article className="prepKdsTicket prepKdsTicket-done">
+      <div className="prepKdsTicketHead prepKdsTicketHead-done">
+        <span className="prepKdsTicketCode">{orderNumber(order)}</span>
+        <span className="prepKdsDoneBadge"><Check size={14} /> Done</span>
       </div>
-    </section>
+
+      <div className="prepKdsTicketBody">
+        <div className="prepKdsTicketItems">
+          {(order.items || []).map((item) => (
+            <div className="prepKdsTicketItem prepKdsTicketItem-done" key={item.id}>
+              <span className="prepKdsTicketQty">&times;{formatQuantity(item.quantity)}</span>
+              <span className="prepKdsTicketItemBody">
+                <span className="prepKdsTicketItemName">{item.product_name_snapshot || item.products?.name || 'Item'}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+        <span className="prepKdsCompletedAt">Completed {formatOrderTime(orderCompletedAt(order))} Cairo</span>
+      </div>
+
+      <div className="prepKdsTicketStage prepKdsTicketStage-completed">COMPLETED</div>
+    </article>
   );
 }
 
@@ -490,7 +447,7 @@ function PrepRecipeOverlay({ payload, now, onClose }) {
         </div>
 
         <div className="prepKdsRecipeContext">
-          <span><Clock3 size={18} /> ASAP / {formatTimer(orderTiming(order, now).elapsedMs)}</span>
+          <span><Clock3 size={18} /> {formatTimer(elapsedMsFor(order, now))} elapsed</span>
           <span><MapPin size={18} /> {fulfillmentLabel(order)}</span>
         </div>
 
@@ -592,6 +549,8 @@ function PrepRecipeOverlay({ payload, now, onClose }) {
 
 export default function PrepOrders({ user, onLogout }) {
   const [orders, setOrders] = useState([]);
+  const [completedOrders, setCompletedOrders] = useState([]);
+  const [filter, setFilter] = useState('active');
   const [location, setLocation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -614,6 +573,11 @@ export default function PrepOrders({ user, onLogout }) {
   const refreshTimerRef = useRef(null);
   const queuedRefreshTimerRef = useRef(null);
   const highlightTimerRef = useRef(null);
+  const filterRef = useRef(filter);
+
+  useEffect(() => {
+    filterRef.current = filter;
+  }, [filter]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -642,6 +606,26 @@ export default function PrepOrders({ user, onLogout }) {
     return selectedLocation;
   }, [applyServerTime]);
 
+  const loadCompleted = useCallback(async () => {
+    try {
+      const payload = await api(`/api/cart-operations/orders?status_group=${COMPLETED_STATUS_GROUP}`);
+      if (!mountedRef.current) return;
+
+      applyServerTime(payload.server_time);
+      const todayKey = cairoDayKey(Date.now() + clockOffsetRef.current);
+      const rows = (payload.orders || [])
+        .filter((order) => order.status === 'completed')
+        .filter((order) => cairoDayKey(orderCompletedAt(order)) === todayKey)
+        .sort((a, b) => (
+          new Date(orderCompletedAt(b) || 0).getTime() - new Date(orderCompletedAt(a) || 0).getTime()
+        ));
+      setCompletedOrders(rows);
+    } catch (error) {
+      if (error.status === 401 || error.status === 403) return;
+      // The completed list is secondary; keep the last known list on failure.
+    }
+  }, [applyServerTime]);
+
   const loadOrders = useCallback(async ({ initial = false } = {}) => {
     if (loadPromiseRef.current) {
       queuedRefreshRef.current = true;
@@ -660,7 +644,7 @@ export default function PrepOrders({ user, onLogout }) {
 
         const nextOrders = (payload.orders || [])
           .filter((order) => (
-            ['confirmed', 'preparing', 'ready'].includes(order.status)
+            ACTIVE_STATUSES.includes(order.status)
             && (!order.payment_status || order.payment_status === 'paid')
           ))
           .sort((a, b) => (
@@ -668,12 +652,12 @@ export default function PrepOrders({ user, onLogout }) {
           ));
 
         if (hasLoadedOrdersRef.current) {
-          const newlyConfirmedIds = nextOrders
+          const newlyArrivedIds = nextOrders
             .filter((order) => order.status === 'confirmed' && !knownOrderIdsRef.current.has(order.id))
             .map((order) => order.id);
 
-          if (newlyConfirmedIds.length > 0) {
-            setHighlightedOrderIds(new Set(newlyConfirmedIds));
+          if (newlyArrivedIds.length > 0) {
+            setHighlightedOrderIds(new Set(newlyArrivedIds));
             window.clearTimeout(highlightTimerRef.current);
             highlightTimerRef.current = window.setTimeout(() => {
               if (mountedRef.current) setHighlightedOrderIds(new Set());
@@ -725,8 +709,9 @@ export default function PrepOrders({ user, onLogout }) {
     refreshTimerRef.current = window.setTimeout(() => {
       refreshTimerRef.current = null;
       loadOrders();
+      if (filterRef.current === 'completed') loadCompleted();
     }, delay);
-  }, [loadOrders]);
+  }, [loadOrders, loadCompleted]);
 
   const loadKitchen = useCallback(async () => {
     setLoading(true);
@@ -734,7 +719,8 @@ export default function PrepOrders({ user, onLogout }) {
 
     const results = await Promise.allSettled([
       loadLocation(),
-      loadOrders({ initial: true })
+      loadOrders({ initial: true }),
+      loadCompleted()
     ]);
 
     if (!mountedRef.current) return;
@@ -744,7 +730,7 @@ export default function PrepOrders({ user, onLogout }) {
       setLoadError(locationResult.reason?.message || 'Could not load the assigned prep location.');
     }
     setLoading(false);
-  }, [loadLocation, loadOrders]);
+  }, [loadLocation, loadOrders, loadCompleted]);
 
   useEffect(() => {
     loadKitchen();
@@ -812,9 +798,12 @@ export default function PrepOrders({ user, onLogout }) {
   useEffect(() => {
     if (connectionState === 'live' || navigator.onLine === false) return undefined;
 
-    const timer = window.setInterval(() => loadOrders(), DEGRADED_POLL_MS);
+    const timer = window.setInterval(() => {
+      loadOrders();
+      if (filterRef.current === 'completed') loadCompleted();
+    }, DEGRADED_POLL_MS);
     return () => window.clearInterval(timer);
-  }, [connectionState, loadOrders]);
+  }, [connectionState, loadOrders, loadCompleted]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -841,21 +830,24 @@ export default function PrepOrders({ user, onLogout }) {
 
   const closeRecipe = useCallback(() => setRecipePayload(null), []);
 
-  const lanes = useMemo(() => {
-    const grouped = {
-      confirmed: [],
-      preparing: [],
-      ready: []
-    };
+  const openRecipe = useCallback((order, item) => setRecipePayload({ order, item }), []);
 
+  const showCompleted = useCallback(() => {
+    setFilter('completed');
+    loadCompleted();
+  }, [loadCompleted]);
+
+  const stageCounts = useMemo(() => {
+    const counts = { confirmed: 0, preparing: 0, ready: 0 };
     for (const order of orders) {
-      if (grouped[order.status]) grouped[order.status].push(order);
+      if (counts[order.status] !== undefined) counts[order.status] += 1;
     }
-
-    return grouped;
+    return counts;
   }, [orders]);
 
-  async function updateOrderStatus(order, status) {
+  async function advanceOrder(order, status) {
+    if (savingOrderIds.has(order.id)) return;
+
     setSavingOrderIds((current) => new Set(current).add(order.id));
     setToast(null);
 
@@ -867,16 +859,24 @@ export default function PrepOrders({ user, onLogout }) {
 
       if (!mountedRef.current) return;
 
-      setOrders((current) => current.map((entry) => (
-        entry.id === order.id ? { ...entry, status } : entry
-      )));
+      if (status === 'completed') {
+        setOrders((current) => current.filter((entry) => entry.id !== order.id));
+        knownOrderIdsRef.current.delete(order.id);
+        loadCompleted();
+        setToast({ type: 'success', message: `${orderNumber(order)} completed.` });
+      } else {
+        setOrders((current) => current.map((entry) => (
+          entry.id === order.id ? { ...entry, status } : entry
+        )));
+        setToast({
+          type: 'success',
+          message: status === 'ready'
+            ? `${orderNumber(order)} is ready for handoff.`
+            : `${orderNumber(order)} moved to Preparing.`
+        });
+      }
+
       setLoadError('');
-      setToast({
-        type: 'success',
-        message: status === 'ready'
-          ? `${orderNumber(order)} is ready for handoff.`
-          : `${orderNumber(order)} moved to Preparing.`
-      });
     } catch (error) {
       if (!mountedRef.current) return;
 
@@ -921,7 +921,7 @@ export default function PrepOrders({ user, onLogout }) {
       <div className="prepKdsRoot prepKdsBoot">
         <div className="prepKdsBootCard">
           <ChefHat size={42} />
-          <strong>Opening kitchen display</strong>
+          <strong>Opening order display</strong>
           <span>Loading the assigned location and live queue...</span>
         </div>
       </div>
@@ -944,35 +944,56 @@ export default function PrepOrders({ user, onLogout }) {
     );
   }
 
+  const isCompleted = filter === 'completed';
+
   return (
     <div className="prepKdsRoot">
       <header className="prepKdsHeader">
-        <div className="prepKdsBrand">
-          <span className="prepKdsBrandMark"><ChefHat size={25} /></span>
-          <span>
-            <strong>EBTL Kitchen</strong>
-            <small><MapPin size={13} /> {location.name}</small>
-          </span>
+        <div className="prepKdsHeaderLead">
+          <div className="prepKdsHeaderLeadTop">
+            <span className="prepKdsHeaderEyebrow">Fulfillment</span>
+            <span className={`prepKdsConnection prepKdsConnection-${connectionState}`}>
+              <ConnectionIcon size={13} />
+              {connectionLabel}
+            </span>
+          </div>
+          <h1 className="prepKdsLocationName">{location.name}</h1>
         </div>
 
-        <div className="prepKdsClock">
-          <strong>{cairoTimeFormatter.format(new Date(now))}</strong>
-          <span>{cairoDateFormatter.format(new Date(now))} / Cairo</span>
-        </div>
-
-        <div className="prepKdsHeaderActions">
-          <span className={`prepKdsConnection prepKdsConnection-${connectionState}`}>
-            <ConnectionIcon size={17} />
-            {connectionLabel}
-          </span>
-          <span className="prepKdsEmployee">
-            <small>Prep</small>
-            <strong>{user?.name || user?.username || 'Employee'}</strong>
-          </span>
-          <button className="prepKdsLogout" type="button" onClick={handleLogout} disabled={loggingOut}>
-            {loggingOut ? <RefreshCw size={18} className="spinIcon" /> : <LogOut size={18} />}
-            Logout
+        <div className="prepKdsFilter" role="tablist" aria-label="Order filter">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!isCompleted}
+            className={!isCompleted ? 'prepKdsFilterActive' : ''}
+            onClick={() => setFilter('active')}
+          >
+            Active &middot; {orders.length}
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isCompleted}
+            className={isCompleted ? 'prepKdsFilterActive' : ''}
+            onClick={showCompleted}
+          >
+            Completed &middot; {completedOrders.length}
+          </button>
+        </div>
+
+        <div className="prepKdsStageCounts">
+          <div className="prepKdsStageCount prepKdsStageCount-new">
+            <strong>{stageCounts.confirmed}</strong>
+            <small>New</small>
+          </div>
+          <div className="prepKdsStageCount prepKdsStageCount-preparing">
+            <strong>{stageCounts.preparing}</strong>
+            <small>Preparing</small>
+          </div>
+          <div className="prepKdsStageCount prepKdsStageCount-ready">
+            <strong>{stageCounts.ready}</strong>
+            <small>Ready</small>
+          </div>
         </div>
       </header>
 
@@ -988,19 +1009,63 @@ export default function PrepOrders({ user, onLogout }) {
       )}
 
       <main className="prepKdsBoard">
-        {LANE_CONFIG.map((config) => (
-          <PrepLane
-            key={config.status}
-            config={config}
-            orders={lanes[config.status]}
-            now={now}
-            savingOrderIds={savingOrderIds}
-            highlightedOrderIds={highlightedOrderIds}
-            onStatus={updateOrderStatus}
-            onOpenItem={(order, item) => setRecipePayload({ order, item })}
-          />
-        ))}
+        {!isCompleted && (
+          orders.length === 0 ? (
+            <div className="prepKdsEmpty">
+              <ChefHat size={38} />
+              <strong>No active orders</strong>
+              <span>New orders will appear here automatically, in the order they arrive.</span>
+            </div>
+          ) : (
+            <div className="prepKdsWall">
+              {orders.map((order) => (
+                <PrepTicket
+                  key={order.id}
+                  order={order}
+                  now={now}
+                  saving={savingOrderIds.has(order.id)}
+                  highlighted={highlightedOrderIds.has(order.id)}
+                  onAdvance={advanceOrder}
+                  onOpenRecipe={openRecipe}
+                />
+              ))}
+            </div>
+          )
+        )}
+
+        {isCompleted && (
+          completedOrders.length === 0 ? (
+            <div className="prepKdsEmpty">
+              <Check size={38} />
+              <strong>No completed orders yet</strong>
+              <span>Orders you finish will appear here for the rest of your shift.</span>
+            </div>
+          ) : (
+            <div className="prepKdsWall">
+              {completedOrders.map((order) => (
+                <CompletedTicket key={order.id} order={order} />
+              ))}
+            </div>
+          )
+        )}
       </main>
+
+      <nav className="prepKdsNav">
+        <div className="prepKdsNavUser">
+          <span className="prepKdsAvatar">{initialsFor(user?.name || user?.username)}</span>
+          <span className="prepKdsNavUserCopy">
+            <strong>{user?.name || user?.username || 'Employee'}</strong>
+            <small>Station operator &middot; {location.name}</small>
+          </span>
+        </div>
+
+        <div className="prepKdsNavClock">{cairoTimeFormatter.format(new Date(now))}</div>
+
+        <button className="prepKdsLogout" type="button" onClick={handleLogout} disabled={loggingOut}>
+          {loggingOut ? <RefreshCw size={17} className="spinIcon" /> : <Power size={17} />}
+          Log Out
+        </button>
+      </nav>
 
       <PrepRecipeOverlay payload={recipePayload} now={now} onClose={closeRecipe} />
     </div>
