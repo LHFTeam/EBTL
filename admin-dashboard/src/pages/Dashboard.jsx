@@ -46,7 +46,7 @@ function numberValue(value) {
 export default function Dashboard() {
   const { data, loading, error, reload } = useLoad(() => api('/api/dashboard'));
 
-  if (loading || error) return <Loading error={error} />;
+  if (loading || error) return <Loading error={error} onRetry={reload} />;
 
   const kpis = data?.kpis || {};
   const recentOrders = data?.recentOrders || [];

@@ -3,7 +3,7 @@ import { api } from '../api/client.js';
 import { baseUnits } from '../config/constants.js';
 import { Loading, Message, Section, SimpleTable } from '../components/ui.jsx';
 import { useLoad } from '../hooks/useLoad.js';
-import { splitTags, toBool } from '../utils/format.js';
+import { splitTags, toBool, yesNo } from '../utils/format.js';
 
 const blank = {
   name: '',
@@ -226,7 +226,7 @@ export default function Ingredients() {
     }
   }
 
-  if (loading || error) return <Loading error={error} />;
+  if (loading || error) return <Loading error={error} onRetry={reload} />;
 
   return <div className="grid">
     <Section title={editing ? 'Edit Ingredient' : 'Add Ingredient'} action={editing && <button onClick={resetForm}>Cancel edit</button>}>
@@ -290,11 +290,15 @@ export default function Ingredients() {
       </div>
       <SimpleTable
         rows={rows}
+        emptyText={(search || categoryFilter) ? 'No ingredients match the current filters.' : 'No records yet.'}
         columns={['name', 'category', 'icon_key', 'base_unit', 'purchase_unit_cost', 'purchase_unit_size', 'cost_per_base_unit', 'is_perishable', 'is_customer_supplied', 'is_active']}
         format={{
           purchase_unit_cost: value => displayNumber(value, 2),
           purchase_unit_size: value => displayNumber(value, 3),
-          cost_per_base_unit: value => displayNumber(value, 6)
+          cost_per_base_unit: value => displayNumber(value, 6),
+          is_perishable: yesNo,
+          is_customer_supplied: yesNo,
+          is_active: yesNo
         }}
         actions={(row) => <div className="inlineActions">
           <button onClick={() => edit(row)}>Edit</button>

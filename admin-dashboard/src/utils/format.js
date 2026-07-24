@@ -4,3 +4,5 @@ export function d(v) { return v ? new Date(v).toLocaleDateString() : '-'; }
 export function slugify(v) { return String(v || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
 export function toBool(v) { return v === true || v === 'true'; }
 export function splitTags(v) { return String(v || '').split(',').map(x => x.trim()).filter(Boolean); }
+export function humanize(v) { return String(v ?? '').split('_').filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1)).join(' ') || '-'; }
+export function yesNo(v) { return v ? 'Yes' : 'No'; }

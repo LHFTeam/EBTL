@@ -141,6 +141,13 @@ select:disabled {
   padding: 16px;
 }
 
+.loadError {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  padding: 16px;
+}
+
 /* Layout */
 
 .appShell {

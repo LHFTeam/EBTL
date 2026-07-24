@@ -174,7 +174,7 @@ export default function Analytics() {
       </div>
 
       {loading || error ? (
-        <Loading error={error} />
+        <Loading error={error} onRetry={reload} />
       ) : (
         <>
           <div className="analyticsKpis">

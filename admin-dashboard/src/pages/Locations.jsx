@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { api } from '../api/client.js';
 import { Loading, Message, Section, SimpleTable } from '../components/ui.jsx';
 import { useLoad } from '../hooks/useLoad.js';
-import { toBool } from '../utils/format.js';
+import { humanize, toBool } from '../utils/format.js';
 
 const blank = {
   name: '',
@@ -432,7 +432,7 @@ export default function Locations() {
     }
   }
 
-  if (loading || error) return <Loading error={error} />;
+  if (loading || error) return <Loading error={error} onRetry={reload} />;
 
   return (
     <div className="grid">
@@ -463,8 +463,8 @@ export default function Locations() {
             disabled={editingProtectedCentralWarehouse}
             onChange={(e) => setForm({ ...form, type: e.target.value })}
           >
-            <option value="central_warehouse">central_warehouse</option>
-            <option value="beach_cart">beach_cart</option>
+            <option value="central_warehouse">Central Warehouse</option>
+            <option value="beach_cart">Beach Cart</option>
           </select>
 
           <label>
@@ -634,7 +634,9 @@ export default function Locations() {
           rows={data}
           columns={['banner_image_url', 'name', 'type', 'compound_name', 'beach_name', 'address', 'delivery_fee', 'is_active']}
           format={{
-            banner_image_url: (value, row) => value ? <img className="tableImageThumb locationTableBannerThumb" src={value} alt={row.name} /> : '-'
+            banner_image_url: (value, row) => value ? <img className="tableImageThumb locationTableBannerThumb" src={value} alt={row.name} /> : '-',
+            type: (value) => humanize(value),
+            is_active: (value) => value ? 'Active' : 'Inactive'
           }}
           actions={(row) => {
             const protectedCentralWarehouse = isProtectedCentralWarehouse(row);
