@@ -1089,11 +1089,13 @@ class CartOrderSummaryCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             CartSummaryRow(label: 'Subtotal', value: totals.subtotalLabel),
-            const SizedBox(height: 10),
-            CartSummaryRow(
-              label: 'Delivery Fee',
-              value: totals.deliveryFeeLabel,
-            ),
+            if (totals.deliveryFee > 0) ...[
+              const SizedBox(height: 10),
+              CartSummaryRow(
+                label: 'Delivery Fee',
+                value: totals.deliveryFeeLabel,
+              ),
+            ],
             const SizedBox(height: 12),
             Divider(color: Colors.white.withValues(alpha: 0.20)),
             const SizedBox(height: 12),

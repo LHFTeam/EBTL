@@ -3172,6 +3172,7 @@ customerRouter.get('/customer/home', async (req, res) => {
 
   const customer = await findCustomerFromRequest(req);
   let summary = null;
+  let favoriteProductIds = new Set();
 
   if (customer) {
     const cart = await getActiveCart(customer.id, {
@@ -3183,6 +3184,12 @@ customerRouter.get('/customer/home', async (req, res) => {
     });
 
     summary = await cartSummary(cart.data?.id || null);
+
+    try {
+      favoriteProductIds = await loadCustomerFavoriteIdSet(customer.id);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
   }
 
   res.json({
@@ -3197,7 +3204,7 @@ customerRouter.get('/customer/home', async (req, res) => {
       primary_cta_label: 'Find your cocktail',
       primary_cta_target: 'cocktail_finder'
     },
-    featuredCocktails: catalog.data.cards,
+    featuredCocktails: catalog.data.cards.map((card) => addFavoriteFlagToCard(card, favoriteProductIds)),
     categories: (categories.data || []).map(publicCategory),
     liquorTypes: (liquorTypes.data || []).map(publicLiquorType),
     cartSummary: summary
@@ -3414,7 +3421,10 @@ customerRouter.get('/customer/cocktails', async (req, res) => {
     categoryId: parsed.data.category_id || null,
     q: parsed.data.q || '',
     liquorTypeIds: parsed.data.liquor_type_ids || [],
-    tags: parsed.data.tags || []
+    tags: parsed.data.tags || [],
+    // The cocktail finder must only surface cocktails, never snacks,
+    // essentials, bundles or add-ons that may share tags/filters.
+    productTypes: ['cocktail']
   });
 
   if (catalog.error) return res.status(400).json({
@@ -3763,6 +3773,24 @@ customerRouter.patch('/customer/notifications/:notificationId/read', async (req,
   res.json({
     session: sessionPayload(ensured.customer.id, ensured.token),
     notification: publicNotification(updated.data)
+  });
+});
+
+customerRouter.post('/customer/notifications/read-all', async (req, res) => {
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const updated = await supabase
+    .from('customer_notifications')
+    .update({ read_at: new Date().toISOString() })
+    .eq('customer_id', ensured.customer.id)
+    .is('read_at', null);
+
+  if (updated.error) return res.status(400).json({ error: updated.error.message });
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    unread_count: 0
   });
 });
 

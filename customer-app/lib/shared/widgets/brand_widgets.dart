@@ -95,6 +95,60 @@ class CircleIconButton extends StatelessWidget {
   }
 }
 
+/// A circular notifications button with an unread badge counter. Used in the
+/// top bar of screens (home, shop) in place of the old search/cart shortcuts.
+class NotificationsIconButton extends StatelessWidget {
+  final int unreadCount;
+  final VoidCallback onTap;
+
+  const NotificationsIconButton({
+    super.key,
+    required this.unreadCount,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        CircleIconButton(
+          icon: Icons.notifications_none,
+          onTap: onTap,
+          iconColor: EbtlColors.navy,
+        ),
+        if (unreadCount > 0)
+          Positioned(
+            right: -2,
+            top: -4,
+            child: IgnorePointer(
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 20),
+                height: 20,
+                padding: const EdgeInsets.symmetric(horizontal: 5),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: EbtlColors.coral,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: EbtlColors.white, width: 1.5),
+                ),
+                child: Text(
+                  unreadCount > 9 ? '9+' : '$unreadCount',
+                  style: GoogleFonts.manrope(
+                    color: Colors.white,
+                    fontSize: 11,
+                    height: 1,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class StepBubble extends StatelessWidget {
   final int number;
 

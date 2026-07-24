@@ -17,19 +17,21 @@ import 'widgets/how_it_works_block.dart';
 class HomeScreen extends StatelessWidget {
   final AppData data;
   final VoidCallback onOpenFinder;
-  final VoidCallback onOpenCart;
   final ValueChanged<ServiceLocation> onLocationSelected;
   final ValueChanged<Cocktail> onOpenCocktail;
   final ValueChanged<LiquorType> onOpenFinderWithBottle;
+  final int unreadNotificationCount;
+  final VoidCallback onOpenNotifications;
 
   const HomeScreen({
     super.key,
     required this.data,
     required this.onOpenFinder,
     required this.onOpenFinderWithBottle,
-    required this.onOpenCart,
     required this.onLocationSelected,
     required this.onOpenCocktail,
+    required this.unreadNotificationCount,
+    required this.onOpenNotifications,
   });
 
   @override
@@ -42,9 +44,9 @@ class HomeScreen extends StatelessWidget {
           SliverToBoxAdapter(
             child: HeroHomeHeader(
               hero: data.hero,
-              cartSummary: data.cartSummary,
               onOpenFinder: onOpenFinder,
-              onOpenCart: onOpenCart,
+              unreadNotificationCount: unreadNotificationCount,
+              onOpenNotifications: onOpenNotifications,
             ),
           ),
           if (data.serviceAreas.isNotEmpty)
@@ -84,6 +86,7 @@ class HomeScreen extends StatelessWidget {
               icon: Icons.local_bar_outlined,
               title: 'Featured Cocktails',
               actionText: 'View all',
+              onAction: onOpenFinder,
               child: featured.isEmpty
                   ? const EmptyStateCard(
                       message: 'No featured cocktails are available right now.',
@@ -115,22 +118,20 @@ class HomeScreen extends StatelessWidget {
 
 class HeroHomeHeader extends StatelessWidget {
   final HeroContent hero;
-  final CartSummary? cartSummary;
   final VoidCallback onOpenFinder;
-  final VoidCallback onOpenCart;
+  final int unreadNotificationCount;
+  final VoidCallback onOpenNotifications;
 
   const HeroHomeHeader({
     super.key,
     required this.hero,
-    required this.cartSummary,
     required this.onOpenFinder,
-    required this.onOpenCart,
+    required this.unreadNotificationCount,
+    required this.onOpenNotifications,
   });
 
   @override
   Widget build(BuildContext context) {
-    final cartCount = cartSummary?.totalQuantity ?? 0;
-
     return Container(
       height: 470,
       decoration: const BoxDecoration(color: EbtlColors.cream),
@@ -161,36 +162,9 @@ class HeroHomeHeader extends StatelessWidget {
               children: [
                 const EbtlLogo(),
                 const Spacer(),
-                CircleIconButton(icon: Icons.search, onTap: onOpenFinder),
-                const SizedBox(width: 12),
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    CircleIconButton(
-                      icon: Icons.shopping_cart_outlined,
-                      onTap: onOpenCart,
-                    ),
-                    if (cartCount > 0)
-                      Positioned(
-                        right: -2,
-                        top: -4,
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: const BoxDecoration(
-                            color: EbtlColors.coral,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            cartCount > 99 ? '99+' : cartCount.toString(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
+                NotificationsIconButton(
+                  unreadCount: unreadNotificationCount,
+                  onTap: onOpenNotifications,
                 ),
               ],
             ),

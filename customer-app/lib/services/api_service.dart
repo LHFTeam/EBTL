@@ -18,6 +18,7 @@ import '../models/cocktail_models.dart';
 import '../models/common_models.dart';
 import '../models/favorite_models.dart';
 import '../models/notification_models.dart';
+import '../models/order_detail_models.dart';
 import '../models/profile_models.dart';
 import '../models/shop_models.dart';
 
@@ -422,6 +423,18 @@ class ApiService {
     return CustomerNotification.fromJson(asMap(json['notification']));
   }
 
+  static Future<int> markAllCustomerNotificationsRead() async {
+    await ensureSession();
+
+    final json = await _request(
+      method: 'POST',
+      path: '/api/customer/notifications/read-all',
+      attachToken: true,
+    );
+
+    return readInt(json['unread_count']);
+  }
+
   static Future<void> registerCustomerPushToken({
     required String token,
     required String platform,
@@ -513,6 +526,20 @@ class ApiService {
     );
 
     return CustomerOrdersResponse.fromJson(json);
+  }
+
+  static Future<OrderDetailResponse> fetchCustomerOrderDetail({
+    required String orderId,
+  }) async {
+    await ensureSession();
+
+    final json = await _request(
+      method: 'GET',
+      path: '/api/customer/orders/${Uri.encodeComponent(orderId)}',
+      attachToken: true,
+    );
+
+    return OrderDetailResponse.fromJson(json);
   }
 
   static Future<FavoriteCocktailsResponse> fetchFavoriteCocktails({

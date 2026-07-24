@@ -34,9 +34,24 @@ class _CustomerNotificationsScreenState
     final future = ApiService.fetchCustomerNotifications();
 
     // Side channel only: the FutureBuilder still owns error rendering.
-    future.then((response) {
+    // As soon as the notifications screen loads successfully we mark every
+    // notification as read. This is the common "notification center" pattern:
+    // opening the list counts as seeing the notifications, so the unread badge
+    // clears without the customer having to tap each card individually.
+    future.then((response) async {
       if (!mounted) return;
-      widget.onUnreadCountChanged?.call(response.unreadCount);
+
+      if (response.unreadCount > 0) {
+        try {
+          await ApiService.markAllCustomerNotificationsRead();
+        } catch (_) {
+          // Best-effort: keep the fetched count if the mark-all call fails.
+          if (mounted) widget.onUnreadCountChanged?.call(response.unreadCount);
+          return;
+        }
+      }
+
+      if (mounted) widget.onUnreadCountChanged?.call(0);
     }).catchError((_) {});
 
     return future;

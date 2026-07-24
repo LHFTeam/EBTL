@@ -965,145 +965,25 @@ class CheckoutOrderStrip extends StatelessWidget {
     );
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 6, 0, 12),
+      padding: const EdgeInsets.fromLTRB(22, 6, 22, 12),
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.only(right: 22),
-            child: CheckoutSectionTitle(
-              title: 'Your Order',
-              subtitle: '($totalQuantity item${totalQuantity == 1 ? '' : 's'})',
-              actionText: 'Edit Cart',
-              onAction: onEditCart,
-            ),
-          ),
-          SizedBox(
-            height: 112,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: items.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                return CheckoutOrderMiniCard(item: items[index]);
-              },
-            ),
+          CheckoutSectionTitle(
+            title: 'Your Order',
+            subtitle: '($totalQuantity item${totalQuantity == 1 ? '' : 's'})',
+            actionText: 'Edit Cart',
+            onAction: onEditCart,
           ),
           if (itemWarnings.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.only(right: 22),
-              child: CheckoutWarningBox(
-                message: itemWarnings
-                    .map(
-                      (warning) => '${warning.productName}: ${warning.reason}',
-                    )
-                    .join('\n'),
-              ),
+            const SizedBox(height: 4),
+            CheckoutWarningBox(
+              message: itemWarnings
+                  .map(
+                    (warning) => '${warning.productName}: ${warning.reason}',
+                  )
+                  .join('\n'),
             ),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-class CheckoutOrderMiniCard extends StatelessWidget {
-  final CheckoutItem item;
-
-  const CheckoutOrderMiniCard({super.key, required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final customizationSummary = item.cleanCustomizationSummary;
-    final variantName = item.variantName.trim();
-
-    return SizedBox(
-      width: 192,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(13),
-            child: SizedBox(
-              width: 62,
-              height: 76,
-              child: NetworkOrAssetImage(
-                imageUrl: item.imageUrl,
-                asset: item.imageAsset,
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.productName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.manrope(
-                      fontSize: 11.5,
-                      height: 1.12,
-                      fontWeight: FontWeight.w900,
-                      color: EbtlColors.navy,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  if (variantName.isNotEmpty) ...[
-                    Text(
-                      variantName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.manrope(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        color: EbtlColors.muted,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                  ],
-                  if (customizationSummary != null) ...[
-                    Text(
-                      customizationSummary,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.manrope(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        color: EbtlColors.teal,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                  ],
-                  Text(
-                    'Qty ${item.quantity}',
-                    style: GoogleFonts.manrope(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      color: EbtlColors.muted,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    item.lineTotalLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.manrope(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                      color: item.isAvailable
-                          ? EbtlColors.navy
-                          : EbtlColors.coral,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );

@@ -7,15 +7,13 @@ import '../../../shared/widgets/brand_widgets.dart';
 import '../../../shared/widgets/network_or_asset_image.dart';
 
 class ShopHeader extends StatelessWidget {
-  final int cartQuantity;
-  final VoidCallback? onSearch;
-  final VoidCallback onOpenCart;
+  final int unreadNotificationCount;
+  final VoidCallback onOpenNotifications;
 
   const ShopHeader({
     super.key,
-    required this.cartQuantity,
-    required this.onSearch,
-    required this.onOpenCart,
+    required this.unreadNotificationCount,
+    required this.onOpenNotifications,
   });
 
   @override
@@ -62,9 +60,10 @@ class ShopHeader extends StatelessWidget {
               ],
             ),
           ),
-          CircleIconButton(icon: Icons.search, onTap: onSearch ?? () {}),
-          const SizedBox(width: 12),
-          ShopCartIconButton(count: cartQuantity, onTap: onOpenCart),
+          NotificationsIconButton(
+            unreadCount: unreadNotificationCount,
+            onTap: onOpenNotifications,
+          ),
         ],
       ),
     );
