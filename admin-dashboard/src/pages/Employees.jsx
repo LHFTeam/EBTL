@@ -19,7 +19,7 @@ export default function Employees() {
     credential_is_active: true,
     must_change_password: true
   };
-  const resetBlank = { password: '', confirm_password: '', must_change_password: true, credential_is_active: true };
+  const resetBlank = { username: '', password: '', confirm_password: '', must_change_password: true, credential_is_active: true };
   const [form, setForm] = useState(blank);
   const [editing, setEditing] = useState(null);
   const [resetting, setResetting] = useState(null);
@@ -95,6 +95,12 @@ export default function Employees() {
       setErr('Password and confirmation do not match.');
       return;
     }
+    const hasCredential = Boolean(resetting.credential?.username);
+    const newUsername = resetForm.username.trim();
+    if (!hasCredential && !newUsername) {
+      setErr('A dashboard username is required to create credentials for this employee.');
+      return;
+    }
     try {
       await api(`/api/employees/${resetting.id}/reset-password`, {
         method:'POST',
@@ -102,7 +108,7 @@ export default function Employees() {
           password: resetForm.password,
           must_change_password: toBool(resetForm.must_change_password),
           credential_is_active: toBool(resetForm.credential_is_active),
-          username: resetting.credential?.username ? undefined : resetting.username
+          username: hasCredential ? undefined : newUsername
         })
       });
       setResetting(null);
@@ -186,8 +192,9 @@ export default function Employees() {
       <Message text={msg}/><Message text={err} type="error"/>
     </Section>
 
-    {resetting && <Section title={`Reset Password: ${resetting.full_name}`} action={<button onClick={() => setResetting(null)}>Cancel reset</button>}>
+    {resetting && <Section title={`${resetting.credential?.username ? 'Reset Password' : 'Create Dashboard Login'}: ${resetting.full_name}`} action={<button onClick={() => setResetting(null)}>Cancel</button>}>
       <form className="miniForm formGrid" onSubmit={resetPassword}>
+        {!resetting.credential?.username && <input required minLength={3} pattern="[a-zA-Z0-9._-]+" title="At least 3 characters: letters, numbers, dots, underscores or hyphens" placeholder="Dashboard username" value={resetForm.username} onChange={e => setResetForm({...resetForm, username:e.target.value})}/>}
         <input required minLength={8} type="password" placeholder="New temporary password" value={resetForm.password} onChange={e => setResetForm({...resetForm, password:e.target.value})}/>
         <input required minLength={8} type="password" placeholder="Confirm temporary password" value={resetForm.confirm_password} onChange={e => setResetForm({...resetForm, confirm_password:e.target.value})}/>
         <label><input type="checkbox" checked={toBool(resetForm.must_change_password)} onChange={e => setResetForm({...resetForm, must_change_password:e.target.checked})}/> Require change on next login</label>
