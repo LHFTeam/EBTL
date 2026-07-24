@@ -244,12 +244,15 @@ export async function notifyOrderReadyForPickup({ order, previousStatus = null }
   if (previousStatus && ['ready', 'completed'].includes(previousStatus)) return { data: null, push: [] };
 
   const orderNumber = order.order_number || 'your order';
+  const isDelivery = order.fulfillment_type === 'delivery_to_unit';
   return createCustomerNotification({
     customerId: order.customer_id,
     orderId: order.id,
     type: 'order_ready_for_pickup',
     title: 'Your order is ready',
-    body: `${orderNumber} is ready for pickup from the EBTL cart.`,
+    body: isDelivery
+      ? `${orderNumber} is ready and will be sent to your unit.`
+      : `${orderNumber} is ready for pickup from the EBTL cart.`,
     dedupeKey: `order:${order.id}:ready_for_pickup`,
     data: {
       order_id: order.id,

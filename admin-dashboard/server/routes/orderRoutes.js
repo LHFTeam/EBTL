@@ -25,11 +25,6 @@ const OPERATION_TRANSITIONS = {
   preparing: ['ready'],
   ready: ['completed']
 };
-const ORDER_PREP_STATUS_BY_ORDER_STATUS = {
-  preparing: 'in_progress',
-  ready: 'packed',
-  completed: 'packed'
-};
 
 function userCanUseCartOperations(user) {
   return CART_OPERATION_ROLES.includes(user?.role);
@@ -44,11 +39,12 @@ function paymentRows(order) {
 }
 
 function paymentConfirmedAt(order) {
+  if (order?.confirmed_at) return order.confirmed_at;
+
   const paidPayment = paymentRows(order)
     .filter((payment) => payment.status === 'paid')
     .sort((a, b) => new Date(a.updated_at || a.created_at || 0) - new Date(b.updated_at || b.created_at || 0))[0];
 
-  if (paidPayment?.raw_payload?.demo_confirmed_at) return paidPayment.raw_payload.demo_confirmed_at;
   if (paidPayment?.updated_at) return paidPayment.updated_at;
   if (paidPayment?.created_at) return paidPayment.created_at;
   if (order?.status === 'confirmed' && order?.payment_status === 'paid') return order.created_at;
@@ -217,13 +213,78 @@ function enrichOrderItem({ item, removedByItemId, additionsByItemId, componentsB
   };
 }
 
-function publicOperationalOrder({ order, items }) {
+function prepRecipe(recipe) {
+  if (!recipe) return null;
+  return {
+    id: recipe.id,
+    yield_servings: recipe.yield_servings,
+    notes: recipe.notes
+  };
+}
+
+function prepRecipeItems(recipeItems = []) {
+  return recipeItems.map((recipeItem) => ({
+    id: recipeItem.id,
+    ingredient_id: recipeItem.ingredient_id,
+    quantity: recipeItem.quantity,
+    unit: recipeItem.unit,
+    is_optional: Boolean(recipeItem.is_optional),
+    is_customer_supplied: Boolean(recipeItem.is_customer_supplied),
+    ingredients: recipeItem.ingredients ? {
+      id: recipeItem.ingredients.id,
+      name: recipeItem.ingredients.name,
+      base_unit: recipeItem.ingredients.base_unit,
+      is_customer_supplied: Boolean(recipeItem.ingredients.is_customer_supplied),
+      allergen_flags: recipeItem.ingredients.allergen_flags
+    } : null
+  }));
+}
+
+function prepOperationalItem(item) {
+  return {
+    id: item.id,
+    product_name_snapshot: item.product_name_snapshot,
+    variant_name_snapshot: item.variant_name_snapshot,
+    quantity: item.quantity,
+    prep_status: item.prep_status,
+    customization_summary: item.customization_summary,
+    product_image_url: item.product_image_url,
+    product_type: item.product_type,
+    serving_count: item.serving_count,
+    products: item.products ? {
+      name: item.products.name,
+      product_type: item.products.product_type,
+      image_url: item.products.image_url,
+      prep_time_minutes: item.products.prep_time_minutes
+    } : null,
+    recipe: prepRecipe(item.recipe),
+    recipe_items: prepRecipeItems(item.recipe_items),
+    removed_ingredients: (item.removed_ingredients || []).map((removed) => ({
+      id: removed.id,
+      recipe_item_id: removed.recipe_item_id,
+      ingredient_id: removed.ingredient_id,
+      ingredient_name_snapshot: removed.ingredient_name_snapshot,
+      quantity_snapshot: removed.quantity_snapshot,
+      unit_snapshot: removed.unit_snapshot
+    })),
+    additions: (item.additions || []).map((addition) => ({
+      id: addition.id,
+      quantity_per_parent: addition.quantity_per_parent,
+      product_name_snapshot: addition.product_name_snapshot,
+      variant_name_snapshot: addition.variant_name_snapshot,
+      serving_count_snapshot: addition.serving_count_snapshot,
+      recipe: prepRecipe(addition.recipe),
+      recipe_items: prepRecipeItems(addition.recipe_items)
+    }))
+  };
+}
+
+function publicOperationalOrder({ order, items, isPrep = false }) {
   const confirmedAt = paymentConfirmedAt(order);
   const customerName = order.customers?.full_name || null;
   const customerPhone = order.customer_phone_snapshot || order.customers?.phone || null;
-  const payments = paymentRows(order).sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0));
 
-  return {
+  const operationalOrder = {
     id: order.id,
     order_number: order.order_number,
     location_id: order.location_id,
@@ -232,27 +293,48 @@ function publicOperationalOrder({ order, items }) {
     fulfillment_type: order.fulfillment_type,
     status: order.status,
     payment_status: order.payment_status,
-    requested_fulfillment_at: order.requested_fulfillment_at,
-    subtotal_ex_vat: order.subtotal_ex_vat,
-    vat_amount: order.vat_amount,
-    discount_amount: order.discount_amount,
-    delivery_fee: order.delivery_fee,
-    total_amount: order.total_amount,
     customer_notes: order.customer_notes,
-    internal_notes: order.internal_notes,
     customer_address_snapshot: order.customer_address_snapshot,
-    customer_phone_snapshot: order.customer_phone_snapshot,
     created_at: order.created_at,
     updated_at: order.updated_at,
     confirmed_at: confirmedAt,
     customer: {
-      name: customerName || 'Walk-in Customer',
-      phone: customerPhone
+      name: customerName || 'Walk-in Customer'
     },
-    latest_payment: payments[0] || null,
     item_count: items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
-    items
+    items: isPrep ? items.map(prepOperationalItem) : items
   };
+
+  if (!isPrep) {
+    operationalOrder.requested_fulfillment_at = order.requested_fulfillment_at;
+    operationalOrder.subtotal_ex_vat = order.subtotal_ex_vat;
+    operationalOrder.vat_amount = order.vat_amount;
+    operationalOrder.discount_amount = order.discount_amount;
+    operationalOrder.delivery_fee = order.delivery_fee;
+    operationalOrder.total_amount = order.total_amount;
+    operationalOrder.internal_notes = order.internal_notes;
+    operationalOrder.customer_phone_snapshot = order.customer_phone_snapshot;
+    operationalOrder.customer.phone = customerPhone;
+  }
+
+  return operationalOrder;
+}
+
+function operationTransitionsFor(user, currentStatus) {
+  if (user?.role === 'prep') {
+    if (currentStatus === 'confirmed') return ['preparing'];
+    if (currentStatus === 'preparing') return ['ready'];
+    return [];
+  }
+
+  return OPERATION_TRANSITIONS[currentStatus] || [];
+}
+
+function requireGlobalOrderAccess(req, res, next) {
+  if (req.user?.role === 'prep') {
+    return res.status(403).json({ error: 'Prep employees can only access orders for their assigned cart location.' });
+  }
+  next();
 }
 
 orderRouter.get('/cart-operations/locations', requireArea('orders'), async (req, res) => {
@@ -298,10 +380,15 @@ orderRouter.get('/cart-operations/orders', requireArea('orders'), async (req, re
     statuses: parsed.data.statuses
   });
 
+  if (req.user.role === 'prep' && statuses.some((status) => !ACTIVE_OPERATION_STATUSES.includes(status))) {
+    return res.status(403).json({ error: 'Prep employees can only view active orders for their assigned cart.' });
+  }
+
   const orderResult = await supabase
     .from('orders')
-    .select('*, customers(full_name,phone), locations(id,name,type,compound_name,beach_name,is_active), payments(id,status,provider,amount,currency,created_at,updated_at,raw_payload)')
+    .select('id,order_number,customer_id,location_id,order_channel,fulfillment_type,status,payment_status,requested_fulfillment_at,subtotal_ex_vat,vat_amount,discount_amount,delivery_fee,total_amount,customer_notes,internal_notes,customer_address_snapshot,customer_phone_snapshot,created_at,confirmed_at,updated_at, customers(full_name,phone), locations(id,name,type,compound_name,beach_name,is_active), payments(id,status,created_at,updated_at)')
     .eq('location_id', resolved.selectedLocation.id)
+    .eq('payment_status', 'paid')
     .in('status', statuses)
     .order('created_at', { ascending: true })
     .limit(200);
@@ -388,7 +475,11 @@ orderRouter.get('/cart-operations/orders', requireArea('orders'), async (req, re
   })), 'order_id');
 
   const publicOrders = orders
-    .map((order) => publicOperationalOrder({ order, items: itemsByOrderId.get(order.id) || [] }))
+    .map((order) => publicOperationalOrder({
+      order,
+      items: itemsByOrderId.get(order.id) || [],
+      isPrep: req.user.role === 'prep'
+    }))
     .sort((a, b) => new Date(a.confirmed_at || a.created_at || 0) - new Date(b.confirmed_at || b.created_at || 0));
 
   res.json({
@@ -411,7 +502,7 @@ orderRouter.patch('/cart-operations/orders/:id/status', requireArea('orders'), a
   const existing = await sb(
     supabase
       .from('orders')
-      .select('id,order_number,status,customer_id,location_id')
+      .select('id,order_number,status,payment_status,customer_id,location_id,fulfillment_type')
       .eq('id', req.params.id)
       .single(),
     res
@@ -425,46 +516,50 @@ orderRouter.patch('/cart-operations/orders/:id/status', requireArea('orders'), a
   });
   if (!resolved) return;
 
-  const allowedNextStatuses = OPERATION_TRANSITIONS[existing.status] || [];
+  if (existing.payment_status !== 'paid') {
+    return res.status(409).json({
+      error: `Order ${existing.order_number || existing.id} cannot be prepared until payment is complete.`
+    });
+  }
+
+  const allowedNextStatuses = operationTransitionsFor(req.user, existing.status);
   if (!allowedNextStatuses.includes(parsed.data.status)) {
     return res.status(409).json({
       error: `Order ${existing.order_number || existing.id} cannot move from ${existing.status} to ${parsed.data.status}.`
     });
   }
 
-  const data = await sb(
-    supabase
-      .from('orders')
-      .update({ status: parsed.data.status })
-      .eq('id', req.params.id)
-      .eq('status', existing.status)
-      .select()
-      .single(),
-    res
-  );
+  const updatedOrder = await supabase
+    .rpc('transition_cart_order_status', {
+      p_order_id: req.params.id,
+      p_expected_status: existing.status,
+      p_next_status: parsed.data.status
+    })
+    .maybeSingle();
 
-  if (!data) return;
-
-  const nextPrepStatus = ORDER_PREP_STATUS_BY_ORDER_STATUS[parsed.data.status];
-  if (nextPrepStatus) {
-    const itemUpdate = await supabase
-      .from('order_items')
-      .update({ prep_status: nextPrepStatus })
-      .eq('order_id', req.params.id)
-      .neq('prep_status', 'cancelled');
-
-    if (itemUpdate.error) return res.status(400).json({ error: itemUpdate.error.message });
+  if (updatedOrder.error) return res.status(400).json({ error: updatedOrder.error.message });
+  if (!updatedOrder.data) {
+    return res.status(409).json({
+      error: `Order ${existing.order_number || existing.id} was already updated on another screen.`
+    });
   }
+
+  const data = updatedOrder.data;
 
   await notifyOrderReadyForPickup({
     order: data,
     previousStatus: existing.status
   });
 
-  res.json(data);
+  res.json({
+    id: data.id,
+    order_number: data.order_number,
+    status: data.status,
+    updated_at: data.updated_at
+  });
 });
 
-orderRouter.get('/orders', requireArea('orders'), async (_req, res) => {
+orderRouter.get('/orders', requireArea('orders'), requireGlobalOrderAccess, async (_req, res) => {
   const [orders, items, removedIngredients, additions, locations] = await Promise.all([
     supabase.from('orders').select('*, customers(full_name,phone), locations(name,type,compound_name)').order('created_at', { ascending: false }).limit(100),
     supabase.from('order_items').select('*').order('id'),
@@ -482,7 +577,7 @@ orderRouter.get('/orders', requireArea('orders'), async (_req, res) => {
   });
 });
 
-orderRouter.patch('/orders/:id', requireArea('orders'), async (req, res) => {
+orderRouter.patch('/orders/:id', requireArea('orders'), requireGlobalOrderAccess, async (req, res) => {
   const parsed = z.object({ status: z.enum(orderStatuses).optional(), payment_status: z.enum(paymentStatuses).optional(), internal_notes: z.string().optional() }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid order update' });
 

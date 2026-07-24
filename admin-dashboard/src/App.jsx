@@ -4,6 +4,8 @@ import Login from './features/auth/Login.jsx';
 import PasswordChange from './features/auth/PasswordChange.jsx';
 
 const Shell = lazy(() => import('./layout/Shell.jsx'));
+const PrepOrders = lazy(() => import('./pages/PrepOrders.jsx'));
+const AUTH_SYNC_KEY = 'ebtl-auth-session-changed';
 
 window.__EBTL_APP_COMPONENT_LOADED__ = true;
 fetch('/api/health?client_boot=app', { cache: 'no-store' }).catch(() => {});
@@ -11,6 +13,18 @@ fetch('/api/health?client_boot=app', { cache: 'no-store' }).catch(() => {});
 function replacePath(path) {
   if (window.location.pathname !== path) {
     window.history.replaceState({}, '', path);
+  }
+}
+
+function authenticatedPath(user) {
+  return user?.role === 'prep' ? '/prep/orders' : '/dashboard';
+}
+
+function broadcastAuthChange() {
+  try {
+    window.localStorage.setItem(AUTH_SYNC_KEY, `${Date.now()}:${Math.random()}`);
+  } catch {
+    // Storage can be disabled; the active tab still updates normally.
   }
 }
 
@@ -67,6 +81,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    function handleAuthChange(event) {
+      if (event.key === AUTH_SYNC_KEY) window.location.reload();
+    }
+
+    window.addEventListener('storage', handleAuthChange);
+    return () => window.removeEventListener('storage', handleAuthChange);
+  }, []);
+
+  useEffect(() => {
     if (auth.loading) return;
 
     if (!auth.user || auth.user.must_change_password) {
@@ -74,10 +97,16 @@ export default function App() {
       return;
     }
 
+    if (auth.user.role === 'prep') {
+      replacePath('/prep/orders');
+      return;
+    }
+
     if (
       window.location.pathname === '/login' ||
       window.location.pathname === '/' ||
-      window.location.pathname === '/admin'
+      window.location.pathname === '/admin' ||
+      window.location.pathname.startsWith('/prep')
     ) {
       replacePath('/dashboard');
     }
@@ -85,18 +114,21 @@ export default function App() {
 
   async function logout() {
     await api('/api/logout', { method: 'POST' });
+    broadcastAuthChange();
     setAuth({ loading: false, user: null, access: [] });
     replacePath('/login');
   }
 
   function handleLogin(result) {
+    broadcastAuthChange();
     setAuth({ loading: false, user: result.user, access: result.access });
-    replacePath('/dashboard');
+    replacePath(authenticatedPath(result.user));
   }
 
   function handlePasswordChanged(result) {
+    broadcastAuthChange();
     setAuth({ loading: false, user: result.user, access: result.access });
-    replacePath('/dashboard');
+    replacePath(authenticatedPath(result.user));
   }
 
   if (auth.loading) {
@@ -113,6 +145,16 @@ export default function App() {
 
   if (auth.user.must_change_password) {
     return <PasswordChange onChanged={handlePasswordChanged} onLogout={logout} />;
+  }
+
+  if (auth.user.role === 'prep') {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<div className="loginShell"><div className="muted">Loading prep orders…</div></div>}>
+          <PrepOrders user={auth.user} onLogout={logout} />
+        </Suspense>
+      </ErrorBoundary>
+    );
   }
 
   return (

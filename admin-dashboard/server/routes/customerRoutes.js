@@ -4649,6 +4649,12 @@ customerRouter.post('/customer/checkout/quote', async (req, res) => {
     error: 'Invalid checkout quote request.'
   });
 
+  if (parsed.data.requested_fulfillment_at) {
+    return res.status(400).json({
+      error: 'Scheduled orders are not supported. Orders are prepared as soon as payment is confirmed.'
+    });
+  }
+
   const ensured = await ensureCustomer(req, res);
   if (!ensured) return;
 
@@ -4711,6 +4717,12 @@ async function handleCustomerPlaceOrder(req, res) {
       message: issue.message
     }))
   });
+
+  if (parsed.data.requested_fulfillment_at) {
+    return res.status(400).json({
+      error: 'Scheduled orders are not supported. Orders are prepared as soon as payment is confirmed.'
+    });
+  }
 
   if (!isSimpleEgyptianMobile(parsed.data.customer_phone)) {
     return res.status(400).json({
@@ -4849,9 +4861,9 @@ async function handleCustomerPlaceOrder(req, res) {
       customer_address_snapshot: customerAddressSnapshot,
       order_channel: 'app',
       fulfillment_type: parsed.data.fulfillment_type,
-      status: isDemoPaymentMode ? 'confirmed' : 'pending_payment',
-      payment_status: isDemoPaymentMode ? 'paid' : 'pending',
-      requested_fulfillment_at: parsed.data.requested_fulfillment_at || null,
+      status: 'pending_payment',
+      payment_status: 'pending',
+      requested_fulfillment_at: null,
       subtotal_ex_vat: quote.data.quote.totals.subtotal_ex_vat,
       vat_amount: quote.data.quote.totals.vat_amount,
       discount_amount: quote.data.quote.totals.discount_amount,
@@ -4994,9 +5006,26 @@ async function handleCustomerPlaceOrder(req, res) {
   }
 
   if (isDemoPaymentMode) {
+    const confirmedOrder = await supabase
+      .from('orders')
+      .update({
+        status: 'confirmed',
+        payment_status: 'paid',
+        requested_fulfillment_at: null
+      })
+      .eq('id', orderInsert.data.id)
+      .eq('status', 'pending_payment')
+      .select('*, locations(id,name,type,compound_name,beach_name,banner_image_url,delivery_fee), customer_addresses(*)')
+      .single();
+
+    if (confirmedOrder.error) {
+      await supabase.from('orders').delete().eq('id', orderInsert.data.id);
+      return res.status(400).json({ error: confirmedOrder.error.message });
+    }
+
     if (quote.data.quote.promotion) {
       await recordPromotionRedemptionIfNeeded({
-        order: orderInsert.data,
+        order: confirmedOrder.data,
         payment: payment.data
       });
     }
@@ -5014,22 +5043,22 @@ async function handleCustomerPlaceOrder(req, res) {
     return res.json({
       session: sessionPayload(ensured.customer.id, ensured.token),
       order: {
-        id: orderInsert.data.id,
-        order_number: orderInsert.data.order_number,
-        status: orderInsert.data.status,
-        payment_status: orderInsert.data.payment_status,
-        fulfillment_type: orderInsert.data.fulfillment_type,
-        requested_fulfillment_at: orderInsert.data.requested_fulfillment_at,
-        created_at: orderInsert.data.created_at,
-        customer_phone: orderInsert.data.customer_phone_snapshot,
-        address: orderInsert.data.customer_address_snapshot,
-        location: publicLocation(orderInsert.data.locations),
+        id: confirmedOrder.data.id,
+        order_number: confirmedOrder.data.order_number,
+        status: confirmedOrder.data.status,
+        payment_status: confirmedOrder.data.payment_status,
+        fulfillment_type: confirmedOrder.data.fulfillment_type,
+        requested_fulfillment_at: null,
+        created_at: confirmedOrder.data.created_at,
+        customer_phone: confirmedOrder.data.customer_phone_snapshot,
+        address: confirmedOrder.data.customer_address_snapshot,
+        location: publicLocation(confirmedOrder.data.locations),
         totals: quote.data.quote.totals,
         promotion: quote.data.quote.promotion
       },
       items: orderItems.data,
       payment: createDemoPaymentPayload({
-        order: orderInsert.data,
+        order: confirmedOrder.data,
         payment: payment.data
       }),
       nextScreen: 'order_confirmed'
@@ -5312,6 +5341,123 @@ customerRouter.post('/customer/orders/:orderId/payment-result', async (req, res)
   });
 });
 
+async function beginPaymentEvent({ provider, providerEventId, eventType, rawPayload }) {
+  const inserted = await supabase
+    .from('payment_events')
+    .insert({
+      provider,
+      provider_event_id: providerEventId,
+      event_type: eventType,
+      raw_payload: rawPayload
+    })
+    .select('id,processed_at')
+    .maybeSingle();
+
+  if (!inserted.error) {
+    return { event: inserted.data, duplicate: false, resumed: false };
+  }
+
+  if (String(inserted.error.code) !== '23505') {
+    return { error: inserted.error };
+  }
+
+  const existing = await supabase
+    .from('payment_events')
+    .select('id,processed_at')
+    .eq('provider', provider)
+    .eq('provider_event_id', providerEventId)
+    .maybeSingle();
+
+  if (existing.error) return { error: existing.error };
+  if (!existing.data) {
+    return { error: new Error('The existing payment event could not be loaded for retry.') };
+  }
+
+  return {
+    event: existing.data,
+    duplicate: Boolean(existing.data.processed_at),
+    resumed: !existing.data.processed_at
+  };
+}
+
+async function markPaymentEventProcessed({ provider, providerEventId }) {
+  return supabase
+    .from('payment_events')
+    .update({ processed_at: new Date().toISOString() })
+    .eq('provider', provider)
+    .eq('provider_event_id', providerEventId);
+}
+
+async function updateProviderPayment({ payment, patch, isSuccess }) {
+  let query = supabase
+    .from('payments')
+    .update({
+      ...patch,
+      status: isSuccess ? 'paid' : 'failed'
+    })
+    .eq('id', payment.id);
+
+  if (!isSuccess) query = query.neq('status', 'paid');
+
+  const updated = await query.select().maybeSingle();
+  if (updated.error) return { error: updated.error };
+  if (updated.data) return { data: updated.data };
+
+  const current = await supabase
+    .from('payments')
+    .select('*')
+    .eq('id', payment.id)
+    .single();
+
+  return current.error ? { error: current.error } : { data: current.data };
+}
+
+async function updateOrderForPaymentResult({ orderId, isSuccess }) {
+  if (isSuccess) {
+    const confirmed = await supabase
+      .from('orders')
+      .update({
+        status: 'confirmed',
+        payment_status: 'paid'
+      })
+      .eq('id', orderId)
+      .eq('status', 'pending_payment')
+      .select()
+      .maybeSingle();
+
+    if (confirmed.error) return { error: confirmed.error };
+    if (confirmed.data) return { data: confirmed.data };
+
+    const paid = await supabase
+      .from('orders')
+      .update({ payment_status: 'paid' })
+      .eq('id', orderId)
+      .select()
+      .single();
+
+    return paid.error ? { error: paid.error } : { data: paid.data };
+  }
+
+  const failed = await supabase
+    .from('orders')
+    .update({ payment_status: 'failed' })
+    .eq('id', orderId)
+    .neq('payment_status', 'paid')
+    .select()
+    .maybeSingle();
+
+  if (failed.error) return { error: failed.error };
+  if (failed.data) return { data: failed.data };
+
+  const current = await supabase
+    .from('orders')
+    .select('*')
+    .eq('id', orderId)
+    .single();
+
+  return current.error ? { error: current.error } : { data: current.data };
+}
+
 customerRouter.post('/payments/geidea/callback', async (req, res) => {
   const payload = req.body || {};
   const providerEventId = crypto
@@ -5319,17 +5465,18 @@ customerRouter.post('/payments/geidea/callback', async (req, res) => {
     .update(JSON.stringify(payload))
     .digest('hex');
 
-  await supabase
-    .from('payment_events')
-    .upsert({
-      provider: 'geidea',
-      provider_event_id: providerEventId,
-      event_type: 'callback',
-      raw_payload: payload
-    }, {
-      onConflict: 'provider_event_id',
-      ignoreDuplicates: true
-    });
+  const eventClaim = await beginPaymentEvent({
+    provider: 'geidea',
+    providerEventId,
+    eventType: 'callback',
+    rawPayload: payload
+  });
+  if (eventClaim.error) {
+    return res.status(500).json({ ok: false, error: eventClaim.error.message });
+  }
+  if (eventClaim.duplicate) {
+    return res.json({ ok: true, duplicate: true });
+  }
 
   const verification = verifyGeideaCallbackSignature(payload);
   const fields = verification.fields || extractGeideaCallbackFields(payload);
@@ -5375,39 +5522,28 @@ customerRouter.post('/payments/geidea/callback', async (req, res) => {
   }
 
   const isSuccess = geideaCallbackIsSuccess(fields);
-  const nextPaymentStatus = isSuccess ? 'paid' : 'failed';
-  const nextOrderPaymentStatus = isSuccess ? 'paid' : 'failed';
-  const nextOrderStatus = isSuccess ? 'confirmed' : payment.data.orders.status;
-
-  const updatedPayment = await supabase
-    .from('payments')
-    .update({
+  const updatedPayment = await updateProviderPayment({
+    payment: payment.data,
+    isSuccess,
+    patch: {
       provider_payment_id: fields.order_id || payment.data.provider_payment_id,
-      status: nextPaymentStatus,
       raw_payload: {
         ...(payment.data.raw_payload || {}),
         geidea_callback: payload,
         geidea_callback_fields: fields
       }
-    })
-    .eq('id', payment.data.id)
-    .select()
-    .single();
+    }
+  });
 
   if (updatedPayment.error) return res.status(400).json({
     ok: false,
     error: updatedPayment.error.message
   });
 
-  const updatedOrder = await supabase
-    .from('orders')
-    .update({
-      status: nextOrderStatus,
-      payment_status: nextOrderPaymentStatus
-    })
-    .eq('id', payment.data.order_id)
-    .select()
-    .single();
+  const updatedOrder = await updateOrderForPaymentResult({
+    orderId: payment.data.order_id,
+    isSuccess
+  });
 
   if (updatedOrder.error) return res.status(400).json({
     ok: false,
@@ -5439,15 +5575,18 @@ customerRouter.post('/payments/geidea/callback', async (req, res) => {
       }
     }
   }
-  await supabase
-    .from('payment_events')
-    .update({ processed_at: new Date().toISOString() })
-    .eq('provider_event_id', providerEventId);
+  const markedProcessed = await markPaymentEventProcessed({
+    provider: 'geidea',
+    providerEventId
+  });
+  if (markedProcessed.error) {
+    return res.status(500).json({ ok: false, error: markedProcessed.error.message });
+  }
 
   res.json({
     ok: true,
-    payment_status: nextPaymentStatus,
-    order_status: nextOrderStatus
+    payment_status: updatedPayment.data.status,
+    order_status: updatedOrder.data.status
   });
 });
 
@@ -5469,34 +5608,30 @@ customerRouter.post('/payments/stripe/webhook', async (req, res) => {
     return res.json({ ok: true, ignored: true });
   }
 
-  // Record-and-dedupe: if this event id already landed, skip re-processing.
-  const inserted = await supabase
-    .from('payment_events')
-    .insert({
-      provider: STRIPE_PAYMENT_PROVIDER,
-      provider_event_id: eventId,
-      event_type: event.type,
-      raw_payload: event
-    })
-    .select('id')
-    .maybeSingle();
-
-  if (inserted.error) {
-    // Unique-violation means we've already seen (and processed) this event.
-    if (String(inserted.error.code) === '23505') {
-      return res.json({ ok: true, duplicate: true });
-    }
-    return res.status(400).json({ ok: false, error: inserted.error.message });
+  const eventClaim = await beginPaymentEvent({
+    provider: STRIPE_PAYMENT_PROVIDER,
+    providerEventId: eventId,
+    eventType: event.type,
+    rawPayload: event
+  });
+  if (eventClaim.error) {
+    return res.status(500).json({ ok: false, error: eventClaim.error.message });
+  }
+  if (eventClaim.duplicate) {
+    return res.json({ ok: true, duplicate: true });
   }
 
   const paymentIntent = event.data?.object || {};
   const ebtlPaymentId = paymentIntent.metadata?.ebtl_payment_id;
 
   if (!ebtlPaymentId) {
-    await supabase
-      .from('payment_events')
-      .update({ processed_at: new Date().toISOString() })
-      .eq('provider_event_id', eventId);
+    const markedProcessed = await markPaymentEventProcessed({
+      provider: STRIPE_PAYMENT_PROVIDER,
+      providerEventId: eventId
+    });
+    if (markedProcessed.error) {
+      return res.status(500).json({ ok: false, error: markedProcessed.error.message });
+    }
     return res.json({ ok: true, ignored: 'missing ebtl_payment_id' });
   }
 
@@ -5526,36 +5661,25 @@ customerRouter.post('/payments/stripe/webhook', async (req, res) => {
   }
 
   const isSuccess = event.type === 'payment_intent.succeeded';
-  const nextPaymentStatus = isSuccess ? 'paid' : 'failed';
-  const nextOrderPaymentStatus = isSuccess ? 'paid' : 'failed';
-  const nextOrderStatus = isSuccess ? 'confirmed' : payment.data.orders.status;
-
-  const updatedPayment = await supabase
-    .from('payments')
-    .update({
+  const updatedPayment = await updateProviderPayment({
+    payment: payment.data,
+    isSuccess,
+    patch: {
       provider_payment_id: paymentIntent.id || payment.data.provider_payment_id,
-      status: nextPaymentStatus,
       raw_payload: {
         ...(payment.data.raw_payload || {}),
         stripe_event_type: event.type,
         stripe_payment_intent: paymentIntent
       }
-    })
-    .eq('id', payment.data.id)
-    .select()
-    .single();
+    }
+  });
 
   if (updatedPayment.error) return res.status(400).json({ ok: false, error: updatedPayment.error.message });
 
-  const updatedOrder = await supabase
-    .from('orders')
-    .update({
-      status: nextOrderStatus,
-      payment_status: nextOrderPaymentStatus
-    })
-    .eq('id', payment.data.order_id)
-    .select()
-    .single();
+  const updatedOrder = await updateOrderForPaymentResult({
+    orderId: payment.data.order_id,
+    isSuccess
+  });
 
   if (updatedOrder.error) return res.status(400).json({ ok: false, error: updatedOrder.error.message });
 
@@ -5585,15 +5709,18 @@ customerRouter.post('/payments/stripe/webhook', async (req, res) => {
     }
   }
 
-  await supabase
-    .from('payment_events')
-    .update({ processed_at: new Date().toISOString() })
-    .eq('provider_event_id', eventId);
+  const markedProcessed = await markPaymentEventProcessed({
+    provider: STRIPE_PAYMENT_PROVIDER,
+    providerEventId: eventId
+  });
+  if (markedProcessed.error) {
+    return res.status(500).json({ ok: false, error: markedProcessed.error.message });
+  }
 
   res.json({
     ok: true,
-    payment_status: nextPaymentStatus,
-    order_status: nextOrderStatus
+    payment_status: updatedPayment.data.status,
+    order_status: updatedOrder.data.status
   });
 });
 

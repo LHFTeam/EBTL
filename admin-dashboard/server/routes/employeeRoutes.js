@@ -8,6 +8,26 @@ import { supabase } from '../lib/supabase.js';
 
 export const employeeRouter = Router();
 
+async function validatePrepLocation(employee) {
+  if (employee.role !== 'prep') return { ok: true };
+  if (!employee.default_location_id) {
+    return { ok: false, error: 'Prep employees require an assigned active beach cart location.' };
+  }
+
+  const location = await supabase
+    .from('locations')
+    .select('id,type,is_active')
+    .eq('id', employee.default_location_id)
+    .maybeSingle();
+
+  if (location.error) return { ok: false, error: location.error.message };
+  if (!location.data || location.data.type !== 'beach_cart' || !location.data.is_active) {
+    return { ok: false, error: 'Prep employees require an assigned active beach cart location.' };
+  }
+
+  return { ok: true };
+}
+
 async function canDeactivateEmployee(employeeId) {
   const current = await supabase.from('employees').select('id,role').eq('id', employeeId).single();
   if (current.error) return { ok: false, error: current.error.message };
@@ -55,6 +75,8 @@ employeeRouter.post('/employees', requireArea('employees'), async (req, res) => 
   if (!parsed.success) return res.status(400).json({ error: 'Invalid employee. Username must be at least 3 characters; password at least 8 characters.' });
 
   const { username, password, credential_is_active, must_change_password, ...employeePayload } = parsed.data;
+  const prepLocation = await validatePrepLocation(employeePayload);
+  if (!prepLocation.ok) return res.status(400).json({ error: prepLocation.error });
 
   const created = await supabase.from('employees').insert(clean(employeePayload)).select().single();
   if (created.error) return res.status(400).json({ error: created.error.message });
@@ -92,6 +114,15 @@ employeeRouter.patch('/employees/:id', requireArea('employees'), async (req, res
   if (!parsed.success) return res.status(400).json({ error: 'Invalid employee update' });
 
   const { username, credential_is_active, must_change_password, ...employeePayload } = parsed.data;
+  const existing = await supabase
+    .from('employees')
+    .select('id,role,default_location_id,is_active')
+    .eq('id', req.params.id)
+    .single();
+  if (existing.error) return res.status(400).json({ error: existing.error.message });
+
+  const prepLocation = await validatePrepLocation({ ...existing.data, ...employeePayload });
+  if (!prepLocation.ok) return res.status(400).json({ error: prepLocation.error });
 
   if (employeePayload.is_active === false) {
     if (req.user.employee_id === req.params.id) return res.status(400).json({ error: 'You cannot deactivate your own employee record.' });

@@ -163,6 +163,35 @@ async function loadLocation(id, res) {
   return result.data;
 }
 
+async function activePrepAssignmentCount(locationId, res) {
+  const result = await supabase
+    .from('employees')
+    .select('id', { count: 'exact', head: true })
+    .eq('role', 'prep')
+    .eq('is_active', true)
+    .eq('default_location_id', locationId);
+
+  if (result.error) {
+    res.status(400).json({ error: result.error.message });
+    return null;
+  }
+
+  return result.count || 0;
+}
+
+async function blockInvalidPrepLocationChange({ locationId, nextLocation, res }) {
+  if (nextLocation.is_active && nextLocation.type === 'beach_cart') return false;
+
+  const assignedPrepCount = await activePrepAssignmentCount(locationId, res);
+  if (assignedPrepCount === null) return true;
+  if (!assignedPrepCount) return false;
+
+  res.status(409).json({
+    error: `Reassign or deactivate ${assignedPrepCount} active prep employee${assignedPrepCount === 1 ? '' : 's'} before changing this kitchen location.`
+  });
+  return true;
+}
+
 const createLocationSchema = z.object({
   name: z.preprocess(trimText, z.string().min(1, 'Location name is required.')),
   type: z.enum(locationTypes),
@@ -370,6 +399,12 @@ locationRouter.patch('/locations/:id/deactivate', requireArea('locations'), asyn
     });
   }
 
+  if (await blockInvalidPrepLocationChange({
+    locationId: req.params.id,
+    nextLocation: { ...current, is_active: false },
+    res
+  })) return;
+
   const data = await sb(
     supabase
       .from('locations')
@@ -427,6 +462,12 @@ locationRouter.patch('/locations/:id', requireArea('locations'), async (req, res
   if (beachCartError) {
     return res.status(400).json({ error: beachCartError });
   }
+
+  if (await blockInvalidPrepLocationChange({
+    locationId: req.params.id,
+    nextLocation,
+    res
+  })) return;
 
   const data = await sb(
     supabase

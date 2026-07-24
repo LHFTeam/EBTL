@@ -117,7 +117,7 @@ export function createApp() {
     app.use(express.static(distPath, { index: false }));
     app.use(express.static(publicPath, { index: false }));
 
-    app.get(['/login', '/dashboard', '/dashboard/*', '/admin', '/admin/*'], (_req, res) => {
+    app.get(['/login', '/dashboard', '/dashboard/*', '/admin', '/admin/*', '/prep', '/prep/*'], (_req, res) => {
       sendFirstExistingFile(res, [indexHtml]);
     });
 

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { envUsers, roleAccess, roles } from '../config/appConfig.js';
 import { requireAuth, requireEmployeeSession } from '../middleware/auth.js';
+import { employeeCredentialToUser, loadCurrentEmployeeUser } from '../lib/currentEmployee.js';
 import { hashPassword, verifyPassword } from '../lib/passwords.js';
 import { clearSessionCookie, setSessionCookie } from '../lib/session.js';
 import { supabase } from '../lib/supabase.js';
@@ -15,6 +16,9 @@ authRouter.post('/login', async (req, res) => {
 
   const foundEnv = envUsers().find((user) => user.username === username && user.password === password);
   if (foundEnv && roles.includes(foundEnv.role)) {
+    if (foundEnv.role === 'prep') {
+      return res.status(403).json({ error: 'Prep access requires an active employee account with an assigned beach cart.' });
+    }
     const user = { username: foundEnv.username, name: foundEnv.name || foundEnv.username, role: foundEnv.role, source: 'env' };
     setSessionCookie(res, user);
     return res.json({ user, access: roleAccess[user.role] || [] });
@@ -22,7 +26,7 @@ authRouter.post('/login', async (req, res) => {
 
   const { data, error } = await supabase
     .from('employee_credentials')
-    .select('username,password_hash,password_salt,must_change_password,is_active, employees(id,full_name,role,is_active,default_location_id)')
+    .select('username,password_hash,password_salt,must_change_password,is_active, employees(id,full_name,role,is_active,default_location_id, locations(id,name,type,is_active))')
     .eq('username', username)
     .maybeSingle();
 
@@ -30,29 +34,24 @@ authRouter.post('/login', async (req, res) => {
     console.error(error);
   }
 
-  if (!data || !data.is_active || !data.employees?.is_active || !verifyPassword(password, data.password_salt, data.password_hash)) {
+  const user = employeeCredentialToUser(data);
+  if (!data || !user || !verifyPassword(password, data.password_salt, data.password_hash)) {
     return res.status(401).json({ error: 'Invalid username or password' });
   }
 
-  const user = {
-    username: data.username,
-    name: data.employees.full_name,
-    role: data.employees.role,
-    employee_id: data.employees.id,
-    location_id: data.employees.default_location_id,
-    must_change_password: Boolean(data.must_change_password),
-    source: 'employee'
-  };
   setSessionCookie(res, user);
   res.json({ user, access: roleAccess[user.role] || [] });
 });
 
-authRouter.post('/logout', requireAuth, (_req, res) => {
+authRouter.post('/logout', (_req, res) => {
   clearSessionCookie(res);
   res.json({ ok: true });
 });
 
-authRouter.get('/me', requireAuth, (req, res) => res.json({ user: req.user, access: roleAccess[req.user.role] || [] }));
+authRouter.get('/me', requireAuth, (req, res) => {
+  setSessionCookie(res, req.user);
+  res.json({ user: req.user, access: roleAccess[req.user.role] || [] });
+});
 
 authRouter.post('/me/password', requireEmployeeSession, async (req, res) => {
   const parsed = z.object({
@@ -81,7 +80,18 @@ authRouter.post('/me/password', requireEmployeeSession, async (req, res) => {
     .eq('employee_id', req.user.employee_id);
   if (updated.error) return res.status(400).json({ error: updated.error.message });
 
-  const user = { ...req.user, must_change_password: false };
+  let user;
+  try {
+    user = await loadCurrentEmployeeUser(req.user.employee_id);
+  } catch (error) {
+    console.error('Failed to refresh employee after password change', error);
+    return res.status(503).json({ error: 'Password changed, but the dashboard session could not be refreshed. Please log in again.' });
+  }
+  if (!user) {
+    clearSessionCookie(res);
+    return res.status(403).json({ error: 'Password changed, but this dashboard account is no longer active or valid.' });
+  }
+
   setSessionCookie(res, user);
   res.json({ user, access: roleAccess[user.role] || [] });
 });
