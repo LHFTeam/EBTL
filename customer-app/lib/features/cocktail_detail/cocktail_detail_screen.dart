@@ -244,6 +244,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
       widget.onCartChanged();
 
       showAppSnackBar(context, result.successMessage);
+      Navigator.of(context).pop();
     } catch (error) {
       if (!mounted) return;
 
