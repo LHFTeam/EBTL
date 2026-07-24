@@ -5,9 +5,41 @@ on:
   push:
     branches: [main]
 
+# Cancel superseded runs: rapid pushes to the same PR (or branch) leave only
+# the newest run alive instead of building every intermediate commit.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # Detect which app directories changed so the heavy build jobs only run when
+  # they are actually affected. Jobs skipped via `if:` report a "skipped"
+  # conclusion, which branch protection treats as passing for required checks.
+  changes:
+    name: detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      admin-dashboard: ${{ steps.filter.outputs.admin-dashboard }}
+      customer-app: ${{ steps.filter.outputs.customer-app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            admin-dashboard:
+              - 'admin-dashboard/**'
+              - '.github/workflows/ci.yml'
+            customer-app:
+              - 'customer-app/**'
+              - '.github/workflows/ci.yml'
+
   admin-dashboard:
     name: admin-dashboard build
+    needs: changes
+    if: ${{ needs.changes.outputs.admin-dashboard == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -25,6 +57,8 @@ jobs:
 
   customer-app:
     name: customer-app analyze
+    needs: changes
+    if: ${{ needs.changes.outputs.customer-app == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -39,6 +73,8 @@ jobs:
 
   customer-app-android:
     name: customer-app android build
+    needs: changes
+    if: ${{ needs.changes.outputs.customer-app == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
