@@ -5776,11 +5776,20 @@ customerRouter.get('/customer/orders/:orderId', async (req, res) => {
 
   const currentStatusIndex = statusOrder.indexOf(order.data.status);
 
+  const statusTimestamps = {
+    pending_payment: order.data.created_at,
+    confirmed: order.data.confirmed_at,
+    preparing: order.data.preparing_at,
+    ready: order.data.ready_at,
+    completed: order.data.completed_at
+  };
+
   const timeline = statusOrder.map((status, index) => ({
     status,
     label: status.split('_').map((word) => word[0].toUpperCase() + word.slice(1)).join(' '),
     completed: currentStatusIndex >= index,
-    timestamp: status === order.data.status ? order.data.updated_at : null
+    timestamp: statusTimestamps[status]
+      || (status === order.data.status ? order.data.updated_at : null)
   }));
 
   res.json({
@@ -5793,6 +5802,10 @@ customerRouter.get('/customer/orders/:orderId', async (req, res) => {
       fulfillment_type: order.data.fulfillment_type,
       requested_fulfillment_at: order.data.requested_fulfillment_at,
       created_at: order.data.created_at,
+      confirmed_at: order.data.confirmed_at || null,
+      preparing_at: order.data.preparing_at || null,
+      ready_at: order.data.ready_at || null,
+      completed_at: order.data.completed_at || null,
       customer_phone: order.data.customer_phone_snapshot || null,
       address_text: order.data.customer_address_snapshot || null,
       statusTimeline: timeline,

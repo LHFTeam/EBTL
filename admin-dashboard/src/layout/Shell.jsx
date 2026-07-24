@@ -7,6 +7,7 @@ import AdditionalProducts from '../pages/AdditionalProducts.jsx';
 import Liquors from '../pages/Liquors.jsx';
 import Shop from '../pages/Shop.jsx';
 import Dashboard from '../pages/Dashboard.jsx';
+import Analytics from '../pages/Analytics.jsx';
 import Employees from '../pages/Employees.jsx';
 import Ingredients from '../pages/Ingredients.jsx';
 import Inventory from '../pages/Inventory.jsx';
@@ -163,6 +164,7 @@ export default function Shell({ user, access, onLogout }) {
         </div>
       </header>}
       {active === 'dashboard' && <Dashboard />}
+      {active === 'analytics' && <Analytics />}
       {active === 'orders' && <Orders
         selectedLocationId={cartLocationState.selectedLocationId}
         selectedLocation={selectedCartLocation}

@@ -298,6 +298,9 @@ function publicOperationalOrder({ order, items, isPrep = false }) {
     created_at: order.created_at,
     updated_at: order.updated_at,
     confirmed_at: confirmedAt,
+    preparing_at: order.preparing_at || null,
+    ready_at: order.ready_at || null,
+    completed_at: order.completed_at || null,
     customer: {
       name: customerName || 'Walk-in Customer'
     },
@@ -386,7 +389,7 @@ orderRouter.get('/cart-operations/orders', requireArea('orders'), async (req, re
 
   const orderResult = await supabase
     .from('orders')
-    .select('id,order_number,customer_id,location_id,order_channel,fulfillment_type,status,payment_status,requested_fulfillment_at,subtotal_ex_vat,vat_amount,discount_amount,delivery_fee,total_amount,customer_notes,internal_notes,customer_address_snapshot,customer_phone_snapshot,created_at,confirmed_at,updated_at, customers(full_name,phone), locations(id,name,type,compound_name,beach_name,is_active), payments(id,status,created_at,updated_at)')
+    .select('id,order_number,customer_id,location_id,order_channel,fulfillment_type,status,payment_status,requested_fulfillment_at,subtotal_ex_vat,vat_amount,discount_amount,delivery_fee,total_amount,customer_notes,internal_notes,customer_address_snapshot,customer_phone_snapshot,created_at,confirmed_at,preparing_at,ready_at,completed_at,updated_at, customers(full_name,phone), locations(id,name,type,compound_name,beach_name,is_active), payments(id,status,created_at,updated_at)')
     .eq('location_id', resolved.selectedLocation.id)
     .eq('payment_status', 'paid')
     .in('status', statuses)
