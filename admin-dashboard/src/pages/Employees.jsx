@@ -128,6 +128,27 @@ export default function Employees() {
   }
 
   if (loading || error) return <Loading error={error} />;
+  const prepLocationRequired = form.role === 'prep';
+  const availableLocations = prepLocationRequired
+    ? data.locations.filter((location) => location.type === 'beach_cart' && location.is_active)
+    : data.locations;
+
+  function changeRole(role) {
+    const selectedLocationIsValid = data.locations.some((location) => (
+      location.id === form.default_location_id
+      && location.type === 'beach_cart'
+      && location.is_active
+    ));
+
+    setForm({
+      ...form,
+      role,
+      default_location_id: role === 'prep' && !selectedLocationIsValid
+        ? ''
+        : form.default_location_id
+    });
+  }
+
   const rows = data.employees.map(e => ({
     ...e,
     username: e.credential?.username,
@@ -144,8 +165,16 @@ export default function Employees() {
         <input required placeholder="Dashboard username" value={form.username} onChange={e => setForm({...form, username:e.target.value})}/>
         {!editing && <input required minLength={8} type="password" placeholder="Initial password" value={form.password} onChange={e => setForm({...form, password:e.target.value})}/>} 
         <input placeholder="Phone" value={form.phone || ''} onChange={e => setForm({...form, phone:e.target.value})}/>
-        <select value={form.role} onChange={e => setForm({...form, role:e.target.value})}>{roles.map(r => <option key={r}>{r}</option>)}</select>
-        <select value={form.default_location_id || ''} onChange={e => setForm({...form, default_location_id:e.target.value})}><option value="">No default location</option>{data.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
+        <select value={form.role} onChange={e => changeRole(e.target.value)}>{roles.map(r => <option key={r}>{r}</option>)}</select>
+        <select
+          required={prepLocationRequired}
+          aria-label={prepLocationRequired ? 'Required prep beach cart location' : 'Default location'}
+          value={form.default_location_id || ''}
+          onChange={e => setForm({...form, default_location_id:e.target.value})}
+        >
+          <option value="">{prepLocationRequired ? 'Select active beach cart (required)' : 'No default location'}</option>
+          {availableLocations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
         <input placeholder="Optional Supabase Auth user UUID" value={form.auth_user_id || ''} onChange={e => setForm({...form, auth_user_id:e.target.value})}/>
         <label><input type="checkbox" checked={toBool(form.is_active)} onChange={e => setForm({...form, is_active:e.target.checked})}/> Employee active</label>
         <label><input type="checkbox" checked={toBool(form.credential_is_active)} onChange={e => setForm({...form, credential_is_active:e.target.checked})}/> Dashboard login active</label>
@@ -153,6 +182,7 @@ export default function Employees() {
         <button className="primary">{editing ? 'Save Changes' : 'Create Employee'}</button>
       </form>
       <p className="muted">Dashboard login uses employee_credentials. The Supabase Auth UUID is optional and is not required for this dashboard login flow.</p>
+      {prepLocationRequired && <p className="muted">Prep employees must be assigned to an active beach cart. Their kitchen screen is locked to that location.</p>}
       <Message text={msg}/><Message text={err} type="error"/>
     </Section>
 

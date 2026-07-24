@@ -49,7 +49,7 @@ export const roleAccess = {
   supervisor: ['dashboard', 'orders', 'inventory', 'transfers', 'ingredients', 'cocktails', 'additional-products', 'liquors', 'shop', 'locations'],
   warehouse: ['dashboard', 'inventory', 'transfers', 'ingredients', 'locations'],
   cart_operator: ['dashboard', 'orders', 'inventory', 'transfers'],
-  prep: ['dashboard', 'orders']
+  prep: ['orders']
 };
 
 export const employeeRoles = ['prep', 'cart_operator', 'warehouse', 'supervisor', 'manager', 'admin'];

@@ -10,7 +10,7 @@ export function encodeSession(user) {
   return `${payload}.${sign(payload)}`;
 }
 
-export function decodeSession(token) {
+export function decodeSessionDetails(token) {
   try {
     if (!token || !token.includes('.')) return null;
     const [payload, signature] = token.split('.');
@@ -18,10 +18,15 @@ export function decodeSession(token) {
     if (signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
     const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
     if (!data.exp || Date.now() > data.exp) return null;
-    return data.user;
+    if (!data.user || typeof data.user !== 'object') return null;
+    return { user: data.user, exp: data.exp };
   } catch {
     return null;
   }
+}
+
+export function decodeSession(token) {
+  return decodeSessionDetails(token)?.user || null;
 }
 
 export function getCookie(req, name) {
