@@ -178,7 +178,7 @@ employeeRouter.post('/employees/:id/reset-password', requireArea('employees'), a
     credential_is_active: z.boolean().optional(),
     username: z.string().min(3).regex(/^[a-zA-Z0-9._-]+$/).optional()
   }).safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  if (!parsed.success) return res.status(400).json({ error: 'Password must be at least 8 characters, and a username (when creating credentials) must be at least 3 characters using letters, numbers, dots, underscores or hyphens.' });
 
   const existingEmployee = await supabase.from('employees').select('id,is_active').eq('id', req.params.id).single();
   if (existingEmployee.error) return res.status(400).json({ error: existingEmployee.error.message });

@@ -194,7 +194,7 @@ export default function Employees() {
 
     {resetting && <Section title={`${resetting.credential?.username ? 'Reset Password' : 'Create Dashboard Login'}: ${resetting.full_name}`} action={<button onClick={() => setResetting(null)}>Cancel</button>}>
       <form className="miniForm formGrid" onSubmit={resetPassword}>
-        {!resetting.credential?.username && <input required placeholder="Dashboard username" value={resetForm.username} onChange={e => setResetForm({...resetForm, username:e.target.value})}/>}
+        {!resetting.credential?.username && <input required minLength={3} pattern="[a-zA-Z0-9._-]+" title="At least 3 characters: letters, numbers, dots, underscores or hyphens" placeholder="Dashboard username" value={resetForm.username} onChange={e => setResetForm({...resetForm, username:e.target.value})}/>}
         <input required minLength={8} type="password" placeholder="New temporary password" value={resetForm.password} onChange={e => setResetForm({...resetForm, password:e.target.value})}/>
         <input required minLength={8} type="password" placeholder="Confirm temporary password" value={resetForm.confirm_password} onChange={e => setResetForm({...resetForm, confirm_password:e.target.value})}/>
         <label><input type="checkbox" checked={toBool(resetForm.must_change_password)} onChange={e => setResetForm({...resetForm, must_change_password:e.target.checked})}/> Require change on next login</label>
