@@ -12,6 +12,7 @@ import { customerRateLimiter } from './middleware/rateLimit.js';
 import { authRouter } from './routes/authRoutes.js';
 import { cocktailRouter } from './routes/cocktailRoutes.js';
 import { dashboardRouter } from './routes/dashboardRoutes.js';
+import { analyticsRouter } from './routes/analyticsRoutes.js';
 import { employeeRouter } from './routes/employeeRoutes.js';
 import { ingredientRouter } from './routes/ingredientRoutes.js';
 import { inventoryRouter } from './routes/inventoryRoutes.js';
@@ -89,6 +90,7 @@ export function createApp() {
 
   app.use('/api', authRouter);
   app.use('/api', dashboardRouter);
+  app.use('/api', analyticsRouter);
   app.use('/api', locationRouter);
   app.use('/api', employeeRouter);
   app.use('/api', ingredientRouter);

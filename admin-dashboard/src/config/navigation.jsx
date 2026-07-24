@@ -3,6 +3,7 @@ import {
   Boxes,
   ClipboardList,
   FlaskConical,
+  LineChart,
   MapPin,
   Martini,
   ShoppingBag,
@@ -18,7 +19,8 @@ export const navigationSections = [
     key: 'overview',
     label: 'Overview',
     tabs: [
-      { key: 'dashboard', label: 'Dashboard', icon: BarChart3 }
+      { key: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+      { key: 'analytics', label: 'Analytics', icon: LineChart }
     ]
   },
   {
