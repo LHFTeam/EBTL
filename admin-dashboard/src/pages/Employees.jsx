@@ -192,7 +192,10 @@ export default function Employees() {
           <option value="">{prepLocationRequired ? 'Select active beach cart (required)' : 'No default location'}</option>
           {availableLocations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
-        <input aria-label="Optional Supabase Auth user UUID" placeholder="Optional Supabase Auth user UUID" value={form.auth_user_id || ''} onChange={e => setForm({...form, auth_user_id:e.target.value})}/>
+        <details className="full advancedField">
+          <summary>Advanced: Supabase Auth link (optional)</summary>
+          <input aria-label="Supabase Auth user UUID" placeholder="Supabase Auth user UUID" value={form.auth_user_id || ''} onChange={e => setForm({...form, auth_user_id:e.target.value})}/>
+        </details>
         <label><input type="checkbox" checked={toBool(form.is_active)} onChange={e => setForm({...form, is_active:e.target.checked})}/> Employee active</label>
         <label><input type="checkbox" checked={toBool(form.credential_is_active)} onChange={e => setForm({...form, credential_is_active:e.target.checked})}/> Dashboard login active</label>
         <label><input type="checkbox" checked={toBool(form.must_change_password)} onChange={e => setForm({...form, must_change_password:e.target.checked})}/> Must change password</label>
@@ -226,7 +229,7 @@ export default function Employees() {
       </div>
       <SimpleTable
         rows={rows}
-        columns={['full_name','username','phone','role','location','is_active','credential_active','must_change_password','auth_user_id']}
+        columns={['full_name','username','phone','role','location','is_active','credential_active','must_change_password']}
         emptyText={filtersActive ? 'No employees match the current filters.' : 'No records yet.'}
         format={{
           role: (value) => humanize(value),

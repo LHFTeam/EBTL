@@ -632,7 +632,7 @@ export default function Locations() {
       <Section title="Locations">
         <SimpleTable
           rows={data}
-          columns={['banner_image_url', 'name', 'type', 'compound_name', 'beach_name', 'address', 'delivery_fee', 'is_active']}
+          columns={['banner_image_url', 'name', 'type', 'compound_name', 'delivery_fee', 'is_active']}
           format={{
             banner_image_url: (value, row) => value ? <img className="tableImageThumb locationTableBannerThumb" src={value} alt={row.name} /> : '-',
             type: (value) => humanize(value),

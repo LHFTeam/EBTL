@@ -816,7 +816,8 @@ export default function Cocktails({
         </button>
       }
     >
-      {addOpen && <form className="miniForm formGrid" onSubmit={add}>    
+      {addOpen && <form className="miniForm formGrid" onSubmit={add}>
+        <div className="formSectionLabel full">Product details</div>
         <input
           required
           aria-label={copy.namePlaceholder}
@@ -916,6 +917,7 @@ export default function Cocktails({
           onChange={(tags) => setForm({ ...form, tags })}
         />
 
+        <div className="formSectionLabel full">Pricing &amp; first variant</div>
         <input
           required
           aria-label="Variant name"
@@ -1218,12 +1220,14 @@ export default function Cocktails({
                   <input
                     type="number"
                     min="0"
-                    max="1"
-                    step="0.0001"
-                    value={numericInput(draft.vat_rate)}
+                    max="100"
+                    step="0.01"
+                    aria-label="VAT rate percent"
+                    placeholder="VAT rate %"
+                    value={vatPercentInput(draft.vat_rate)}
                     onChange={(e) => setVariantEdits({
                       ...variantEdits,
-                      [variant.id]: { ...draft, vat_rate: e.target.value }
+                      [variant.id]: { ...draft, vat_rate: vatPercentToDecimal(e.target.value) }
                     })}
                   />
 

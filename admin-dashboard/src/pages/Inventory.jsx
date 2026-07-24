@@ -23,7 +23,16 @@ export default function Inventory() {
     }
   }
   if (loading || error) return <Loading error={error} onRetry={reload} />;
-  return <div className="grid2"><Section title="Inventory Balances"><SimpleTable rows={data.balances.map(b => ({...b, ingredient: b.ingredients?.name, location: b.locations?.name}))} columns={['location','ingredient','quantity_on_hand','reserved_quantity','reorder_point','par_level']} /></Section>
-    <Section title="Manual Stock Adjustment"><form className="miniForm" onSubmit={adjust}><select required aria-label="Location" value={form.location_id} onChange={e => setForm({...form, location_id:e.target.value})}><option value="">Location</option>{data.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select><select required aria-label="Ingredient" value={form.ingredient_id} onChange={e => setForm({...form, ingredient_id:e.target.value})}><option value="">Ingredient</option>{data.ingredients.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}</select><input required aria-label="Quantity delta" type="number" step="0.001" placeholder="Qty delta e.g. 10 or -2" value={form.quantity_delta} onChange={e => setForm({...form, quantity_delta:e.target.value})}/><input aria-label="Reason" placeholder="Reason" value={form.reason} onChange={e => setForm({...form, reason:e.target.value})}/><button className="primary">Post Movement</button></form><Message text={msg}/><Message text={err} type="error"/></Section>
+  const selectedBalance = form.location_id && form.ingredient_id
+    ? data.balances.find(b => b.ingredient_id === form.ingredient_id && b.location_id === form.location_id)
+    : null;
+  const onHandHint = (form.location_id && form.ingredient_id)
+    ? (selectedBalance
+      ? `Current on hand: ${Number(selectedBalance.quantity_on_hand || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })} ${selectedBalance.ingredients?.base_unit || ''}`.trim()
+      : 'No balance recorded yet for this ingredient at this location.')
+    : '';
+  return <div className="grid">
+    <div className="grid2"><Section title="Inventory Balances"><SimpleTable rows={data.balances.map(b => ({...b, ingredient: b.ingredients?.name, location: b.locations?.name}))} columns={['location','ingredient','quantity_on_hand','reserved_quantity','reorder_point','par_level']} /></Section>
+    <Section title="Manual Stock Adjustment"><form className="miniForm" onSubmit={adjust}><select required aria-label="Location" value={form.location_id} onChange={e => setForm({...form, location_id:e.target.value})}><option value="">Location</option>{data.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select><select required aria-label="Ingredient" value={form.ingredient_id} onChange={e => setForm({...form, ingredient_id:e.target.value})}><option value="">Ingredient</option>{data.ingredients.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}</select><input required aria-label="Quantity delta" type="number" step="0.001" placeholder="Qty delta e.g. 10 or -2" value={form.quantity_delta} onChange={e => setForm({...form, quantity_delta:e.target.value})}/><input aria-label="Reason" placeholder="Reason" value={form.reason} onChange={e => setForm({...form, reason:e.target.value})}/>{onHandHint && <p className="muted smallText noPad">{onHandHint}</p>}<button className="primary">Post Movement</button></form><Message text={msg}/><Message text={err} type="error"/></Section></div>
     <Section title="Recent Movements"><SimpleTable rows={data.movements.map(m => ({...m, ingredient: m.ingredients?.name, location: m.locations?.name}))} columns={['created_at','location','ingredient','movement_type','quantity_delta','reason']} format={{created_at: dt}} /></Section></div>;
 }
