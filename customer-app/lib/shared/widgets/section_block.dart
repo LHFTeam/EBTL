@@ -9,6 +9,7 @@ class SectionBlock extends StatelessWidget {
   final String title;
   final String? subtitle;
   final String? actionText;
+  final VoidCallback? onAction;
   final Widget child;
 
   const SectionBlock({
@@ -17,6 +18,7 @@ class SectionBlock extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.actionText,
+    this.onAction,
     required this.child,
   });
 
@@ -53,25 +55,48 @@ class SectionBlock extends StatelessWidget {
                   ),
                 ),
                 if (actionText != null)
-                  Row(
-                    children: [
-                      Text(
-                        actionText!,
-                        style: GoogleFonts.manrope(
-                          fontWeight: FontWeight.w800,
-                          color: EbtlColors.teal,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      const Icon(Icons.chevron_right, color: EbtlColors.teal),
-                    ],
-                  ),
+                  _SectionAction(label: actionText!, onTap: onAction),
               ],
             ),
           ),
           const SizedBox(height: 14),
           child,
         ],
+      ),
+    );
+  }
+}
+
+class _SectionAction extends StatelessWidget {
+  final String label;
+  final VoidCallback? onTap;
+
+  const _SectionAction({required this.label, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.manrope(
+                  fontWeight: FontWeight.w800,
+                  color: EbtlColors.teal,
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right, color: EbtlColors.teal),
+            ],
+          ),
+        ),
       ),
     );
   }

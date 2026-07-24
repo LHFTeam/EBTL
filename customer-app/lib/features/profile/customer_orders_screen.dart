@@ -4,6 +4,7 @@ import '../../core/theme/ebtl_colors.dart';
 import '../../models/profile_models.dart';
 import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
+import 'order_detail_screen.dart';
 import 'widgets/profile_widgets.dart';
 
 class CustomerOrdersScreen extends StatefulWidget {
@@ -26,6 +27,17 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
     setState(() {
       ordersFuture = ApiService.fetchCustomerOrders();
     });
+  }
+
+  void _openOrderDetail(ProfileOrder order) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OrderDetailScreen(
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+        ),
+      ),
+    );
   }
 
   @override
@@ -63,9 +75,11 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                         if (index.isOdd) return const SizedBox(height: 12);
 
                         final orderIndex = index ~/ 2;
+                        final order = snapshot.data!.orders[orderIndex];
 
                         return ProfileOrderCard(
-                          order: snapshot.data!.orders[orderIndex],
+                          order: order,
+                          onTap: () => _openOrderDetail(order),
                         );
                       }, childCount: (snapshot.data!.orders.length * 2) - 1),
                     ),

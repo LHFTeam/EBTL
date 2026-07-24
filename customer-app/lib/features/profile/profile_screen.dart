@@ -7,6 +7,7 @@ import '../../shared/widgets/app_state_widgets.dart';
 import 'customer_addresses_screen.dart';
 import 'customer_orders_screen.dart';
 import 'favorite_cocktails_screen.dart';
+import 'order_detail_screen.dart';
 import 'profile_edit_sheet.dart';
 import 'widgets/profile_widgets.dart';
 
@@ -172,6 +173,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 SliverToBoxAdapter(
                   child: ProfileOrdersSection(
                     recentOrders: profile.recentOrders,
+                    onOpenOrder: (order) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => OrderDetailScreen(
+                            orderId: order.id,
+                            orderNumber: order.orderNumber,
+                          ),
+                        ),
+                      );
+                    },
                     onViewAll:
                         profile.recentOrders.hasMore ||
                             profile.recentOrders.items.isNotEmpty

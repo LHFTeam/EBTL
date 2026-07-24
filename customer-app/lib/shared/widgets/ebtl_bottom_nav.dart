@@ -7,12 +7,14 @@ class EbtlBottomNav extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onTap;
   final bool showProfileDot;
+  final int cartItemCount;
 
   const EbtlBottomNav({
     super.key,
     required this.selectedIndex,
     required this.onTap,
     this.showProfileDot = false,
+    this.cartItemCount = 0,
   });
 
   @override
@@ -63,6 +65,34 @@ class EbtlBottomNav extends StatelessWidget {
                               border: Border.all(
                                 color: EbtlColors.white,
                                 width: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (index == 3 && cartItemCount > 0)
+                        Positioned(
+                          top: -6,
+                          right: -10,
+                          child: Container(
+                            constraints: const BoxConstraints(minWidth: 17),
+                            height: 17,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: EbtlColors.coral,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: EbtlColors.white,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Text(
+                              cartItemCount > 99 ? '99+' : '$cartItemCount',
+                              style: GoogleFonts.manrope(
+                                fontSize: 9.5,
+                                height: 1,
+                                fontWeight: FontWeight.w900,
+                                color: EbtlColors.white,
                               ),
                             ),
                           ),

@@ -271,11 +271,13 @@ class ProfileAvatar extends StatelessWidget {
 class ProfileOrdersSection extends StatelessWidget {
   final ProfileRecentOrders recentOrders;
   final VoidCallback? onViewAll;
+  final ValueChanged<ProfileOrder>? onOpenOrder;
 
   const ProfileOrdersSection({
     super.key,
     required this.recentOrders,
     required this.onViewAll,
+    this.onOpenOrder,
   });
 
   @override
@@ -296,7 +298,12 @@ class ProfileOrdersSection extends StatelessWidget {
           if (firstOrder == null)
             const ProfileEmptyOrdersCard()
           else
-            ProfileOrderCard(order: firstOrder),
+            ProfileOrderCard(
+              order: firstOrder,
+              onTap: onOpenOrder == null
+                  ? null
+                  : () => onOpenOrder!(firstOrder),
+            ),
         ],
       ),
     );
@@ -362,12 +369,13 @@ class ProfileSectionHeader extends StatelessWidget {
 
 class ProfileOrderCard extends StatelessWidget {
   final ProfileOrder order;
+  final VoidCallback? onTap;
 
-  const ProfileOrderCard({super.key, required this.order});
+  const ProfileOrderCard({super.key, required this.order, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final card = Container(
       height: 103,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -402,22 +410,15 @@ class ProfileOrderCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Order #${order.displayOrderNumber}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.manrope(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                          color: EbtlColors.navy,
-                        ),
-                      ),
-                    ),
-                    ProfileStatusBadge(order: order),
-                  ],
+                Text(
+                  'Order #${order.displayOrderNumber}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.manrope(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: EbtlColors.navy,
+                  ),
                 ),
                 const SizedBox(height: 9),
                 Text(
@@ -446,22 +447,25 @@ class ProfileOrderCard extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                order.displayTotal,
-                style: GoogleFonts.manrope(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  color: EbtlColors.navy,
-                ),
-              ),
-              const SizedBox(height: 8),
+              ProfileStatusBadge(order: order),
               const Icon(Icons.chevron_right, color: EbtlColors.navy, size: 25),
             ],
           ),
         ],
+      ),
+    );
+
+    if (onTap == null) return card;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: card,
       ),
     );
   }

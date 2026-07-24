@@ -344,9 +344,10 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
             onOpenFinder: () => openFinder(),
             onOpenFinderWithBottle: (liquor) =>
                 openFinder(liquorTypeId: liquor.id),
-            onOpenCart: openCart,
             onLocationSelected: selectLocation,
             onOpenCocktail: (cocktail) => openCocktailDetail(data, cocktail),
+            unreadNotificationCount: unreadNotificationCount,
+            onOpenNotifications: openNotifications,
           ),
           FinderScreen(
             data: data,
@@ -356,12 +357,13 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
           ),
           ShopScreen(
             data: data,
-            onOpenCart: openCart,
             onCartChanged: reloadAppData,
             onSwitchTab: (index) => setState(() => selectedIndex = index),
             onOpenProduct: (product) {
               openCocktailDetail(data, Cocktail.fromShopProduct(product));
             },
+            unreadNotificationCount: unreadNotificationCount,
+            onOpenNotifications: openNotifications,
           ),
           CartScreen(
             data: data,
@@ -413,6 +415,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
             selectedIndex: safeSelectedIndex,
             onTap: handleBottomNavTap,
             showProfileDot: unreadNotificationCount > 0,
+            cartItemCount: data.cartSummary?.totalQuantity ?? 0,
           ),
         );
       },

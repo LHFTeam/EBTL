@@ -9,7 +9,6 @@ import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import 'shop_category_picker_screen.dart';
 import 'shop_category_products_screen.dart';
-import 'shop_search_screen.dart';
 import 'widgets/shop_loading_state.dart';
 import 'widgets/shop_product_detail_sheet.dart';
 import 'widgets/shop_product_widgets.dart';
@@ -35,18 +34,20 @@ class _ShopScreenPayload {
 
 class ShopScreen extends StatefulWidget {
   final AppData data;
-  final VoidCallback onOpenCart;
   final VoidCallback onCartChanged;
   final ValueChanged<int> onSwitchTab;
   final ValueChanged<ShopProduct> onOpenProduct;
+  final int unreadNotificationCount;
+  final VoidCallback onOpenNotifications;
 
   const ShopScreen({
     super.key,
     required this.data,
-    required this.onOpenCart,
     required this.onCartChanged,
     required this.onSwitchTab,
     required this.onOpenProduct,
+    required this.unreadNotificationCount,
+    required this.onOpenNotifications,
   });
 
   @override
@@ -337,20 +338,6 @@ class _ShopScreenState extends State<ShopScreen> {
     );
   }
 
-  void openSearch(ShopResponse shop) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ShopSearchScreen(
-          shop: shop,
-          locationId: widget.data.selectedLocationId,
-          onCategoryTap: openCategory,
-          onProductTap: openProduct,
-          onQuickAdd: quickAddProduct,
-        ),
-      ),
-    );
-  }
-
   void openCategoryByTarget(ShopResponse shop, String target) {
     final category = categoryForTarget(shop, target);
 
@@ -425,9 +412,8 @@ class _ShopScreenState extends State<ShopScreen> {
               slivers: [
                 SliverToBoxAdapter(
                   child: ShopHeader(
-                    cartQuantity: widget.data.cartSummary?.totalQuantity ?? 0,
-                    onSearch: null,
-                    onOpenCart: widget.onOpenCart,
+                    unreadNotificationCount: widget.unreadNotificationCount,
+                    onOpenNotifications: widget.onOpenNotifications,
                   ),
                 ),
                 SliverToBoxAdapter(
@@ -449,9 +435,8 @@ class _ShopScreenState extends State<ShopScreen> {
               slivers: [
                 SliverToBoxAdapter(
                   child: ShopHeader(
-                    cartQuantity: widget.data.cartSummary?.totalQuantity ?? 0,
-                    onSearch: null,
-                    onOpenCart: widget.onOpenCart,
+                    unreadNotificationCount: widget.unreadNotificationCount,
+                    onOpenNotifications: widget.onOpenNotifications,
                   ),
                 ),
                 SliverToBoxAdapter(
@@ -478,9 +463,8 @@ class _ShopScreenState extends State<ShopScreen> {
               slivers: [
                 SliverToBoxAdapter(
                   child: ShopHeader(
-                    cartQuantity: cartQuantityFor(payload),
-                    onSearch: () => openSearch(shop),
-                    onOpenCart: widget.onOpenCart,
+                    unreadNotificationCount: widget.unreadNotificationCount,
+                    onOpenNotifications: widget.onOpenNotifications,
                   ),
                 ),
                 SliverToBoxAdapter(

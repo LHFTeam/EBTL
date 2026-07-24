@@ -13,9 +13,8 @@ class ShopLoadingState extends StatelessWidget {
         slivers: [
           SliverToBoxAdapter(
             child: ShopHeader(
-              cartQuantity: 0,
-              onSearch: null,
-              onOpenCart: () {},
+              unreadNotificationCount: 0,
+              onOpenNotifications: () {},
             ),
           ),
           const SliverFillRemaining(
