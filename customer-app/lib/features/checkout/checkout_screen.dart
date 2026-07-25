@@ -52,6 +52,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   bool isApplyingPromo = false;
   bool isPlacingOrder = false;
+  bool isConfirmingPayment = false;
   bool showValidationErrors = false;
 
   @override
@@ -248,18 +249,32 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
-  Future<PaymentStatusResponse> pollPaymentStatus(String orderId) async {
-    PaymentStatusResponse? latest;
+  // Payment reconciliation waits on a Stripe/Geidea webhook reaching the
+  // backend. On a cold-starting Render instance that can take much longer than
+  // the couple of seconds it usually does, so poll well past the common case
+  // before giving up — backing off so we don't hammer the API — and return the
+  // last status seen if the window is exhausted (the order still settles
+  // server-side; the UI just can't confirm it live yet).
+  static const Duration _paymentPollBudget = Duration(seconds: 90);
+  static const Duration _paymentPollInitialDelay = Duration(seconds: 2);
+  static const Duration _paymentPollMaxDelay = Duration(seconds: 6);
 
-    for (int i = 0; i < 10; i += 1) {
+  Future<PaymentStatusResponse> pollPaymentStatus(String orderId) async {
+    final deadline = DateTime.now().add(_paymentPollBudget);
+    Duration delay = _paymentPollInitialDelay;
+    PaymentStatusResponse latest = await ApiService.fetchOrderPaymentStatus(
+      orderId: orderId,
+    );
+
+    while (!latest.isFinal && DateTime.now().add(delay).isBefore(deadline)) {
+      await Future<void>.delayed(delay);
       latest = await ApiService.fetchOrderPaymentStatus(orderId: orderId);
 
-      if (latest.isFinal) return latest;
-
-      await Future<void>.delayed(const Duration(seconds: 2));
+      final Duration next = delay * 1.5;
+      delay = next > _paymentPollMaxDelay ? _paymentPollMaxDelay : next;
     }
 
-    return latest ?? await ApiService.fetchOrderPaymentStatus(orderId: orderId);
+    return latest;
   }
 
   void openOrderConfirmed(
@@ -460,12 +475,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   // Shared confirmation tail: poll the backend until the payment is final, then
-  // route to the confirmed screen or the result screen accordingly.
+  // route to the confirmed screen or the result screen accordingly. Shows a
+  // blocking "confirming payment" overlay for the duration so the customer
+  // isn't left staring at an unexplained spinner while the webhook lands.
   Future<void> finishPaymentByPolling(
     PlaceOrderResponse response,
     CheckoutData checkout,
   ) async {
-    final status = await pollPaymentStatus(response.order.id);
+    if (mounted) setState(() => isConfirmingPayment = true);
+
+    PaymentStatusResponse status;
+    try {
+      status = await pollPaymentStatus(response.order.id);
+    } finally {
+      if (mounted) setState(() => isConfirmingPayment = false);
+    }
 
     if (!mounted) return;
 
@@ -548,10 +572,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: EbtlColors.cream,
-      body: SafeArea(
-        child: FutureBuilder<CheckoutPageResponse>(
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: EbtlColors.cream,
+          body: SafeArea(
+            child: FutureBuilder<CheckoutPageResponse>(
           future: checkoutFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -709,6 +735,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           },
         ),
       ),
+        ),
+        if (isConfirmingPayment)
+          const Positioned.fill(child: PaymentConfirmingOverlay()),
+      ],
     );
   }
 }
@@ -2195,7 +2225,67 @@ class _PaidStatusPill extends StatelessWidget {
   }
 }
 
-class CheckoutResultScreen extends StatelessWidget {
+// Blocking overlay shown while we poll the backend for payment confirmation
+// after the Stripe/Geidea sheet closes. Being a full Material barrier, it also
+// swallows taps so the customer can't re-submit the form underneath.
+class PaymentConfirmingOverlay extends StatelessWidget {
+  const PaymentConfirmingOverlay({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: EbtlColors.navy.withValues(alpha: 0.55),
+      child: Center(
+        child: Container(
+          margin: const EdgeInsets.all(28),
+          padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 30),
+          decoration: BoxDecoration(
+            color: EbtlColors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: EbtlColors.border),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 44,
+                height: 44,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  color: EbtlColors.coral,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Confirming your payment',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: EbtlColors.navy,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Please keep the app open — this can take up to a minute. '
+                "You won't be charged twice.",
+                textAlign: TextAlign.center,
+                style: GoogleFonts.manrope(
+                  fontSize: 14,
+                  height: 1.4,
+                  fontWeight: FontWeight.w600,
+                  color: EbtlColors.ink,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class CheckoutResultScreen extends StatefulWidget {
   final PaymentStatusResponse status;
   final VoidCallback onDone;
 
@@ -2206,9 +2296,38 @@ class CheckoutResultScreen extends StatelessWidget {
   });
 
   @override
+  State<CheckoutResultScreen> createState() => _CheckoutResultScreenState();
+}
+
+class _CheckoutResultScreenState extends State<CheckoutResultScreen> {
+  late PaymentStatusResponse _status = widget.status;
+  bool _isChecking = false;
+
+  // Manual "Check Again" for the still-processing case: a single fresh read so
+  // a customer whose webhook lands late can confirm their order without leaving
+  // this screen. Failures are surfaced softly; the order is never lost.
+  Future<void> _checkAgain() async {
+    if (_isChecking) return;
+    setState(() => _isChecking = true);
+
+    try {
+      final latest = await ApiService.fetchOrderPaymentStatus(
+        orderId: _status.orderId,
+      );
+      if (!mounted) return;
+      setState(() => _status = latest);
+    } catch (error) {
+      if (!mounted) return;
+      showAppSnackBar(context, apiErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _isChecking = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final paid = status.isPaid;
-    final failed = status.isFailed;
+    final paid = _status.isPaid;
+    final failed = _status.isFailed;
 
     final title = paid
         ? 'Order Confirmed'
@@ -2217,10 +2336,10 @@ class CheckoutResultScreen extends StatelessWidget {
         : 'Payment Processing';
 
     final message = paid
-        ? 'Your order ${status.orderNumber} is confirmed.'
+        ? 'Your order ${_status.orderNumber} is confirmed.'
         : failed
-        ? 'Payment failed. Please return to checkout and try again.'
-        : 'Your payment is still being confirmed. You can refresh the order status shortly.';
+        ? 'Your payment did not go through, so you have not been charged. Please return to checkout and try again.'
+        : "If you were charged, your payment is safe — we're still waiting for the bank to confirm it, which can take a minute. Your order will appear under Orders once it's confirmed, and you won't be charged twice.";
 
     final icon = paid
         ? Icons.check
@@ -2275,18 +2394,68 @@ class CheckoutResultScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 54,
-                    child: ElevatedButton(
-                      onPressed: onDone,
-                      style: ebtlCoralButtonStyle(),
-                      child: Text(
-                        'Done',
-                        style: GoogleFonts.manrope(fontWeight: FontWeight.w900),
+                  // Only the still-processing state offers a re-check; paid and
+                  // failed are terminal.
+                  if (!paid && !failed) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: ElevatedButton(
+                        onPressed: _isChecking ? null : _checkAgain,
+                        style: ebtlCoralButtonStyle(withDisabledColors: true),
+                        child: _isChecking
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: EbtlColors.white,
+                                ),
+                              )
+                            : Text(
+                                'Check Again',
+                                style: GoogleFonts.manrope(
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: OutlinedButton(
+                        onPressed: widget.onDone,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: EbtlColors.navy,
+                          side: const BorderSide(color: EbtlColors.border),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: Text(
+                          'Done',
+                          style: GoogleFonts.manrope(
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ] else
+                    SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: ElevatedButton(
+                        onPressed: widget.onDone,
+                        style: ebtlCoralButtonStyle(),
+                        child: Text(
+                          'Done',
+                          style: GoogleFonts.manrope(
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
