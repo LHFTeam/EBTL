@@ -106,7 +106,7 @@ class _ShopCategoryProductsScreenState
       if (!mounted) return;
 
       setState(() {
-        errorMessage = error.toString();
+        errorMessage = apiErrorMessage(error);
         hasLoadedInitial = true;
         isLoading = false;
       });

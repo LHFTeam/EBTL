@@ -101,7 +101,7 @@ class _ProfileEditSheetState extends State<ProfileEditSheet> {
 
       showAppSnackBar(
         context,
-        error is ApiException ? error.message : error.toString(),
+        apiErrorMessage(error),
       );
     }
   }

@@ -418,7 +418,7 @@ class _ShopScreenState extends State<ShopScreen> {
                 ),
                 SliverToBoxAdapter(
                   child: InlineErrorCard(
-                    message: snapshot.error.toString(),
+                    message: apiErrorMessage(snapshot.error!),
                     onRetry: () {
                       setState(() => shopFuture = loadShop());
                     },

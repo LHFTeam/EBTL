@@ -570,7 +570,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                   SliverToBoxAdapter(
                     child: InlineErrorCard(
-                      message: snapshot.error.toString(),
+                      message: apiErrorMessage(snapshot.error!),
                       onRetry: reloadCheckout,
                     ),
                   ),
