@@ -304,7 +304,10 @@ Extend via its props before copy-pasting.
    current routes query Supabase, and flag schema needs rather than faking them.
 6. **Verify before claiming success:** `npm run build` should pass and the
    server should boot (it throws on missing Supabase/session config). There are
-   no automated tests — say so honestly instead of claiming they passed.
+   no automated tests — say so honestly instead of claiming they passed. **CI**
+   (`.github/workflows/ci.yml`) is the only gate on a PR touching this app: it
+   runs `npm ci` + `npm run build` and nothing else (no test runner, no
+   linter). Keep the build green.
 7. **The customer API here is a contract** with the Flutter app. Changing
    request/response shapes under `/api/customer/*` is a breaking change for
    `customer-app`; keep them in sync and call it out.

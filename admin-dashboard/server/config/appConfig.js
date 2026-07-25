@@ -45,8 +45,8 @@ if (isProd && SESSION_SECRET === 'dev-only-change-me') {
 
 export const roleAccess = {
   admin: ['*'],
-  manager: ['dashboard', 'analytics', 'orders', 'inventory', 'transfers', 'ingredients', 'cocktails', 'additional-products', 'liquors', 'shop', 'locations', 'employees'],
-  supervisor: ['dashboard', 'orders', 'inventory', 'transfers', 'ingredients', 'cocktails', 'additional-products', 'liquors', 'shop', 'locations'],
+  manager: ['dashboard', 'analytics', 'orders', 'inventory', 'transfers', 'ingredients', 'cocktails', 'additional-products', 'liquors', 'shop', 'promotions', 'locations', 'employees'],
+  supervisor: ['dashboard', 'orders', 'inventory', 'transfers', 'ingredients', 'cocktails', 'additional-products', 'liquors', 'shop', 'promotions', 'locations'],
   warehouse: ['dashboard', 'inventory', 'transfers', 'ingredients', 'locations'],
   cart_operator: ['dashboard', 'orders', 'inventory', 'transfers'],
   prep: ['orders']
@@ -59,6 +59,8 @@ export const transferStatuses = ['draft', 'picked', 'in_transit', 'received', 'c
 export const productStatuses = ['draft', 'active', 'archived'];
 export const productTypes = ['cocktail', 'snack', 'essential', 'bundle', 'add_on'];
 export const locationTypes = ['central_warehouse', 'beach_cart'];
+export const promotionDiscountTypes = ['percentage', 'fixed_amount', 'free_delivery'];
+export const promotionFulfillmentTypes = ['pickup_at_cart', 'delivery_to_unit'];
 export const roles = Object.keys(roleAccess);
 
 export function can(role, area) {

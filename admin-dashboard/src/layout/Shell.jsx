@@ -13,6 +13,7 @@ import Ingredients from '../pages/Ingredients.jsx';
 import Inventory from '../pages/Inventory.jsx';
 import Locations from '../pages/Locations.jsx';
 import Orders from '../pages/Orders.jsx';
+import Promotions from '../pages/Promotions.jsx';
 import Transfers from '../pages/Transfers.jsx';
 
 const CART_LOCATION_STORAGE_KEY = 'ebtl.cart_operations.location_id';
@@ -179,6 +180,7 @@ export default function Shell({ user, access, onLogout }) {
       {active === 'additional-products' && <AdditionalProducts />}
       {active === 'liquors' && <Liquors />}
       {active === 'shop' && <Shop />}
+      {active === 'promotions' && <Promotions />}
       {active === 'locations' && <Locations />}
       {active === 'employees' && <Employees />}
     </main>
