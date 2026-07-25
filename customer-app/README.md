@@ -50,8 +50,14 @@ per-checkout Stripe keys. See the root [`STRIPE_SETUP.md`](../STRIPE_SETUP.md).
   at your upload keystore (or set the `ANDROID_KEYSTORE_*` env vars in CI).
   Without it, release builds fall back to the debug key — fine for
   `flutter run --release`, but Play uploads require the real key.
-- iOS push is not yet wired (no APNs entitlement / `remote-notification`
-  background mode).
+- **iOS push** is wired: the `aps-environment` entitlement
+  (`ios/Runner/Runner.entitlements`) and the `remote-notification` background
+  mode are set, and `CODE_SIGN_ENTITLEMENTS` is applied to all Runner build
+  configs. The entitlement ships as `development`; Xcode injects `production`
+  for App Store / TestFlight distribution builds. To deliver pushes you still
+  need to (1) add the app's APNs auth key to the Firebase console and
+  (2) enable the **Push Notifications** capability on the App ID / provisioning
+  profile in the Apple Developer portal.
 - Microsoft Clarity session replay ships **on by default** in release builds;
   disclose it in the store privacy labels and verify PII masking against a real
   recording.
