@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/app_data.dart';
 import '../../models/cocktail_models.dart';
 import '../../services/api_service.dart';
+import '../../core/network/api_exception.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import '../../shared/widgets/cocktail_card_widgets.dart';
 import 'widgets/finder_filter_widgets.dart';
@@ -186,7 +187,7 @@ class _FinderScreenState extends State<FinderScreen> {
 
                 if (snapshot.hasError) {
                   return InlineErrorCard(
-                    message: snapshot.error.toString(),
+                    message: apiErrorMessage(snapshot.error!),
                     onRetry: reloadResults,
                   );
                 }

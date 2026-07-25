@@ -33,10 +33,16 @@ The app is a thin client over the **customer API** of a separate backend
   identity. Note the **Dart package name stays `ebtl_customer_app`** (the
   `name:` in `pubspec.yaml`, imported as `package:ebtl_customer_app/...`) —
   that is independent of the store bundle ID and is not renamed.
-- Dependencies are deliberately minimal: `http`, `google_fonts`,
-  `flutter_secure_storage`, `flutter_markdown`, `flutter_svg`,
-  `cupertino_icons`. **Do not add packages** (state management, DI, routing,
-  codegen, etc.) unless the task explicitly calls for it.
+- Dependencies are deliberately lean. Core UI/networking: `http`,
+  `google_fonts`, `flutter_secure_storage`, `flutter_markdown`, `flutter_svg`,
+  `cupertino_icons`. Payments: `flutter_stripe` (native Payment Sheet).
+  Analytics/telemetry: `clarity_flutter` (session replay), `firebase_core` +
+  `firebase_messaging` (push), `firebase_crashlytics` (crash/error reporting).
+  The Firebase and Clarity integrations are **inert unless configured at build
+  time** (see the service classes below), so the app still builds and runs
+  without any of their credentials. **Do not add further packages** (state
+  management, DI, routing, codegen, etc.) unless the task explicitly calls for
+  it.
 - **No state-management library and no code generation.** State is plain
   `StatefulWidget` + `FutureBuilder`, with data and callbacks passed down as
   constructor parameters. JSON mapping is hand-written. Keep it that way.
@@ -87,6 +93,10 @@ lib/
   services/
     api_service.dart        # THE single backend gateway. Static methods only.
                             # Session/token/location persistence lives here too.
+    firebase_bootstrap.dart # One-time Firebase init shared by push + crash.
+    push_notification_service.dart  # FCM registration (inert without config).
+    crash_reporting_service.dart    # Crashlytics + global uncaught-error hooks.
+    clarity_service.dart    # Microsoft Clarity session replay (release-only).
   features/<feature>/       # One folder per screen/flow:
                             # home, finder, shop, cocktail_detail, cart,
                             # checkout (includes OrderConfirmedScreen),
@@ -100,14 +110,20 @@ assets/                     # images, ingredient SVGs, banners, onboarding,
 test/                       # widget_test.dart (stale template — see above)
 ```
 
-The root `*.patch` files that used to live here
-(`ebtl_app_demo_order_confirmed_notifications.patch`,
-`ebtl_customer_app_customization_update.patch`) were stale artifacts and have
-been removed: the customization patch's changes were already applied to the
-code, and the notifications patch (customer notifications screen + push
-service) was never applied — no notification/push code exists in `lib/`. If
-that feature is wanted, implement it fresh against the current code rather
-than resurrecting the patch from git history.
+Customer notifications and push are now **implemented** (they were once staged
+in a since-removed `*.patch` file and have since been built directly into the
+tree):
+
+- In-app notifications: `features/profile/customer_notifications_screen.dart` +
+  `models/notification_models.dart`, backed by
+  `ApiService.fetchCustomerNotifications`. `RootShell` polls unread count every
+  30 s (paused in background) and shows a snackbar + profile-tab dot on new
+  ones.
+- Push (FCM): `services/push_notification_service.dart` registers the device
+  token via `ApiService.registerCustomerPushToken`. Android is wired
+  (`google-services.json` materialized in `android/app/build.gradle.kts`); iOS
+  still needs an APNs entitlement + `remote-notification` background mode
+  before push delivers there.
 
 ## Runtime architecture
 
@@ -218,11 +234,14 @@ an endpoint, copy the existing shape:
   (`liquor_type_ids`), tags, category, search text.
 - **Customization** — cart items carry `removed_recipe_item_ids` and
   `additions` (see `addCocktailToCart`).
-- **Payment methods** — provided by the backend per checkout; known keys are
-  `geidea_card` (card session + payment-status polling in
-  `checkout_screen.dart`) and `demo_checkout`. Orders use an
-  `idempotency_key` on placement; payment status is polled via
-  `fetchOrderPaymentStatus`.
+- **Payment methods** — provided by the backend per checkout. The default
+  provider is **Stripe**: `checkout_screen.dart` presents the native
+  `flutter_stripe` Payment Sheet, then reconciles via webhook-backed polling
+  (`fetchOrderPaymentStatus`). The older **Geidea** path
+  (`startGeideaSdkAndRefresh`) is still a placeholder dialog — no real SDK — so
+  keep the backend pinned to Stripe unless that path is finished.
+  `demo_checkout` bypasses payment entirely. Orders carry an `idempotency_key`
+  on placement. See root `STRIPE_SETUP.md` for the backend/webhook contract.
 - **Favorites** — per-anonymous-customer favorite cocktails
   (`/api/customer/favorites`), surfaced on profile and cocktail cards.
 

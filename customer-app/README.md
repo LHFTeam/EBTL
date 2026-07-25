@@ -1,17 +1,55 @@
-# ebtl_customer_app
+# EBTL Customer App
 
-A new Flutter project.
+Flutter app for **EBTL**, a beach-side cocktail-kit service
+("You bring the bottle. We bring the magic."). Customers pick a beach cart,
+browse cocktails and shop products, filter cocktails by a liquor bottle they
+already own (the **Cocktail Finder**), customize a kit, and check out with
+pickup or delivery. There is **no customer login** — an anonymous session token
+is created by the backend and stored on-device. Prices are in EGP.
 
-## Getting Started
+The app is a thin client over the `/api/customer/*` endpoints of the
+`ebtl-admin-dashboard` backend (hosted on Render). See
+[`AGENTS.md`](AGENTS.md) for architecture, conventions, and contributor
+guidance.
 
-This project is a starting point for a Flutter application.
+## Requirements
 
-A few resources to get you started if this is your first Flutter project:
+- Flutter (stable channel), Dart SDK `^3.12.0`
+- Android SDK / Xcode for device builds (the product targets Android + iOS)
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Commands
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Run from this directory (`customer-app/`):
+
+```bash
+flutter pub get      # install dependencies
+flutter analyze      # static analysis — must pass cleanly
+flutter test         # widget/unit tests
+flutter run          # launch on a connected device/emulator
+flutter build apk    # release Android build
+```
+
+## Build-time configuration
+
+These integrations are inert unless configured, so the app builds and runs
+without any of them:
+
+| Flag / file | Purpose | Default |
+| --- | --- | --- |
+| `--dart-define=API_BASE_URL=...` | Point at a different backend (e.g. staging) | Production Render URL |
+| `--dart-define=CLARITY_PROJECT_ID=...` | Microsoft Clarity session replay (release builds only); empty disables it | EBTL project |
+| `google-services.json` / `GoogleService-Info.plist` | Enables Firebase push + Crashlytics | Push/crash reporting disabled |
+
+Payments use Stripe's native Payment Sheet; the backend delivers the
+per-checkout Stripe keys. See the root [`STRIPE_SETUP.md`](../STRIPE_SETUP.md).
+
+## Notes for release
+
+- The Android release build is still signed with the **debug keystore**
+  (`android/app/build.gradle.kts`) — set up a real upload key before shipping
+  to Play.
+- iOS push is not yet wired (no APNs entitlement / `remote-notification`
+  background mode).
+- Microsoft Clarity session replay ships **on by default** in release builds;
+  disclose it in the store privacy labels and verify PII masking against a real
+  recording.

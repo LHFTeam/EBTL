@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/ebtl_colors.dart';
 import '../../models/profile_models.dart';
 import '../../services/api_service.dart';
+import '../../core/network/api_exception.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import 'order_detail_screen.dart';
 import 'widgets/profile_widgets.dart';
@@ -61,7 +62,7 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                 else if (snapshot.hasError)
                   SliverToBoxAdapter(
                     child: InlineErrorCard(
-                      message: snapshot.error.toString(),
+                      message: apiErrorMessage(snapshot.error!),
                       onRetry: reload,
                     ),
                   )

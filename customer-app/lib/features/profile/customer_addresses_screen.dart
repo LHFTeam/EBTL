@@ -181,7 +181,7 @@ class _CustomerAddressesScreenState extends State<CustomerAddressesScreen> {
 
         if (snapshot.hasError && items.isEmpty) {
           return InlineErrorCard(
-            message: snapshot.error.toString(),
+            message: apiErrorMessage(snapshot.error!),
             onRetry: reload,
           );
         }

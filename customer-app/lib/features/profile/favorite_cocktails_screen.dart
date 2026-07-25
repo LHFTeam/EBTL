@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/ebtl_colors.dart';
 import '../../models/favorite_models.dart';
 import '../../services/api_service.dart';
+import '../../core/network/api_exception.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import '../../shared/widgets/detail_card.dart';
 import '../../shared/widgets/network_or_asset_image.dart';
@@ -121,7 +122,7 @@ class _FavoriteCocktailsScreenState extends State<FavoriteCocktailsScreen> {
                 else if (snapshot.hasError && items.isEmpty)
                   SliverToBoxAdapter(
                     child: InlineErrorCard(
-                      message: snapshot.error.toString(),
+                      message: apiErrorMessage(snapshot.error!),
                       onRetry: reload,
                     ),
                   )

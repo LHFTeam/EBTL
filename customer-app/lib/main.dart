@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'shared/widgets/app_state_widgets.dart';
 
+import 'core/network/api_exception.dart';
 import 'core/theme/ebtl_colors.dart';
 
 /* -------------------------------- MODELS -------------------------------- */
@@ -30,10 +31,14 @@ import 'shared/widgets/ebtl_bottom_nav.dart';
 /* --------------------------------- SERVICES --------------------------------- */
 import 'services/api_service.dart';
 import 'services/clarity_service.dart';
+import 'services/crash_reporting_service.dart';
 import 'services/push_notification_service.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Install global crash/error handlers before the first frame so startup
+  // failures are captured too. No-op when Firebase is not configured.
+  await CrashReportingService.initialize();
   runApp(ClarityService.wrap(const EbtlApp()));
 }
 
@@ -324,7 +329,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
 
         if (snapshot.hasError) {
           return AppErrorScreen(
-            message: snapshot.error.toString(),
+            message: apiErrorMessage(snapshot.error!),
             onRetry: reloadAppData,
           );
         }

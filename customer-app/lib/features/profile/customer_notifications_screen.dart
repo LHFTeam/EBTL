@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/ebtl_colors.dart';
 import '../../models/notification_models.dart';
 import '../../services/api_service.dart';
+import '../../core/network/api_exception.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import '../../shared/widgets/detail_card.dart';
 import 'widgets/profile_widgets.dart';
@@ -113,7 +114,7 @@ class _CustomerNotificationsScreenState
                   else if (snapshot.hasError)
                     SliverToBoxAdapter(
                       child: InlineErrorCard(
-                        message: snapshot.error.toString(),
+                        message: apiErrorMessage(snapshot.error!),
                         onRetry: reload,
                       ),
                     )

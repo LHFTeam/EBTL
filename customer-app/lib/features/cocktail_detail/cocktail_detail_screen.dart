@@ -273,7 +273,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
 
           if (snapshot.hasError) {
             return CocktailDetailErrorState(
-              message: snapshot.error.toString(),
+              message: apiErrorMessage(snapshot.error!),
               onRetry: reloadDetail,
             );
           }

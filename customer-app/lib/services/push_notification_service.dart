@@ -1,8 +1,8 @@
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
 import 'api_service.dart';
+import 'firebase_bootstrap.dart';
 
 /// Background/terminated message handler. The OS renders notification messages
 /// itself; this exists so FCM has a registered background entry point.
@@ -24,7 +24,8 @@ class PushNotificationService {
     if (_initialized) return;
 
     try {
-      await Firebase.initializeApp();
+      final ready = await FirebaseBootstrap.ensureInitialized();
+      if (!ready) return;
 
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/ebtl_colors.dart';
 import '../../models/profile_models.dart';
 import '../../services/api_service.dart';
+import '../../core/network/api_exception.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import 'customer_addresses_screen.dart';
 import 'customer_orders_screen.dart';
@@ -128,7 +129,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SliverToBoxAdapter(child: ProfileHeaderSkeleton()),
                 SliverToBoxAdapter(
                   child: InlineErrorCard(
-                    message: snapshot.error.toString(),
+                    message: apiErrorMessage(snapshot.error!),
                     onRetry: reloadProfile,
                   ),
                 ),

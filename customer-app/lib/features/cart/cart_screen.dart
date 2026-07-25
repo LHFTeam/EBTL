@@ -195,7 +195,7 @@ class _CartScreenState extends State<CartScreen> {
                 ),
                 SliverToBoxAdapter(
                   child: InlineErrorCard(
-                    message: snapshot.error.toString(),
+                    message: apiErrorMessage(snapshot.error!),
                     onRetry: () => reloadCart(),
                   ),
                 ),

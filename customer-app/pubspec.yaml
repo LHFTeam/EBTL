@@ -87,6 +87,9 @@ dependencies:
   # time (see lib/services/push_notification_service.dart + android Gradle).
   firebase_core: ^4.12.1
   firebase_messaging: ^16.4.3
+  # Crash + uncaught-error reporting. Inert unless Firebase config is present at
+  # build time (see lib/services/crash_reporting_service.dart).
+  firebase_crashlytics: ^5.0.4
 
 dev_dependencies:
   flutter_test:
