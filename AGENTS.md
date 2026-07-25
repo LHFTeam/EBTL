@@ -104,3 +104,18 @@ more specific and takes precedence over this overview.
 When in doubt about which app a task belongs to: **anything the customer
 touches on their phone is `customer-app` UI, but the data behind it — and any
 API/contract change — is `admin-dashboard`.**
+
+
+## Codex Cloud Git workflow
+
+When running a code-changing task in Codex Cloud:
+
+- The task must be started with `main` selected as its starting branch.
+- Before the first file edit, create and switch to a unique branch named
+  `codex/<short-task-slug>` from the currently checked-out `main` commit.
+- Never commit directly to `main`.
+- After validation, commit all intended changes with a descriptive commit message.
+- Push the branch to `origin` and configure upstream tracking.
+- Do not create or open a pull request unless the user explicitly asks for one.
+- If branch creation, commit, or push fails, preserve the task diff, report the
+  failure, and do not open a pull request as a fallback.
