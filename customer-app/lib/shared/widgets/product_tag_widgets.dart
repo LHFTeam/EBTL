@@ -61,7 +61,7 @@ class ProductTagFilterChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: selected ? color : color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(999),
@@ -73,20 +73,20 @@ class ProductTagFilterChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (selected) ...[
-              const Icon(Icons.check, color: Colors.white, size: 15),
-              const SizedBox(width: 5),
+              const Icon(Icons.check, color: Colors.white, size: 13),
+              const SizedBox(width: 4),
             ] else ...[
               Container(
-                width: 8,
-                height: 8,
+                width: 7,
+                height: 7,
                 decoration: BoxDecoration(color: color, shape: BoxShape.circle),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 5),
             ],
             Text(
               tag.name,
               style: GoogleFonts.manrope(
-                fontSize: 12,
+                fontSize: 10,
                 fontWeight: FontWeight.w900,
                 color: selected ? Colors.white : EbtlColors.navy,
               ),
@@ -115,19 +115,23 @@ class ProductTagSelectedChip extends StatelessWidget {
     return Chip(
       backgroundColor: color.withValues(alpha: 0.12),
       side: BorderSide(color: color.withValues(alpha: 0.42)),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      labelPadding: const EdgeInsets.symmetric(horizontal: 3),
       avatar: Container(
-        width: 10,
-        height: 10,
+        width: 8,
+        height: 8,
         decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       ),
       label: Text(
         tag.name,
         style: GoogleFonts.manrope(
+          fontSize: 12,
           fontWeight: FontWeight.w900,
           color: EbtlColors.navy,
         ),
       ),
-      deleteIcon: const Icon(Icons.close, size: 16),
+      deleteIcon: const Icon(Icons.close, size: 14),
       onDeleted: onDeleted,
     );
   }

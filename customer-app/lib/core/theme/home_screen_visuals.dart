@@ -24,10 +24,10 @@ class HomeScreenVisuals {
     8,
   );
 
-  static const double featuredProductCardNameFontSize = 12;
+  static const double featuredProductCardNameFontSize = 10;
   static const double featuredProductCardNameLineHeight = 1.12;
 
-  static const double featuredProductCardShortDescriptionFontSize = 10;
+  static const double featuredProductCardShortDescriptionFontSize = 8;
   static const double featuredProductCardShortDescriptionLineHeight = 1.1;
 
   // Home Liquor Bottle Cards

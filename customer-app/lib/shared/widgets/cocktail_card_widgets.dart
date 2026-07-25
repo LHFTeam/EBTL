@@ -69,9 +69,9 @@ class CocktailCardShell extends StatelessWidget {
     this.showPrice = true,
     this.imageHeight,
     this.textPadding = const EdgeInsets.fromLTRB(12, 10, 10, 9),
-    this.nameFontSize = 15,
+    this.nameFontSize = 13,
     this.nameLineHeight = 1.15,
-    this.shortDescriptionFontSize = 12,
+    this.shortDescriptionFontSize = 10,
     this.shortDescriptionLineHeight = 1.35,
   });
 

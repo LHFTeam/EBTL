@@ -135,7 +135,7 @@ class _SectionLabel extends StatelessWidget {
         Text(
           title,
           style: GoogleFonts.playfairDisplay(
-            fontSize: 22,
+            fontSize: 20,
             height: 1,
             fontWeight: FontWeight.w800,
             color: EbtlColors.navy,

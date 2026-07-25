@@ -332,7 +332,7 @@ class ProfileSectionHeader extends StatelessWidget {
             child: Text(
               title,
               style: GoogleFonts.playfairDisplay(
-                fontSize: 24,
+                fontSize: 22,
                 height: 1,
                 fontWeight: FontWeight.w800,
                 color: EbtlColors.navy,

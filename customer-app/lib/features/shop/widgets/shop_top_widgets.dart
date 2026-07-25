@@ -231,7 +231,7 @@ class ShopCategoryRail extends StatelessWidget {
     }
 
     return SizedBox(
-      height: 70,
+      height: 64,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(22, 8, 22, 10),
         scrollDirection: Axis.horizontal,
@@ -275,8 +275,8 @@ class ShopCategoryPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          height: 52,
-          padding: const EdgeInsets.fromLTRB(8, 7, 16, 7),
+          height: 46,
+          padding: const EdgeInsets.fromLTRB(7, 7, 14, 7),
           decoration: BoxDecoration(
             color: selected
                 ? EbtlColors.blush.withValues(alpha: 0.55)
@@ -299,8 +299,8 @@ class ShopCategoryPill extends StatelessWidget {
             children: [
               ClipOval(
                 child: SizedBox(
-                  width: 38,
-                  height: 38,
+                  width: 32,
+                  height: 32,
                   child: Image.asset(
                     assetPath,
                     fit: BoxFit.cover,
@@ -310,20 +310,20 @@ class ShopCategoryPill extends StatelessWidget {
                         child: Icon(
                           Icons.shopping_bag_outlined,
                           color: selected ? EbtlColors.coral : EbtlColors.navy,
-                          size: 20,
+                          size: 18,
                         ),
                       );
                     },
                   ),
                 ),
               ),
-              const SizedBox(width: 9),
+              const SizedBox(width: 7),
               Text(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.manrope(
-                  fontSize: 13,
+                  fontSize: 11,
                   fontWeight: FontWeight.w900,
                   color: selected ? EbtlColors.coral : EbtlColors.navy,
                 ),

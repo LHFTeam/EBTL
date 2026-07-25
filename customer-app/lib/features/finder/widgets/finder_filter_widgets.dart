@@ -63,7 +63,7 @@ class FinderResultsHeader extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           SizedBox(
-            height: 42,
+            height: 38,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: options.length,
@@ -74,7 +74,7 @@ class FinderResultsHeader extends StatelessWidget {
                 return GestureDetector(
                   onTap: () => onSortChanged(index),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
                       color: active ? EbtlColors.coral : EbtlColors.white,
                       borderRadius: BorderRadius.circular(999),
@@ -90,14 +90,14 @@ class FinderResultsHeader extends StatelessWidget {
                           style: GoogleFonts.manrope(
                             color: active ? Colors.white : EbtlColors.ink,
                             fontWeight: FontWeight.w800,
-                            fontSize: 13,
+                            fontSize: 11,
                           ),
                         ),
                         if (active) ...[
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           const Icon(
                             Icons.check_circle,
-                            size: 18,
+                            size: 16,
                             color: Colors.white,
                           ),
                         ],
@@ -158,7 +158,7 @@ class ProductTagFilterSection extends StatelessWidget {
                   child: Text(
                     'Filter by Style',
                     style: GoogleFonts.manrope(
-                      fontSize: 15,
+                      fontSize: 13,
                       fontWeight: FontWeight.w900,
                       color: EbtlColors.navy,
                     ),
@@ -179,8 +179,8 @@ class ProductTagFilterSection extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Wrap(
-              spacing: 9,
-              runSpacing: 9,
+              spacing: 7,
+              runSpacing: 7,
               children: tags.map((tag) {
                 final selected = selectedTagNames.contains(tag.name);
                 return ProductTagFilterChip(
@@ -247,12 +247,18 @@ class SelectedChips extends StatelessWidget {
             (liquor) => Chip(
               backgroundColor: EbtlColors.white,
               side: const BorderSide(color: EbtlColors.border),
-              avatar: BottleImage(liquor: liquor, size: 24),
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 3),
+              avatar: BottleImage(liquor: liquor, size: 20),
               label: Text(
                 liquor.name,
-                style: GoogleFonts.manrope(fontWeight: FontWeight.w800),
+                style: GoogleFonts.manrope(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-              deleteIcon: const Icon(Icons.close, size: 16),
+              deleteIcon: const Icon(Icons.close, size: 14),
               onDeleted: () => onRemoveLiquor(liquor.id),
             ),
           ),
