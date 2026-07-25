@@ -1479,6 +1479,22 @@ class CheckoutSummaryCard extends StatelessWidget {
                     valueColor: EbtlColors.teal,
                   ),
                 ],
+                if (summary.hasReferralDiscount) ...[
+                  const SizedBox(height: 8),
+                  CheckoutSummaryLine(
+                    label: 'Referral discount',
+                    value: summary.referralDiscountLabel,
+                    valueColor: EbtlColors.teal,
+                  ),
+                ],
+                if (summary.hasCreditApplied) ...[
+                  const SizedBox(height: 8),
+                  CheckoutSummaryLine(
+                    label: 'Store credit',
+                    value: summary.creditAppliedLabel,
+                    valueColor: EbtlColors.teal,
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Divider(color: EbtlColors.border.withValues(alpha: 0.9)),
                 const SizedBox(height: 10),

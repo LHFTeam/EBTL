@@ -27,6 +27,15 @@ import {
 } from '../lib/stripe.js';
 import { supabase } from '../lib/supabase.js';
 import { publicNotification, registerCustomerPushToken } from '../lib/notifications.js';
+import {
+  ensureReferralCode,
+  attributeReferral,
+  resolveReferralDiscount,
+  getCreditBalance,
+  grantReferralRewardIfNeeded,
+  redeemCreditForOrder,
+  buildReferralHub
+} from '../lib/referrals.js';
 
 export const customerRouter = Router();
 
@@ -1699,11 +1708,11 @@ function profileQuickLinks({ addressCount = 0, favoriteCount = 0, unreadNotifica
     },
     {
       key: 'promo_codes',
-      title: 'Promo Codes',
-      subtitle: 'View available offers',
-      endpoint: null,
-      enabled: false,
-      placeholder: true
+      title: 'Refer & Earn',
+      subtitle: 'Invite friends, earn store credit',
+      endpoint: '/api/customer/referrals',
+      enabled: true,
+      placeholder: false
     },
     {
       key: 'notifications',
@@ -2821,6 +2830,27 @@ async function recordPromotionRedemptionIfNeeded({ order, payment }) {
   return inserted.data;
 }
 
+// Runs the referral + store-credit side effects for a paid order: grants the
+// referrer their reward if this order qualifies, and records any store credit
+// the customer spent. Both are idempotent, so this is safe to call from every
+// payment-success path. Failures are logged but never bubble up — they must not
+// block order confirmation.
+async function settleReferralAndCreditForOrder(order) {
+  if (!order?.id) return;
+
+  try {
+    await grantReferralRewardIfNeeded({ order });
+  } catch (error) {
+    console.error('grantReferralRewardIfNeeded failed', { orderId: order.id, error });
+  }
+
+  try {
+    await redeemCreditForOrder({ order, creditApplied: order.credit_applied });
+  } catch (error) {
+    console.error('redeemCreditForOrder failed', { orderId: order.id, error });
+  }
+}
+
 async function recordGeideaSavedCardIfNeeded({ customerId, payload }) {
   const savedCard = extractGeideaSavedCard(payload);
   if (!customerId || !savedCard?.token_id) return null;
@@ -2952,6 +2982,7 @@ function checkoutPaymentMethods() {
 
 async function buildCheckoutQuote({
   customerId,
+  customer = null,
   cartId,
   locationId,
   fulfillmentType,
@@ -3126,7 +3157,42 @@ async function buildCheckoutQuote({
   if (promotionResult.badRequest) return { badRequest: promotionResult.badRequest };
 
   const discountAmount = money(promotionResult.data?.discountAmount || 0);
-  const totalAmount = money(Math.max(subtotalIncVat + deliveryFee - discountAmount, 0));
+
+  // Referral discount (referee's first-order reward). Mutually exclusive with a
+  // promo-code discount — a customer applies one incentive per order.
+  let referralDiscountAmount = 0;
+  let referralId = null;
+  let referralInfo = null;
+
+  if (discountAmount <= 0 && customer) {
+    const referralDiscount = await resolveReferralDiscount({ customer, subtotalIncVat });
+    if (referralDiscount.error) return { error: referralDiscount.error };
+    if (referralDiscount.data) {
+      referralDiscountAmount = money(referralDiscount.data.discount_amount);
+      referralId = referralDiscount.data.referral_id;
+      referralInfo = {
+        referral_id: referralDiscount.data.referral_id,
+        label: referralDiscount.data.label,
+        description: referralDiscount.data.description,
+        discount_amount: referralDiscountAmount,
+        currency: CURRENCY
+      };
+    }
+  }
+
+  // Store credit — applied to whatever is still due after discounts.
+  const dueBeforeCredit = money(Math.max(subtotalIncVat + deliveryFee - discountAmount - referralDiscountAmount, 0));
+  let creditBalance = 0;
+  let creditApplied = 0;
+
+  if (customer) {
+    const balanceResult = await getCreditBalance(customer.id);
+    if (balanceResult.error) return { error: balanceResult.error };
+    creditBalance = money(balanceResult.data);
+    creditApplied = money(Math.max(Math.min(creditBalance, dueBeforeCredit), 0));
+  }
+
+  const totalAmount = money(Math.max(dueBeforeCredit - creditApplied, 0));
 
   return {
     data: {
@@ -3140,12 +3206,21 @@ async function buildCheckoutQuote({
         promo_code: normalizePromoCode(promoCode) || null,
         promotion: promotionResult.data?.promotion || null,
         raw_promotion: promotionResult.data?.rawPromotion || null,
+        referral_id: referralId,
+        referral: referralInfo,
+        credit: {
+          balance: creditBalance,
+          applied: creditApplied,
+          currency: CURRENCY
+        },
         items: quoteItems,
         totals: {
           subtotal_ex_vat: subtotalExVat,
           vat_amount: vatAmount,
           subtotal_inc_vat: subtotalIncVat,
           discount_amount: discountAmount,
+          referral_discount_amount: referralDiscountAmount,
+          credit_applied: creditApplied,
           delivery_fee: deliveryFee,
           total_amount: totalAmount,
           currency: CURRENCY,
@@ -3676,6 +3751,9 @@ customerRouter.get('/customer/profile', async (req, res) => {
   const favoriteCount = Number(favoritesCount.count || 0);
   const unreadNotifications = Number(unreadNotificationsCount.count || 0);
 
+  const creditBalanceResult = await getCreditBalance(ensured.customer.id);
+  const creditBalance = creditBalanceResult.error ? 0 : creditBalanceResult.data;
+
   res.json({
     session: sessionPayload(ensured.customer.id, ensured.token),
     customer: customerProfilePayload(ensured.customer),
@@ -3700,9 +3778,17 @@ customerRouter.get('/customer/profile', async (req, res) => {
       endpoint: '/api/customer/favorites'
     },
     promo_codes: {
-      enabled: false,
+      enabled: true,
       navigation_only: true,
-      placeholder: true
+      placeholder: false,
+      endpoint: '/api/customer/referrals'
+    },
+    referral: {
+      enabled: true,
+      endpoint: '/api/customer/referrals',
+      apply_endpoint: '/api/customer/referrals/apply',
+      credit_balance: creditBalance,
+      currency: CURRENCY
     },
     notifications: {
       enabled: true,
@@ -3719,6 +3805,47 @@ customerRouter.get('/customer/profile', async (req, res) => {
 });
 
 customerRouter.patch('/customer/profile', handleCustomerProfileUpdate);
+
+customerRouter.get('/customer/referrals', async (req, res) => {
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const hub = await buildReferralHub(ensured.customer);
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    referral: hub
+  });
+});
+
+customerRouter.post('/customer/referrals/apply', async (req, res) => {
+  const parsed = z.object({
+    code: z.string().trim().min(1).max(40)
+  }).safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Enter a referral code.' });
+  }
+
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const result = await attributeReferral({
+    referee: ensured.customer,
+    code: parsed.data.code
+  });
+
+  if (result.badRequest) return res.status(400).json({ error: result.badRequest });
+  if (result.error) return res.status(400).json({ error: result.error.message });
+
+  const hub = await buildReferralHub(ensured.customer);
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    applied: true,
+    referral: hub
+  });
+});
 
 customerRouter.get('/customer/orders', async (req, res) => {
   const parsed = z.object({
@@ -4728,6 +4855,7 @@ customerRouter.post('/customer/checkout/quote', async (req, res) => {
 
   const quote = await buildCheckoutQuote({
     customerId: ensured.customer.id,
+    customer: ensured.customer,
     cartId: parsed.data.cart_id,
     locationId: parsed.data.location_id,
     fulfillmentType: parsed.data.fulfillment_type,
@@ -4856,6 +4984,7 @@ async function handleCustomerPlaceOrder(req, res) {
 
   const quote = await buildCheckoutQuote({
     customerId: ensured.customer.id,
+    customer: ensured.customer,
     cartId: parsed.data.cart_id,
     locationId: parsed.data.location_id,
     fulfillmentType: parsed.data.fulfillment_type,
@@ -4935,6 +5064,8 @@ async function handleCustomerPlaceOrder(req, res) {
       subtotal_ex_vat: quote.data.quote.totals.subtotal_ex_vat,
       vat_amount: quote.data.quote.totals.vat_amount,
       discount_amount: quote.data.quote.totals.discount_amount,
+      referral_id: quote.data.quote.referral_id || null,
+      credit_applied: quote.data.quote.totals.credit_applied || 0,
       delivery_fee: quote.data.quote.totals.delivery_fee,
       total_amount: quote.data.quote.totals.total_amount,
       customer_notes: parsed.data.customer_notes || null
@@ -5097,6 +5228,8 @@ async function handleCustomerPlaceOrder(req, res) {
         payment: payment.data
       });
     }
+
+    await settleReferralAndCreditForOrder(confirmedOrder.data);
 
     await supabase
       .from('cart_items')
@@ -5623,7 +5756,9 @@ customerRouter.post('/payments/geidea/callback', async (req, res) => {
       order: updatedOrder.data,
       payment: updatedPayment.data
     });
-  
+
+    await settleReferralAndCreditForOrder(updatedOrder.data);
+
     if (payment.data.raw_payload?.save_card) {
       const savedCard = await recordGeideaSavedCardIfNeeded({
         customerId: payment.data.orders.customer_id,
@@ -5756,6 +5891,8 @@ customerRouter.post('/payments/stripe/webhook', async (req, res) => {
       order: updatedOrder.data,
       payment: updatedPayment.data
     });
+
+    await settleReferralAndCreditForOrder(updatedOrder.data);
 
     if (payment.data.raw_payload?.save_card) {
       const savedCard = await recordStripeSavedCardIfNeeded({

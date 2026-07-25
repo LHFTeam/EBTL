@@ -45,8 +45,8 @@ if (isProd && SESSION_SECRET === 'dev-only-change-me') {
 
 export const roleAccess = {
   admin: ['*'],
-  manager: ['dashboard', 'analytics', 'orders', 'inventory', 'transfers', 'ingredients', 'cocktails', 'additional-products', 'liquors', 'shop', 'promotions', 'locations', 'employees'],
-  supervisor: ['dashboard', 'orders', 'inventory', 'transfers', 'ingredients', 'cocktails', 'additional-products', 'liquors', 'shop', 'promotions', 'locations'],
+  manager: ['dashboard', 'analytics', 'orders', 'inventory', 'transfers', 'ingredients', 'cocktails', 'additional-products', 'liquors', 'shop', 'promotions', 'referrals', 'locations', 'employees'],
+  supervisor: ['dashboard', 'orders', 'inventory', 'transfers', 'ingredients', 'cocktails', 'additional-products', 'liquors', 'shop', 'promotions', 'referrals', 'locations'],
   warehouse: ['dashboard', 'inventory', 'transfers', 'ingredients', 'locations'],
   cart_operator: ['dashboard', 'orders', 'inventory', 'transfers'],
   prep: ['orders']

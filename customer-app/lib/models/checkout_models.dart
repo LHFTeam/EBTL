@@ -307,6 +307,8 @@ class CheckoutSummary {
   final double vatAmount;
   final double subtotalIncVat;
   final double discountAmount;
+  final double referralDiscountAmount;
+  final double creditApplied;
   final double deliveryFee;
   final double totalAmount;
   final String currency;
@@ -317,6 +319,8 @@ class CheckoutSummary {
     required this.vatAmount,
     required this.subtotalIncVat,
     required this.discountAmount,
+    required this.referralDiscountAmount,
+    required this.creditApplied,
     required this.deliveryFee,
     required this.totalAmount,
     required this.currency,
@@ -329,6 +333,8 @@ class CheckoutSummary {
       vatAmount: readDouble(json['vat_amount']) ?? 0,
       subtotalIncVat: readDouble(json['subtotal_inc_vat']) ?? 0,
       discountAmount: readDouble(json['discount_amount']) ?? 0,
+      referralDiscountAmount: readDouble(json['referral_discount_amount']) ?? 0,
+      creditApplied: readDouble(json['credit_applied']) ?? 0,
       deliveryFee: readDouble(json['delivery_fee']) ?? 0,
       totalAmount: readDouble(json['total_amount']) ?? 0,
       currency: readString(json['currency'], fallback: 'EGP'),
@@ -336,8 +342,14 @@ class CheckoutSummary {
     );
   }
 
+  bool get hasReferralDiscount => referralDiscountAmount > 0;
+  bool get hasCreditApplied => creditApplied > 0;
+
   String get subtotalLabel => formatMoney(subtotalIncVat, currency);
   String get discountLabel => '- ${formatMoney(discountAmount, currency)}';
+  String get referralDiscountLabel =>
+      '- ${formatMoney(referralDiscountAmount, currency)}';
+  String get creditAppliedLabel => '- ${formatMoney(creditApplied, currency)}';
   String get deliveryFeeLabel => formatMoney(deliveryFee, currency);
   String get totalLabel => formatMoney(totalAmount, currency);
 }
