@@ -1831,11 +1831,14 @@ class OrderConfirmedScreen extends StatelessWidget {
                       children: [
                         const _OrderConfirmationLogo(),
                         SizedBox(height: compactHeight ? 18 : 34),
-                        Image.asset(
-                          OrderConfirmationAssets.headerGraphic,
-                          height: compactHeight ? 160 : 218,
-                          fit: BoxFit.contain,
-                          filterQuality: FilterQuality.high,
+                        OverflowBox(
+                          maxWidth: constraints.maxWidth,
+                          child: Image.asset(
+                            OrderConfirmationAssets.headerGraphic,
+                            width: constraints.maxWidth,
+                            fit: BoxFit.fitWidth,
+                            filterQuality: FilterQuality.high,
+                          ),
                         ),
                         SizedBox(height: compactHeight ? 8 : 18),
                         Text(
@@ -2070,13 +2073,7 @@ class _OrderConfirmationSummaryCard extends StatelessWidget {
           iconColor: EbtlColors.coral,
           iconBackground: EbtlColors.blush.withValues(alpha: 0.22),
           label: 'Total Paid',
-          value: totalPaidLabel!,
-          valueStyle: GoogleFonts.manrope(
-            fontSize: 29,
-            height: 1,
-            fontWeight: FontWeight.w900,
-            color: EbtlColors.coral,
-          ),
+          trailing: _TotalPaidValue(value: totalPaidLabel!),
         ),
       ],
       const _OrderConfirmationDivider(),
@@ -2181,6 +2178,67 @@ class _OrderConfirmationInfoRow extends StatelessWidget {
     return ConstrainedBox(
       constraints: BoxConstraints(minHeight: minHeight),
       child: Center(child: child),
+    );
+  }
+}
+
+class _TotalPaidValue extends StatelessWidget {
+  final String value;
+
+  const _TotalPaidValue({required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final style = GoogleFonts.manrope(
+      fontSize: 17,
+      height: 1.15,
+      fontWeight: FontWeight.w800,
+      color: EbtlColors.coral,
+    );
+    final separatorIndex = value.indexOf(' ');
+
+    return Flexible(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final textPainter = TextPainter(
+            text: TextSpan(text: value, style: style),
+            maxLines: 1,
+            textDirection: TextDirection.ltr,
+          )..layout(maxWidth: constraints.maxWidth);
+
+          if (!textPainter.didExceedMaxLines) {
+            return Text(
+              value,
+              maxLines: 1,
+              textAlign: TextAlign.right,
+              style: style,
+            );
+          }
+
+          if (separatorIndex < 0) {
+            return FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(value, maxLines: 1, style: style),
+            );
+          }
+
+          final currency = value.substring(0, separatorIndex);
+          final amount = value.substring(separatorIndex + 1).trimLeft();
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(currency, maxLines: 1, style: style),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(amount, maxLines: 1, style: style),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

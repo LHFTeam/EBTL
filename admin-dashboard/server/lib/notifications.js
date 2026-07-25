@@ -249,10 +249,12 @@ export async function notifyOrderReadyForPickup({ order, previousStatus = null }
     customerId: order.customer_id,
     orderId: order.id,
     type: 'order_ready_for_pickup',
-    title: 'Your order is ready',
+    title: isDelivery
+      ? 'Your order is ready'
+      : `Your order #${String(orderNumber).replace(/^#/, '')} is ready for pickup!`,
     body: isDelivery
       ? `${orderNumber} is ready and will be sent to your unit.`
-      : `${orderNumber} is ready for pickup from the EBTL cart.`,
+      : 'Please head to your EBTL cart to pick up your order before the ice melts!',
     dedupeKey: `order:${order.id}:ready_for_pickup`,
     data: {
       order_id: order.id,
