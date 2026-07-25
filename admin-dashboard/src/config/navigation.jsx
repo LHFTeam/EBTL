@@ -7,6 +7,7 @@ import {
   MapPin,
   Martini,
   ShoppingBag,
+  Ticket,
   Truck,
   Users,
   Wine
@@ -48,6 +49,13 @@ export const navigationSections = [
       { key: 'additional-products', label: 'Additional Products', icon: ShoppingBag },
       { key: 'liquors', label: 'Liquors', icon: Wine },
       { key: 'shop', label: 'Shop', icon: ShoppingBag }
+    ]
+  },
+  {
+    key: 'marketing',
+    label: 'Marketing',
+    tabs: [
+      { key: 'promotions', label: 'Promo Codes', icon: Ticket }
     ]
   },
   {

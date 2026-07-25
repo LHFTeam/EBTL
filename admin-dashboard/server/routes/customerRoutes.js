@@ -2602,23 +2602,26 @@ function calculatePromotionDiscount(promotion, { subtotalIncVat, deliveryFee }) 
   if (!promotion) return 0;
 
   const discountValue = Number(promotion.discount_value || 0);
+  // Optional cap on the discount amount (most useful for percentage codes).
+  const maxDiscount = promotion.max_discount_amount == null ? null : Number(promotion.max_discount_amount);
+  const capped = (amount) => maxDiscount == null ? amount : Math.min(amount, maxDiscount);
 
   if (promotion.discount_type === 'percentage') {
-    return money(Math.min(subtotalIncVat, subtotalIncVat * (discountValue / 100)));
+    return money(Math.min(subtotalIncVat, capped(subtotalIncVat * (discountValue / 100))));
   }
 
   if (promotion.discount_type === 'fixed_amount') {
-    return money(Math.min(subtotalIncVat, discountValue));
+    return money(Math.min(subtotalIncVat, capped(discountValue)));
   }
 
   if (promotion.discount_type === 'free_delivery') {
-    return money(deliveryFee);
+    return money(capped(deliveryFee));
   }
 
   return 0;
 }
 
-async function resolvePromotion({ promoCode, customerId, subtotalIncVat, deliveryFee }) {
+async function resolvePromotion({ promoCode, customerId, subtotalIncVat, deliveryFee, fulfillmentType }) {
   const code = normalizePromoCode(promoCode);
   if (!code) return { data: { promotion: null, discountAmount: 0 } };
 
@@ -2641,6 +2644,11 @@ async function resolvePromotion({ promoCode, customerId, subtotalIncVat, deliver
     return { badRequest: `Promotion requires a minimum order value of EGP ${money(promotion.data.min_order_value)}.` };
   }
 
+  if (promotion.data.allowed_fulfillment_type && fulfillmentType && promotion.data.allowed_fulfillment_type !== fulfillmentType) {
+    const label = promotion.data.allowed_fulfillment_type === 'delivery_to_unit' ? 'delivery' : 'pickup';
+    return { badRequest: `Promotion code is only valid for ${label} orders.` };
+  }
+
   if (promotion.data.usage_limit) {
     const redemptions = await supabase
       .from('promotion_redemptions')
@@ -2651,6 +2659,37 @@ async function resolvePromotion({ promoCode, customerId, subtotalIncVat, deliver
 
     if (Number(redemptions.count || 0) >= Number(promotion.data.usage_limit)) {
       return { badRequest: 'Promotion code usage limit has been reached.' };
+    }
+  }
+
+  if (customerId && promotion.data.per_customer_limit) {
+    const customerRedemptions = await supabase
+      .from('promotion_redemptions')
+      .select('id', { count: 'exact', head: true })
+      .eq('promotion_id', promotion.data.id)
+      .eq('customer_id', customerId);
+
+    if (customerRedemptions.error) return { error: customerRedemptions.error };
+
+    if (Number(customerRedemptions.count || 0) >= Number(promotion.data.per_customer_limit)) {
+      return { badRequest: 'You have already used this promotion code the maximum number of times.' };
+    }
+  }
+
+  if (customerId && promotion.data.first_order_only) {
+    // "First order" = the customer has no prior genuinely-placed order. Ignore
+    // draft/pending_payment/cancelled rows so an abandoned checkout doesn't
+    // disqualify a real first purchase.
+    const priorOrders = await supabase
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('customer_id', customerId)
+      .in('status', ['confirmed', 'preparing', 'ready', 'out_for_delivery', 'completed', 'refunded']);
+
+    if (priorOrders.error) return { error: priorOrders.error };
+
+    if (Number(priorOrders.count || 0) > 0) {
+      return { badRequest: 'Promotion code is only valid on your first order.' };
     }
   }
 
@@ -3079,7 +3118,8 @@ async function buildCheckoutQuote({
     promoCode,
     customerId,
     subtotalIncVat,
-    deliveryFee
+    deliveryFee,
+    fulfillmentType
   });
 
   if (promotionResult.error) return { error: promotionResult.error };

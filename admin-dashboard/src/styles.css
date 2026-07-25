@@ -404,6 +404,26 @@ tr:last-child td {
   margin-right: 8px;
 }
 
+.fieldLabel > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.promoStats {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.promoStatsHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
 .checks {
   display: flex;
   flex-wrap: wrap;
