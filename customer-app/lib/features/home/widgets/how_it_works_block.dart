@@ -57,7 +57,7 @@ class HowItWorksAssetFallback extends StatelessWidget {
             'How it works',
             textAlign: TextAlign.center,
             style: GoogleFonts.playfairDisplay(
-              fontSize: 26,
+              fontSize: 24,
               fontWeight: FontWeight.w800,
               color: EbtlColors.navy,
             ),

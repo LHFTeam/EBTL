@@ -1579,14 +1579,14 @@ class CheckoutSummaryCard extends StatelessWidget {
                   children: [
                     const Icon(
                       Icons.verified_user_outlined,
-                      size: 18,
+                      size: 16,
                       color: EbtlColors.teal,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     Text(
                       'Secure checkout. Your details are safe with us.',
                       style: GoogleFonts.manrope(
-                        fontSize: 12,
+                        fontSize: 10,
                         fontWeight: FontWeight.w700,
                         color: EbtlColors.ink,
                       ),
@@ -1669,7 +1669,7 @@ class CheckoutSectionTitle extends StatelessWidget {
           Text(
             title,
             style: GoogleFonts.playfairDisplay(
-              fontSize: 21,
+              fontSize: 19,
               height: 1,
               fontWeight: FontWeight.w800,
               color: EbtlColors.navy,

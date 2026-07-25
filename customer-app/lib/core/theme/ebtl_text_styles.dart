@@ -5,7 +5,7 @@ import 'ebtl_colors.dart';
 
 TextStyle sectionTitleStyle() {
   return GoogleFonts.manrope(
-    fontSize: 20,
+    fontSize: 18,
     color: EbtlColors.navy,
     fontWeight: FontWeight.w900,
   );
@@ -13,7 +13,7 @@ TextStyle sectionTitleStyle() {
 
 TextStyle detailSectionTitleStyle() {
   return GoogleFonts.manrope(
-    fontSize: 18,
+    fontSize: 16,
     color: EbtlColors.navy,
     fontWeight: FontWeight.w900,
   );

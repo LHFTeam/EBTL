@@ -250,7 +250,7 @@ class FavoriteCocktailCard extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.manrope(
-                          fontSize: 15,
+                          fontSize: 13,
                           height: 1.15,
                           fontWeight: FontWeight.w900,
                           color: EbtlColors.navy,
@@ -265,7 +265,7 @@ class FavoriteCocktailCard extends StatelessWidget {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.manrope(
-                            fontSize: 12,
+                            fontSize: 10,
                             height: 1.25,
                             fontWeight: FontWeight.w600,
                             color: EbtlColors.ink,

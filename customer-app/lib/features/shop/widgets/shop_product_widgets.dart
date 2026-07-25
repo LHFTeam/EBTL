@@ -158,7 +158,7 @@ class ShopGridSectionHeader extends StatelessWidget {
       child: Text(
         title,
         style: GoogleFonts.playfairDisplay(
-          fontSize: 24,
+          fontSize: 22,
           fontWeight: FontWeight.w800,
           color: EbtlColors.navy,
         ),
@@ -270,7 +270,7 @@ class ShopSectionHeader extends StatelessWidget {
             child: Text(
               title,
               style: GoogleFonts.playfairDisplay(
-                fontSize: 24,
+                fontSize: 22,
                 fontWeight: FontWeight.w800,
                 color: EbtlColors.navy,
               ),
@@ -413,7 +413,7 @@ class ShopProductCardTile extends StatelessWidget {
                             maxLines: compact ? 3 : 2,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.manrope(
-                              fontSize: compact ? 11 : 13,
+                              fontSize: compact ? 9 : 11,
                               height: 1.15,
                               fontWeight: FontWeight.w900,
                               color: EbtlColors.navy,
@@ -425,7 +425,7 @@ class ShopProductCardTile extends StatelessWidget {
                             maxLines: effectiveSubtitleMaxLines,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.manrope(
-                              fontSize: compact ? 10 : 12,
+                              fontSize: compact ? 8 : 10,
                               height: 1.22,
                               fontWeight: FontWeight.w700,
                               color: EbtlColors.muted,

@@ -765,7 +765,7 @@ class CartItemCard extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.manrope(
-                              fontSize: 14,
+                              fontSize: 12,
                               height: 1.1,
                               fontWeight: FontWeight.w900,
                               color: EbtlColors.navy,
@@ -793,7 +793,7 @@ class CartItemCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.manrope(
-                          fontSize: 10.5,
+                          fontSize: 8.5,
                           height: 1.1,
                           fontWeight: FontWeight.w600,
                           color: EbtlColors.muted,
@@ -1082,7 +1082,7 @@ class CartOrderSummaryCard extends StatelessWidget {
             Text(
               'Order Summary',
               style: GoogleFonts.manrope(
-                fontSize: 18,
+                fontSize: 16,
                 fontWeight: FontWeight.w900,
                 color: Colors.white,
               ),

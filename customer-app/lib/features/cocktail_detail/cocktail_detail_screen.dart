@@ -800,7 +800,7 @@ class CocktailCustomizationSection extends StatelessWidget {
         Text(
           'Customize your cocktail',
           style: GoogleFonts.manrope(
-            fontSize: 28,
+            fontSize: 26,
             height: 1.08,
             fontWeight: FontWeight.w900,
             color: EbtlColors.navy,
@@ -828,7 +828,7 @@ class CocktailCustomizationSection extends StatelessWidget {
                       child: Text(
                         'Remove ingredients',
                         style: GoogleFonts.manrope(
-                          fontSize: 18,
+                          fontSize: 16,
                           fontWeight: FontWeight.w900,
                           color: EbtlColors.ink,
                         ),
@@ -889,7 +889,7 @@ class CocktailCustomizationSection extends StatelessWidget {
                     Text(
                       'Add extras',
                       style: GoogleFonts.manrope(
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.w900,
                         color: EbtlColors.ink,
                       ),
@@ -1493,7 +1493,7 @@ class RelatedCocktailCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.manrope(
-                            fontSize: 13,
+                            fontSize: 11,
                             fontWeight: FontWeight.w900,
                             color: EbtlColors.navy,
                           ),
@@ -1505,7 +1505,7 @@ class RelatedCocktailCard extends StatelessWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.manrope(
-                              fontSize: 11,
+                              fontSize: 9,
                               height: 1.28,
                               fontWeight: FontWeight.w600,
                               color: EbtlColors.ink,

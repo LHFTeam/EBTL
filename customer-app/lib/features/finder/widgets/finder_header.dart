@@ -86,7 +86,7 @@ class FinderHeader extends StatelessWidget {
                     Text(
                       'Choose Your Bottle',
                       style: GoogleFonts.manrope(
-                        fontSize: 20,
+                        fontSize: 18,
                         fontWeight: FontWeight.w900,
                         color: EbtlColors.navy,
                       ),
