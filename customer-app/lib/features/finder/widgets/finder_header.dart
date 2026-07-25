@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/ebtl_colors.dart';
+import '../../../core/utils/model_sorters.dart';
 import '../../../models/common_models.dart';
 import '../../../shared/widgets/bottle_widgets.dart';
 import '../../../shared/widgets/brand_widgets.dart';
@@ -23,6 +24,11 @@ class FinderHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final orderedLiquorTypes = sortLiquorTypesWithSelectedFirst(
+      liquorTypes,
+      selectedLiquorTypeIds,
+    );
+
     return Container(
       height: 455,
       decoration: const BoxDecoration(color: EbtlColors.cream),
@@ -109,10 +115,10 @@ class FinderHeader extends StatelessWidget {
                   height: 130,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    itemCount: liquorTypes.length,
+                    itemCount: orderedLiquorTypes.length,
                     separatorBuilder: (_, _) => const SizedBox(width: 8),
                     itemBuilder: (context, index) {
-                      final liquor = liquorTypes[index];
+                      final liquor = orderedLiquorTypes[index];
                       final selected = selectedLiquorTypeIds.contains(
                         liquor.id,
                       );
