@@ -26,3 +26,15 @@ List<ProductTag> sortProductTags(List<ProductTag> productTags) {
 List<LiquorType> sortLiquorTypes(List<LiquorType> liquorTypes) {
   return sortByOrderThenName(liquorTypes, (t) => t.displayOrder, (t) => t.name);
 }
+
+List<LiquorType> sortLiquorTypesWithSelectedFirst(
+  List<LiquorType> liquorTypes,
+  Set<String> selectedLiquorTypeIds,
+) {
+  final sorted = sortLiquorTypes(liquorTypes);
+
+  return [
+    ...sorted.where((type) => selectedLiquorTypeIds.contains(type.id)),
+    ...sorted.where((type) => !selectedLiquorTypeIds.contains(type.id)),
+  ];
+}
