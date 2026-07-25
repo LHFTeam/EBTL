@@ -3,6 +3,7 @@ import {
   Boxes,
   ClipboardList,
   FlaskConical,
+  Gift,
   LineChart,
   MapPin,
   Martini,
@@ -55,7 +56,8 @@ export const navigationSections = [
     key: 'marketing',
     label: 'Marketing',
     tabs: [
-      { key: 'promotions', label: 'Promo Codes', icon: Ticket }
+      { key: 'promotions', label: 'Promo Codes', icon: Ticket },
+      { key: 'referrals', label: 'Referrals', icon: Gift }
     ]
   },
   {

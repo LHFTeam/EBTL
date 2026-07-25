@@ -20,6 +20,7 @@ import '../models/favorite_models.dart';
 import '../models/notification_models.dart';
 import '../models/order_detail_models.dart';
 import '../models/profile_models.dart';
+import '../models/referral_models.dart';
 import '../models/shop_models.dart';
 
 class ApiService {
@@ -464,6 +465,31 @@ class ApiService {
     );
 
     return CustomerProfileResponse.fromJson(json);
+  }
+
+  static Future<ReferralHub> fetchReferralHub() async {
+    await ensureSession();
+
+    final json = await _request(
+      method: 'GET',
+      path: '/api/customer/referrals',
+      attachToken: true,
+    );
+
+    return ReferralHub.fromJson(asMap(json['referral']));
+  }
+
+  static Future<ReferralHub> applyReferralCode(String code) async {
+    await ensureSession();
+
+    final json = await _request(
+      method: 'POST',
+      path: '/api/customer/referrals/apply',
+      body: {'code': code.trim()},
+      attachToken: true,
+    );
+
+    return ReferralHub.fromJson(asMap(json['referral']));
   }
 
   static Future<CustomerProfileUpdateResponse> updateCustomerProfile({

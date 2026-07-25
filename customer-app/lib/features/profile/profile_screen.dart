@@ -10,6 +10,7 @@ import 'customer_orders_screen.dart';
 import 'favorite_cocktails_screen.dart';
 import 'order_detail_screen.dart';
 import 'profile_edit_sheet.dart';
+import 'referral_screen.dart';
 import 'widgets/profile_widgets.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -89,8 +90,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       case 'notifications':
         widget.onOpenNotifications();
         return;
-      case 'payment_methods':
       case 'promo_codes':
+      case 'referrals':
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const ReferralScreen(),
+          ),
+        );
+        return;
+      case 'payment_methods':
       default:
         showComingSoon(link.title);
         return;
