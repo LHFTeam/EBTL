@@ -149,6 +149,61 @@ class NotificationsIconButton extends StatelessWidget {
   }
 }
 
+/// A circular button surfacing the customer's active orders (paid but not yet
+/// completed), with a badge showing how many there are. Shown in the top bar
+/// next to [NotificationsIconButton] only while at least one order is active.
+class ActiveOrdersIconButton extends StatelessWidget {
+  final int count;
+  final VoidCallback onTap;
+
+  const ActiveOrdersIconButton({
+    super.key,
+    required this.count,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        CircleIconButton(
+          icon: Icons.receipt_long_outlined,
+          onTap: onTap,
+          iconColor: EbtlColors.navy,
+        ),
+        if (count > 0)
+          Positioned(
+            right: -2,
+            top: -4,
+            child: IgnorePointer(
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 20),
+                height: 20,
+                padding: const EdgeInsets.symmetric(horizontal: 5),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: EbtlColors.coral,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: EbtlColors.white, width: 1.5),
+                ),
+                child: Text(
+                  count > 9 ? '9+' : '$count',
+                  style: GoogleFonts.manrope(
+                    color: Colors.white,
+                    fontSize: 11,
+                    height: 1,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class StepBubble extends StatelessWidget {
   final int number;
 

@@ -39,6 +39,8 @@ class ShopScreen extends StatefulWidget {
   final ValueChanged<ShopProduct> onOpenProduct;
   final int unreadNotificationCount;
   final VoidCallback onOpenNotifications;
+  final int activeOrdersCount;
+  final VoidCallback onOpenActiveOrders;
 
   const ShopScreen({
     super.key,
@@ -48,6 +50,8 @@ class ShopScreen extends StatefulWidget {
     required this.onOpenProduct,
     required this.unreadNotificationCount,
     required this.onOpenNotifications,
+    required this.activeOrdersCount,
+    required this.onOpenActiveOrders,
   });
 
   @override
@@ -414,6 +418,8 @@ class _ShopScreenState extends State<ShopScreen> {
                   child: ShopHeader(
                     unreadNotificationCount: widget.unreadNotificationCount,
                     onOpenNotifications: widget.onOpenNotifications,
+                    activeOrdersCount: widget.activeOrdersCount,
+                    onOpenActiveOrders: widget.onOpenActiveOrders,
                   ),
                 ),
                 SliverToBoxAdapter(
@@ -437,6 +443,8 @@ class _ShopScreenState extends State<ShopScreen> {
                   child: ShopHeader(
                     unreadNotificationCount: widget.unreadNotificationCount,
                     onOpenNotifications: widget.onOpenNotifications,
+                    activeOrdersCount: widget.activeOrdersCount,
+                    onOpenActiveOrders: widget.onOpenActiveOrders,
                   ),
                 ),
                 SliverToBoxAdapter(
@@ -465,6 +473,8 @@ class _ShopScreenState extends State<ShopScreen> {
                   child: ShopHeader(
                     unreadNotificationCount: widget.unreadNotificationCount,
                     onOpenNotifications: widget.onOpenNotifications,
+                    activeOrdersCount: widget.activeOrdersCount,
+                    onOpenActiveOrders: widget.onOpenActiveOrders,
                   ),
                 ),
                 SliverToBoxAdapter(
