@@ -45,9 +45,11 @@ per-checkout Stripe keys. See the root [`STRIPE_SETUP.md`](../STRIPE_SETUP.md).
 
 ## Notes for release
 
-- The Android release build is still signed with the **debug keystore**
-  (`android/app/build.gradle.kts`) — set up a real upload key before shipping
-  to Play.
+- **Android release signing** is wired up but needs your keystore: create
+  `android/key.properties` from `android/key.properties.example` and point it
+  at your upload keystore (or set the `ANDROID_KEYSTORE_*` env vars in CI).
+  Without it, release builds fall back to the debug key — fine for
+  `flutter run --release`, but Play uploads require the real key.
 - iOS push is not yet wired (no APNs entitlement / `remote-notification`
   background mode).
 - Microsoft Clarity session replay ships **on by default** in release builds;
