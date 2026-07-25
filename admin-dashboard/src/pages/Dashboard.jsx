@@ -46,7 +46,7 @@ function numberValue(value) {
 export default function Dashboard() {
   const { data, loading, error, reload } = useLoad(() => api('/api/dashboard'));
 
-  if (loading || error) return <Loading error={error} />;
+  if (loading || error) return <Loading error={error} onRetry={reload} />;
 
   const kpis = data?.kpis || {};
   const recentOrders = data?.recentOrders || [];
@@ -86,9 +86,9 @@ export default function Dashboard() {
         </div>
 
         <div className="dashboardHeroPanel">
-          <span className="heroPanelLabel">Today’s pulse</span>
+          <span className="heroPanelLabel">Recent revenue</span>
           <strong>{money(kpis.recentRevenue)}</strong>
-          <p>Revenue from completed recent orders</p>
+          <p>Completed orders across the latest 200 orders</p>
 
           <button className="heroRefreshButton" onClick={reload}>
             <RefreshCw size={16} />
@@ -148,15 +148,7 @@ export default function Dashboard() {
       </div>
 
       <div className="dashboardTables">
-        <Section
-          title="Recent Orders"
-          action={
-            <button onClick={reload}>
-              <RefreshCw size={16} />
-              Refresh
-            </button>
-          }
-        >
+        <Section title="Recent Orders">
           <SimpleTable
             rows={recentOrders}
             columns={[

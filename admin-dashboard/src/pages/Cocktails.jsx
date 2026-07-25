@@ -258,6 +258,7 @@ export default function Cocktails({
   const [compatEdit, setCompatEdit] = useState([]);
   const [createImageFile, setCreateImageFile] = useState(null);
   const [selectedLiquorFilter, setSelectedLiquorFilter] = useState('all');
+  const [productSearch, setProductSearch] = useState('');
 
   const [editImageFile, setEditImageFile] = useState(null);
   const [msg, setMsg] = useState('');
@@ -291,9 +292,15 @@ export default function Cocktails({
   const productIds = useMemo(() => new Set(products.map((product) => product.id)), [products]);
 
   const cocktailRows = useMemo(() => {
-    if (!showLiquorControls || selectedLiquorFilter === 'all') return products;
-    return products.filter((product) => compatibleLiquorIdsByProduct.get(product.id)?.has(selectedLiquorFilter));
-  }, [products, compatibleLiquorIdsByProduct, selectedLiquorFilter, showLiquorControls]);
+    const searchText = productSearch.trim().toLowerCase();
+    return products.filter((product) => {
+      const matchesLiquor = !showLiquorControls || selectedLiquorFilter === 'all'
+        || compatibleLiquorIdsByProduct.get(product.id)?.has(selectedLiquorFilter);
+      const matchesSearch = !searchText || [product.name, product.short_description, product.slug]
+        .some((value) => String(value || '').toLowerCase().includes(searchText));
+      return matchesLiquor && matchesSearch;
+    });
+  }, [products, compatibleLiquorIdsByProduct, selectedLiquorFilter, showLiquorControls, productSearch]);
 
   const liquorFilterCounts = useMemo(() => {
     const counts = Object.fromEntries(liquorTypes.map((liquor) => [liquor.id, 0]));
@@ -798,7 +805,7 @@ export default function Cocktails({
     }, 'Recipe item added.');
   }
 
-  if (loading || error) return <Loading error={error} />;
+  if (loading || error) return <Loading error={error} onRetry={reload} />;
 
   return <div className="grid">
     <Section
@@ -809,9 +816,11 @@ export default function Cocktails({
         </button>
       }
     >
-      {addOpen && <form className="miniForm formGrid" onSubmit={add}>    
+      {addOpen && <form className="miniForm formGrid" onSubmit={add}>
+        <div className="formSectionLabel full">Product details</div>
         <input
           required
+          aria-label={copy.namePlaceholder}
           placeholder={copy.namePlaceholder}
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value, slug: slugify(e.target.value) })}
@@ -819,6 +828,7 @@ export default function Cocktails({
 
         <input
           required
+          aria-label="Slug"
           placeholder="Slug"
           value={form.slug}
           onChange={(e) => setForm({ ...form, slug: e.target.value })}
@@ -827,6 +837,7 @@ export default function Cocktails({
         {showProductTypeField && (
           <select
             required
+            aria-label="Product type"
             value={form.product_type || productType}
             onChange={(e) => setForm({ ...form, product_type: e.target.value })}
           >
@@ -836,12 +847,12 @@ export default function Cocktails({
           </select>
         )}
 
-        <select value={form.category_id || ''} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
+        <select aria-label="Category" value={form.category_id || ''} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
           <option value="">No category</option>
           {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
         </select>
 
-        <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+        <select aria-label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
           {statuses.map((status) => <option key={status}>{status}</option>)}
         </select>
 
@@ -894,6 +905,7 @@ export default function Cocktails({
         <input
           type="number"
           min="0"
+          aria-label="Prep time minutes"
           placeholder="Prep time minutes"
           value={form.prep_time_minutes}
           onChange={(e) => setForm({ ...form, prep_time_minutes: e.target.value })}
@@ -904,9 +916,11 @@ export default function Cocktails({
           productTags={activeProductTags}
           onChange={(tags) => setForm({ ...form, tags })}
         />
-        
+
+        <div className="formSectionLabel full">Pricing &amp; first variant</div>
         <input
           required
+          aria-label="Variant name"
           placeholder="Variant name"
           value={form.variant_name}
           onChange={(e) => setForm({ ...form, variant_name: e.target.value })}
@@ -916,6 +930,7 @@ export default function Cocktails({
           required
           type="number"
           min="1"
+          aria-label="Serving count"
           placeholder="Serving count"
           value={form.serving_count}
           onChange={(e) => setForm({ ...form, serving_count: e.target.value })}
@@ -926,6 +941,7 @@ export default function Cocktails({
           type="number"
           min="0"
           step="0.01"
+          aria-label="Price ex VAT"
           placeholder="Price ex VAT"
           value={form.price_ex_vat}
           onChange={(e) => setForm({ ...form, price_ex_vat: e.target.value })}
@@ -936,7 +952,8 @@ export default function Cocktails({
           min="0"
           max="100"
           step="0.01"
-          placeholder="VAT rate"
+          aria-label="VAT rate percent"
+          placeholder="VAT rate %"
           value={vatPercentInput(form.vat_rate)}
           onChange={(e) => setForm({ ...form, vat_rate: vatPercentToDecimal(e.target.value) })}
         />
@@ -945,6 +962,7 @@ export default function Cocktails({
           required
           type="number"
           min="1"
+          aria-label="Recipe yield servings"
           placeholder="Recipe yield servings"
           value={form.yield_servings}
           onChange={(e) => setForm({ ...form, yield_servings: e.target.value })}
@@ -1202,12 +1220,14 @@ export default function Cocktails({
                   <input
                     type="number"
                     min="0"
-                    max="1"
-                    step="0.0001"
-                    value={numericInput(draft.vat_rate)}
+                    max="100"
+                    step="0.01"
+                    aria-label="VAT rate percent"
+                    placeholder="VAT rate %"
+                    value={vatPercentInput(draft.vat_rate)}
                     onChange={(e) => setVariantEdits({
                       ...variantEdits,
-                      [variant.id]: { ...draft, vat_rate: e.target.value }
+                      [variant.id]: { ...draft, vat_rate: vatPercentToDecimal(e.target.value) }
                     })}
                   />
 
@@ -1435,6 +1455,16 @@ export default function Cocktails({
     )}
 
     <Section title={copy.tableTitle}>
+      <div className="filtersBar">
+        <input
+          type="search"
+          placeholder={`Search ${copy.entityLower} by name or description`}
+          value={productSearch}
+          onChange={(e) => setProductSearch(e.target.value)}
+        />
+        {productSearch && <button type="button" onClick={() => setProductSearch('')}>Clear search</button>}
+      </div>
+
       {showLiquorControls && (
         <div className="liquorFilterPanel" aria-label="Filter cocktails by compatible liquor">
           <LiquorFilterChip
@@ -1457,6 +1487,9 @@ export default function Cocktails({
 
       <SimpleTable
         rows={cocktailRows}
+        emptyText={(productSearch || (showLiquorControls && selectedLiquorFilter !== 'all'))
+          ? `No ${copy.entityLower} matches the current filters.`
+          : 'No records yet.'}
         columns={showProductTypeField
           ? ['image_url', 'product_type', 'name', 'short_description', 'tags', 'status', 'is_featured', 'prep_time_minutes']
           : ['image_url', 'name', 'short_description', 'tags', 'status', 'is_featured', 'prep_time_minutes']}

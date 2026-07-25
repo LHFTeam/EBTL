@@ -313,7 +313,7 @@ export default function Shop() {
     }, isActive ? 'Product tag activated.' : 'Product tag deactivated.');
   }
 
-  if (loading || error) return <Loading error={error} />;
+  if (loading || error) return <Loading error={error} onRetry={reload} />;
 
   return <div className="grid">
     <div ref={messageRef} className="messageAnchor"><Message text={msg} type={msgType} /></div>

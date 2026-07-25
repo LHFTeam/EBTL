@@ -48,7 +48,7 @@ function duration(minutes) {
 // (invert = true) such as cancellation rate or prep time.
 function DeltaChip({ deltaPct, invert = false }) {
   if (deltaPct === null || deltaPct === undefined) {
-    return <span className="deltaChip deltaChip-flat">New</span>;
+    return <span className="deltaChip deltaChip-flat" title="No activity in the previous period to compare against">New</span>;
   }
 
   const rounded = Math.round(deltaPct);
@@ -174,7 +174,7 @@ export default function Analytics() {
       </div>
 
       {loading || error ? (
-        <Loading error={error} />
+        <Loading error={error} onRetry={reload} />
       ) : (
         <>
           <div className="analyticsKpis">

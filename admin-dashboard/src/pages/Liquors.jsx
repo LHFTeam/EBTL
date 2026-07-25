@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { Loading, Message, Section, SimpleTable } from '../components/ui.jsx';
 import { useLoad } from '../hooks/useLoad.js';
@@ -53,6 +53,7 @@ export default function Liquors() {
   const [editImageFile, setEditImageFile] = useState(null);
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState('ok');
+  const messageRef = useRef(null);
 
   const selectedLiquor = useMemo(
     () => liquors.find((liquor) => liquor.id === editing) || null,
@@ -73,6 +74,16 @@ export default function Liquors() {
   function showMessage(text, type = 'ok') {
     setMsg(text);
     setMsgType(type);
+    if (text) {
+      window.requestAnimationFrame(() => {
+        messageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  }
+
+  function startEditing(liquorId) {
+    setEditing(liquorId);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function chooseLiquorImage(file, setter) {
@@ -204,7 +215,7 @@ export default function Liquors() {
     }, isActive ? 'Liquor activated.' : 'Liquor deactivated.');
   }
 
-  if (loading || error) return <Loading error={error} />;
+  if (loading || error) return <Loading error={error} onRetry={reload} />;
 
   return <div className="grid">
     <Section title="Add Liquor Type">
@@ -261,7 +272,7 @@ export default function Liquors() {
       </form>
     </Section>
 
-    <Message text={msg} type={msgType} />
+    <div ref={messageRef} className="messageAnchor"><Message text={msg} type={msgType} /></div>
 
     {selectedLiquor && (
       <Section
@@ -347,7 +358,7 @@ export default function Liquors() {
         }}
         actions={(row) => (
           <div className="inlineActions">
-            <button type="button" onClick={() => setEditing(row.id)}>Edit</button>
+            <button type="button" onClick={() => startEditing(row.id)}>Edit</button>
             <button
               type="button"
               className={row.is_active ? 'danger' : ''}

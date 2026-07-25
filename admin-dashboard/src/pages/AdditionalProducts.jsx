@@ -20,6 +20,8 @@ export default function AdditionalProducts() {
       editTitle: 'Edit Additional Product',
       archiveButton: 'Archive product',
       archiveNoun: 'this product',
+      entityName: 'Product',
+      entityLower: 'product',
       tableTitle: 'Additional Products',
       emptyRecipeText: 'This product has no recipe yet. This is okay for drafts; create a recipe when you are ready to define inventory consumption.',
       replaceRecipeHelp: 'This editor replaces the full recipe item set for the product. Remove a line here, then save, to delete it from the recipe.',
