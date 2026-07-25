@@ -9,11 +9,15 @@ import '../../../shared/widgets/network_or_asset_image.dart';
 class ShopHeader extends StatelessWidget {
   final int unreadNotificationCount;
   final VoidCallback onOpenNotifications;
+  final int activeOrdersCount;
+  final VoidCallback onOpenActiveOrders;
 
   const ShopHeader({
     super.key,
     required this.unreadNotificationCount,
     required this.onOpenNotifications,
+    required this.activeOrdersCount,
+    required this.onOpenActiveOrders,
   });
 
   @override
@@ -60,6 +64,13 @@ class ShopHeader extends StatelessWidget {
               ],
             ),
           ),
+          if (activeOrdersCount > 0) ...[
+            ActiveOrdersIconButton(
+              count: activeOrdersCount,
+              onTap: onOpenActiveOrders,
+            ),
+            const SizedBox(width: 10),
+          ],
           NotificationsIconButton(
             unreadCount: unreadNotificationCount,
             onTap: onOpenNotifications,

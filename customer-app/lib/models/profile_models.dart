@@ -288,6 +288,18 @@ class ProfileOrder {
     );
   }
 
+  /// An order is "active" once the customer has paid for it but before it has
+  /// been completed (or cancelled/refunded). These are the orders still being
+  /// prepared/fulfilled that the customer is likely tracking.
+  bool get isActive {
+    final normalizedPayment = paymentStatus.trim().toLowerCase();
+    if (normalizedPayment != 'paid') return false;
+
+    final normalizedStatus = status.trim().toLowerCase();
+    const finishedStatuses = {'completed', 'cancelled', 'canceled', 'refunded'};
+    return !finishedStatuses.contains(normalizedStatus);
+  }
+
   String get displayOrderNumber {
     final number = orderNumber?.trim();
     if (number == null || number.isEmpty) return 'Order';

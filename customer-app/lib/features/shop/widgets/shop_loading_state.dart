@@ -15,6 +15,8 @@ class ShopLoadingState extends StatelessWidget {
             child: ShopHeader(
               unreadNotificationCount: 0,
               onOpenNotifications: () {},
+              activeOrdersCount: 0,
+              onOpenActiveOrders: () {},
             ),
           ),
           const SliverFillRemaining(

@@ -22,6 +22,8 @@ class HomeScreen extends StatelessWidget {
   final ValueChanged<LiquorType> onOpenFinderWithBottle;
   final int unreadNotificationCount;
   final VoidCallback onOpenNotifications;
+  final int activeOrdersCount;
+  final VoidCallback onOpenActiveOrders;
 
   const HomeScreen({
     super.key,
@@ -32,6 +34,8 @@ class HomeScreen extends StatelessWidget {
     required this.onOpenCocktail,
     required this.unreadNotificationCount,
     required this.onOpenNotifications,
+    required this.activeOrdersCount,
+    required this.onOpenActiveOrders,
   });
 
   @override
@@ -47,6 +51,8 @@ class HomeScreen extends StatelessWidget {
               onOpenFinder: onOpenFinder,
               unreadNotificationCount: unreadNotificationCount,
               onOpenNotifications: onOpenNotifications,
+              activeOrdersCount: activeOrdersCount,
+              onOpenActiveOrders: onOpenActiveOrders,
             ),
           ),
           if (data.serviceAreas.isNotEmpty)
@@ -121,6 +127,8 @@ class HeroHomeHeader extends StatelessWidget {
   final VoidCallback onOpenFinder;
   final int unreadNotificationCount;
   final VoidCallback onOpenNotifications;
+  final int activeOrdersCount;
+  final VoidCallback onOpenActiveOrders;
 
   const HeroHomeHeader({
     super.key,
@@ -128,6 +136,8 @@ class HeroHomeHeader extends StatelessWidget {
     required this.onOpenFinder,
     required this.unreadNotificationCount,
     required this.onOpenNotifications,
+    required this.activeOrdersCount,
+    required this.onOpenActiveOrders,
   });
 
   @override
@@ -162,6 +172,13 @@ class HeroHomeHeader extends StatelessWidget {
               children: [
                 const EbtlLogo(),
                 const Spacer(),
+                if (activeOrdersCount > 0) ...[
+                  ActiveOrdersIconButton(
+                    count: activeOrdersCount,
+                    onTap: onOpenActiveOrders,
+                  ),
+                  const SizedBox(width: 10),
+                ],
                 NotificationsIconButton(
                   unreadCount: unreadNotificationCount,
                   onTap: onOpenNotifications,

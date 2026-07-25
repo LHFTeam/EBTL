@@ -22,6 +22,7 @@ import 'features/cocktail_detail/cocktail_detail_screen.dart';
 import 'features/cart/cart_screen.dart';
 import 'features/checkout/checkout_screen.dart';
 import 'features/profile/profile_screen.dart';
+import 'features/profile/active_orders_screen.dart';
 import 'features/profile/customer_notifications_screen.dart';
 import 'features/onboarding/onboarding_screen.dart';
 
@@ -151,6 +152,9 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   bool _notificationsBaselineSeeded = false;
   bool _isPollingNotifications = false;
 
+  int activeOrdersCount = 0;
+  bool _isRefreshingActiveOrders = false;
+
   @override
   void initState() {
     super.initState();
@@ -158,6 +162,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     PushNotificationService.initialize();
     _startNotificationsPolling(notifyImmediately: false);
+    _refreshActiveOrders();
   }
 
   @override
@@ -173,6 +178,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     // the background and pick it back up (with an immediate check) on resume.
     if (state == AppLifecycleState.resumed) {
       _startNotificationsPolling(notifyImmediately: true);
+      _refreshActiveOrders();
     } else if (state == AppLifecycleState.paused) {
       _notificationsTimer?.cancel();
       _notificationsTimer = null;
@@ -248,6 +254,37 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         ),
       ),
     );
+  }
+
+  /// Best-effort refresh of the active-orders count that drives the top-bar
+  /// shortcut. Active orders are paid but not yet completed; there is no
+  /// dedicated endpoint, so we derive the count from the orders list.
+  Future<void> _refreshActiveOrders() async {
+    if (_isRefreshingActiveOrders) return;
+    _isRefreshingActiveOrders = true;
+
+    try {
+      final response = await ApiService.fetchCustomerOrders(limit: 100);
+      if (!mounted) return;
+
+      final count = response.orders.where((order) => order.isActive).length;
+      if (count != activeOrdersCount) {
+        setState(() => activeOrdersCount = count);
+      }
+    } catch (_) {
+      // Never surface errors from this background refresh.
+    } finally {
+      _isRefreshingActiveOrders = false;
+    }
+  }
+
+  void openActiveOrders() {
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(builder: (_) => const ActiveOrdersScreen()),
+        )
+        // The set of active orders may have changed while the screen was open.
+        .then((_) => _refreshActiveOrders());
   }
 
   void reloadAppData() {
@@ -353,6 +390,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
             onOpenCocktail: (cocktail) => openCocktailDetail(data, cocktail),
             unreadNotificationCount: unreadNotificationCount,
             onOpenNotifications: openNotifications,
+            activeOrdersCount: activeOrdersCount,
+            onOpenActiveOrders: openActiveOrders,
           ),
           FinderScreen(
             data: data,
@@ -369,6 +408,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
             },
             unreadNotificationCount: unreadNotificationCount,
             onOpenNotifications: openNotifications,
+            activeOrdersCount: activeOrdersCount,
+            onOpenActiveOrders: openActiveOrders,
           ),
           CartScreen(
             data: data,
@@ -393,6 +434,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
                           if (!mounted) return;
                           setState(() => selectedIndex = 0);
                           reloadAppData();
+                          _refreshActiveOrders();
                         },
                       ),
                     ),
