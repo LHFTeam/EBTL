@@ -1,0 +1,14 @@
+# Template for android/key.properties — copy this to `key.properties` and fill
+# in your real values. The real file (and any .jks/.keystore) is gitignored and
+# must NEVER be committed or shared.
+#
+#   cp key.properties.example key.properties
+#
+# storeFile: path to your upload keystore. Either an absolute path, or a path
+# relative to android/app/ (e.g. place the keystore at android/app/
+# upload-keystore.jks and use `storeFile=upload-keystore.jks`).
+
+storeFile=upload-keystore.jks
+storePassword=CHANGE_ME
+keyAlias=upload
+keyPassword=CHANGE_ME
