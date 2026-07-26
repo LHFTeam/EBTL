@@ -1,3 +1,4 @@
+import 'package:clarity_flutter/clarity_flutter.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/ebtl_colors.dart';
@@ -82,9 +83,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return;
       case 'addresses':
         Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => const CustomerAddressesScreen(),
-          ),
+          MaterialPageRoute(builder: (_) => const CustomerAddressesScreen()),
         );
         return;
       case 'notifications':
@@ -92,11 +91,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return;
       case 'promo_codes':
       case 'referrals':
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => const ReferralScreen(),
-          ),
-        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const ReferralScreen()));
         return;
       case 'payment_methods':
       default:
@@ -174,35 +171,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 SliverToBoxAdapter(
-                  child: ProfileIdentityCard(
-                    profile: profile.customer,
-                    onTap: () => openEditProfile(profile.customer),
+                  child: ClarityMask(
+                    child: ProfileIdentityCard(
+                      profile: profile.customer,
+                      onTap: () => openEditProfile(profile.customer),
+                    ),
                   ),
                 ),
                 SliverToBoxAdapter(
-                  child: ProfileOrdersSection(
-                    recentOrders: profile.recentOrders,
-                    onOpenOrder: (order) {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => OrderDetailScreen(
-                            orderId: order.id,
-                            orderNumber: order.orderNumber,
+                  child: ClarityMask(
+                    child: ProfileOrdersSection(
+                      recentOrders: profile.recentOrders,
+                      onOpenOrder: (order) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => OrderDetailScreen(
+                              orderId: order.id,
+                              orderNumber: order.orderNumber,
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                    onViewAll:
-                        profile.recentOrders.hasMore ||
-                            profile.recentOrders.items.isNotEmpty
-                        ? () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const CustomerOrdersScreen(),
-                              ),
-                            );
-                          }
-                        : null,
+                        );
+                      },
+                      onViewAll:
+                          profile.recentOrders.hasMore ||
+                              profile.recentOrders.items.isNotEmpty
+                          ? () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const CustomerOrdersScreen(),
+                                ),
+                              );
+                            }
+                          : null,
+                    ),
                   ),
                 ),
                 SliverToBoxAdapter(

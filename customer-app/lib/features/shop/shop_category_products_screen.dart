@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/theme/ebtl_colors.dart';
 import '../../models/shop_models.dart';
+import '../../services/analytics_service.dart';
 import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import 'widgets/shop_product_detail_sheet.dart';
@@ -48,6 +49,7 @@ class _ShopCategoryProductsScreenState
   @override
   void initState() {
     super.initState();
+    AnalyticsService.logScreenView('shop_category');
     scrollController.addListener(onScroll);
     loadPage(reset: true);
   }
@@ -55,6 +57,7 @@ class _ShopCategoryProductsScreenState
   @override
   void dispose() {
     scrollController.dispose();
+    AnalyticsService.logScreenView('shop');
     super.dispose();
   }
 
@@ -153,6 +156,18 @@ class _ShopCategoryProductsScreenState
         variantId: variant.id,
         quantity: 1,
         locationId: locationId,
+      );
+
+      AnalyticsService.logAddToCart(
+        AnalyticsItem(
+          id: product.id,
+          name: product.name,
+          category: product.category?.name ?? product.productType,
+          variant: variant.name,
+          price: variant.priceIncVat,
+          quantity: 1,
+          currency: variant.currency,
+        ),
       );
 
       if (!mounted) return;

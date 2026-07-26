@@ -1,3 +1,4 @@
+import 'package:clarity_flutter/clarity_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart' as stripe;
 import 'package:google_fonts/google_fonts.dart';
@@ -8,6 +9,7 @@ import '../../core/network/api_exception.dart';
 import '../../core/theme/ebtl_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/checkout_models.dart';
+import '../../services/analytics_service.dart';
 import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import '../../shared/widgets/brand_widgets.dart';
@@ -54,10 +56,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   bool isPlacingOrder = false;
   bool isConfirmingPayment = false;
   bool showValidationErrors = false;
+  bool didLogBeginCheckout = false;
 
   @override
   void initState() {
     super.initState();
+    AnalyticsService.logScreenView('checkout');
     checkoutFuture = loadCheckout();
   }
 
@@ -84,6 +88,30 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         response.checkout.paymentMethodByKey(selectedPaymentMethodKey) ==
             null) {
       selectedPaymentMethodKey = enabledMethods.first.key;
+    }
+
+    if (!didLogBeginCheckout) {
+      didLogBeginCheckout = true;
+      final checkout = response.checkout;
+      AnalyticsService.logBeginCheckout(
+        value: checkout.summary.totalAmount,
+        currency: checkout.summary.currency,
+        coupon: checkout.promotion?.code,
+        fulfillmentType: checkout.fulfillment.type,
+        items: checkout.items
+            .map(
+              (item) => AnalyticsItem(
+                id: item.productId,
+                name: item.productName,
+                category: 'checkout_item',
+                variant: item.variantName,
+                price: item.unitPriceIncVat,
+                quantity: item.quantity,
+                currency: item.currency,
+              ),
+            )
+            .toList(),
+      );
     }
 
     return response;
@@ -286,6 +314,22 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }) {
     if (!mounted) return;
 
+    final effectivePaymentStatus =
+        (paymentStatusOverride ?? order.paymentStatus).trim().toLowerCase();
+    if (effectivePaymentStatus == 'paid' ||
+        effectivePaymentStatus == 'succeeded' ||
+        effectivePaymentStatus == 'completed') {
+      AnalyticsService.logPurchase(
+        transactionId: order.id,
+        value: paidAmount ?? order.totals.totalAmount,
+        currency: paidAmountCurrency ?? order.totals.currency,
+        tax: order.totals.vatAmount,
+        shipping: order.totals.deliveryFee,
+        coupon: order.promotion?.code,
+      );
+    }
+    AnalyticsService.logScreenView('order_confirmed');
+
     setState(() => isPlacingOrder = false);
 
     Navigator.of(context).pushReplacement(
@@ -416,7 +460,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         publishableKey.isEmpty) {
       if (!mounted) return;
       setState(() => isPlacingOrder = false);
-      showAppSnackBar(context, 'Payment could not be started. Please try again.');
+      showAppSnackBar(
+        context,
+        'Payment could not be started. Please try again.',
+      );
       return;
     }
 
@@ -436,8 +483,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           paymentIntentClientSecret: session.clientSecret,
           merchantDisplayName: session.merchantDisplayName,
           customerId: session.hasCustomer ? session.customerId : null,
-          customerEphemeralKeySecret:
-              session.hasCustomer ? session.ephemeralKeySecret : null,
+          customerEphemeralKeySecret: session.hasCustomer
+              ? session.ephemeralKeySecret
+              : null,
           applePay: hasApplePay
               ? stripe.PaymentSheetApplePay(
                   merchantCountryCode: session.merchantCountry,
@@ -556,7 +604,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         return;
       }
 
-      if (response.payment.isStripe || response.nextScreen == 'stripe_payment') {
+      if (response.payment.isStripe ||
+          response.nextScreen == 'stripe_payment') {
         await startStripePaymentSheetAndRefresh(response, checkout);
       } else {
         await startGeideaSdkAndRefresh(response, checkout);
@@ -578,163 +627,166 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           backgroundColor: EbtlColors.cream,
           body: SafeArea(
             child: FutureBuilder<CheckoutPageResponse>(
-          future: checkoutFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const EbtlLoadingSection(
-                label: 'Preparing checkout...',
-              );
-            }
+              future: checkoutFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const EbtlLoadingSection(
+                    label: 'Preparing checkout...',
+                  );
+                }
 
-            if (snapshot.hasError) {
-              return CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: CheckoutTopHeader(
-                      onBack: () => Navigator.of(context).pop(),
+                if (snapshot.hasError) {
+                  return CustomScrollView(
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: CheckoutTopHeader(
+                          onBack: () => Navigator.of(context).pop(),
+                        ),
+                      ),
+                      SliverToBoxAdapter(
+                        child: InlineErrorCard(
+                          message: apiErrorMessage(snapshot.error!),
+                          onRetry: reloadCheckout,
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                final response = snapshot.data;
+                if (response == null) {
+                  return CustomScrollView(
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: CheckoutTopHeader(
+                          onBack: () => Navigator.of(context).pop(),
+                        ),
+                      ),
+                      SliverToBoxAdapter(
+                        child: InlineErrorCard(
+                          message: 'The backend returned no checkout data.',
+                          onRetry: reloadCheckout,
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                final checkout = response.checkout;
+                final enabledMethods = checkout.enabledPaymentMethods;
+
+                if (enabledMethods.isNotEmpty &&
+                    checkout.paymentMethodByKey(selectedPaymentMethodKey) ==
+                        null) {
+                  selectedPaymentMethodKey = enabledMethods.first.key;
+                }
+
+                final summary = effectiveSummary(checkout);
+                final promotion = effectivePromotion(checkout);
+                final validation = effectiveValidation(checkout);
+                final placeEnabled = canPlaceOrder(checkout);
+
+                return CustomScrollView(
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: CheckoutTopHeader(
+                        onBack: () => Navigator.of(context).pop(),
+                      ),
                     ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: InlineErrorCard(
-                      message: apiErrorMessage(snapshot.error!),
-                      onRetry: reloadCheckout,
+                    const SliverToBoxAdapter(
+                      child: CheckoutProgressBar(activeStepIndex: 1),
                     ),
-                  ),
-                ],
-              );
-            }
-
-            final response = snapshot.data;
-            if (response == null) {
-              return CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: CheckoutTopHeader(
-                      onBack: () => Navigator.of(context).pop(),
+                    SliverToBoxAdapter(
+                      child: CheckoutLocationSummaryCard(
+                        location: checkout.location,
+                        fulfillmentType: checkout.fulfillment.type,
+                      ),
                     ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: InlineErrorCard(
-                      message: 'The backend returned no checkout data.',
-                      onRetry: reloadCheckout,
+                    SliverToBoxAdapter(
+                      child: CheckoutOrderStrip(
+                        items: checkout.items,
+                        itemWarnings: checkout.itemWarnings,
+                        onEditCart: widget.onEditCart,
+                      ),
                     ),
-                  ),
-                ],
-              );
-            }
-
-            final checkout = response.checkout;
-            final enabledMethods = checkout.enabledPaymentMethods;
-
-            if (enabledMethods.isNotEmpty &&
-                checkout.paymentMethodByKey(selectedPaymentMethodKey) == null) {
-              selectedPaymentMethodKey = enabledMethods.first.key;
-            }
-
-            final summary = effectiveSummary(checkout);
-            final promotion = effectivePromotion(checkout);
-            final validation = effectiveValidation(checkout);
-            final placeEnabled = canPlaceOrder(checkout);
-
-            return CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: CheckoutTopHeader(
-                    onBack: () => Navigator.of(context).pop(),
-                  ),
-                ),
-                const SliverToBoxAdapter(
-                  child: CheckoutProgressBar(activeStepIndex: 1),
-                ),
-                SliverToBoxAdapter(
-                  child: CheckoutLocationSummaryCard(
-                    location: checkout.location,
-                    fulfillmentType: checkout.fulfillment.type,
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: CheckoutOrderStrip(
-                    items: checkout.items,
-                    itemWarnings: checkout.itemWarnings,
-                    onEditCart: widget.onEditCart,
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: CheckoutCustomerDetailsCard(
-                    nameController: nameController,
-                    phoneController: phoneController,
-                    addressController: addressController,
-                    showAddress: checkout.fulfillment.isDelivery,
-                    showErrors: showValidationErrors,
-                    isNameValid: isCustomerNameValid,
-                    isPhoneValid: isPhoneValid,
-                    isAddressValid: isAddressValid(checkout),
-                    onChanged: () {
-                      setState(() {
-                        activeIdempotencyKey = null;
-                      });
-                    },
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: CheckoutPromoCard(
-                    controller: promoController,
-                    isApplying: isApplyingPromo,
-                    promoError: promoError,
-                    promotion: promotion,
-                    onChanged: (_) {
-                      setState(() {
-                        promoError = null;
-                        quoteOverride = null;
-                        activeIdempotencyKey = null;
-                      });
-                    },
-                    onApply: () => applyPromo(checkout),
-                    onRemove: () {
-                      promoController.clear();
-                      setState(() {
-                        quoteOverride = null;
-                        promoError = null;
-                        activeIdempotencyKey = null;
-                      });
-                    },
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: CheckoutPaymentMethodSection(
-                    methods: enabledMethods,
-                    selectedKey: selectedPaymentMethodKey,
-                    onSelected: (key) {
-                      setState(() {
-                        selectedPaymentMethodKey = key;
-                        activeIdempotencyKey = null;
-                      });
-                    },
-                  ),
-                ),
-                if (!validation.canPlaceOrder ||
-                    validation.blockingReasons.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: CheckoutBlockingReasonsCard(
-                      reasons: validation.blockingReasons,
-                      onEditCart: widget.onEditCart,
+                    SliverToBoxAdapter(
+                      child: ClarityMask(
+                        child: CheckoutCustomerDetailsCard(
+                          nameController: nameController,
+                          phoneController: phoneController,
+                          addressController: addressController,
+                          showAddress: checkout.fulfillment.isDelivery,
+                          showErrors: showValidationErrors,
+                          isNameValid: isCustomerNameValid,
+                          isPhoneValid: isPhoneValid,
+                          isAddressValid: isAddressValid(checkout),
+                          onChanged: () {
+                            setState(() {
+                              activeIdempotencyKey = null;
+                            });
+                          },
+                        ),
+                      ),
                     ),
-                  ),
-                SliverToBoxAdapter(
-                  child: CheckoutSummaryCard(
-                    summary: summary,
-                    promotion: promotion,
-                    canPlaceOrder: placeEnabled,
-                    isPlacingOrder: isPlacingOrder,
-                    onPlaceOrder: () => placeOrder(checkout),
-                  ),
-                ),
-                const SliverToBoxAdapter(child: SizedBox(height: 20)),
-              ],
-            );
-          },
-        ),
-      ),
+                    SliverToBoxAdapter(
+                      child: CheckoutPromoCard(
+                        controller: promoController,
+                        isApplying: isApplyingPromo,
+                        promoError: promoError,
+                        promotion: promotion,
+                        onChanged: (_) {
+                          setState(() {
+                            promoError = null;
+                            quoteOverride = null;
+                            activeIdempotencyKey = null;
+                          });
+                        },
+                        onApply: () => applyPromo(checkout),
+                        onRemove: () {
+                          promoController.clear();
+                          setState(() {
+                            quoteOverride = null;
+                            promoError = null;
+                            activeIdempotencyKey = null;
+                          });
+                        },
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: CheckoutPaymentMethodSection(
+                        methods: enabledMethods,
+                        selectedKey: selectedPaymentMethodKey,
+                        onSelected: (key) {
+                          setState(() {
+                            selectedPaymentMethodKey = key;
+                            activeIdempotencyKey = null;
+                          });
+                        },
+                      ),
+                    ),
+                    if (!validation.canPlaceOrder ||
+                        validation.blockingReasons.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: CheckoutBlockingReasonsCard(
+                          reasons: validation.blockingReasons,
+                          onEditCart: widget.onEditCart,
+                        ),
+                      ),
+                    SliverToBoxAdapter(
+                      child: CheckoutSummaryCard(
+                        summary: summary,
+                        promotion: promotion,
+                        canPlaceOrder: placeEnabled,
+                        isPlacingOrder: isPlacingOrder,
+                        onPlaceOrder: () => placeOrder(checkout),
+                      ),
+                    ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                  ],
+                );
+              },
+            ),
+          ),
         ),
         if (isConfirmingPayment)
           const Positioned.fill(child: PaymentConfirmingOverlay()),
@@ -1008,9 +1060,7 @@ class CheckoutOrderStrip extends StatelessWidget {
             const SizedBox(height: 4),
             CheckoutWarningBox(
               message: itemWarnings
-                  .map(
-                    (warning) => '${warning.productName}: ${warning.reason}',
-                  )
+                  .map((warning) => '${warning.productName}: ${warning.reason}')
                   .join('\n'),
             ),
           ],
@@ -1823,8 +1873,8 @@ class OrderConfirmedScreen extends StatelessWidget {
                   ),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      minHeight: constraints.maxHeight -
-                          (compactHeight ? 40 : 48),
+                      minHeight:
+                          constraints.maxHeight - (compactHeight ? 40 : 48),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2000,9 +2050,7 @@ class _SoftGlow extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: [color, color.withValues(alpha: 0)],
-        ),
+        gradient: RadialGradient(colors: [color, color.withValues(alpha: 0)]),
       ),
     );
   }
@@ -2281,7 +2329,11 @@ class _PaidStatusPill extends StatelessWidget {
               shape: BoxShape.circle,
               border: Border.all(color: EbtlColors.teal.withValues(alpha: 0.7)),
             ),
-            child: const Icon(Icons.check_rounded, size: 14, color: EbtlColors.teal),
+            child: const Icon(
+              Icons.check_rounded,
+              size: 14,
+              color: EbtlColors.teal,
+            ),
           ),
           const SizedBox(width: 8),
           Text(

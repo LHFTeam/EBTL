@@ -7,6 +7,7 @@ import '../../core/theme/ebtl_colors.dart';
 import '../../core/theme/ebtl_text_styles.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/cocktail_detail_models.dart';
+import '../../services/analytics_service.dart';
 import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import '../../shared/widgets/bottle_widgets.dart';
@@ -60,19 +61,57 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
   final Set<String> selectedRemovedRecipeItemIds = <String>{};
   final Map<String, SelectedAddition> selectedAdditionsByVariantId =
       <String, SelectedAddition>{};
+  final Set<String> trackedSlugs = <String>{};
 
   @override
   void initState() {
     super.initState();
+    AnalyticsService.logScreenView('cocktail_detail');
     activeSlug = widget.slug;
     detailFuture = loadDetail();
   }
 
-  Future<CocktailDetailResponse> loadDetail() {
-    return ApiService.fetchCocktailDetail(
+  @override
+  void dispose() {
+    const parentScreens = [
+      'home',
+      'cocktail_finder',
+      'shop',
+      'cart',
+      'profile',
+    ];
+    final parentIndex = widget.selectedNavIndex
+        .clamp(0, parentScreens.length - 1)
+        .toInt();
+    AnalyticsService.logScreenView(parentScreens[parentIndex]);
+    super.dispose();
+  }
+
+  Future<CocktailDetailResponse> loadDetail() async {
+    final response = await ApiService.fetchCocktailDetail(
       slug: activeSlug,
       locationId: widget.locationId,
       liquorTypeId: widget.liquorTypeId,
+    );
+
+    final cocktail = response.cocktail;
+    if (trackedSlugs.add(cocktail.slug)) {
+      AnalyticsService.logViewItem(analyticsItem(cocktail));
+    }
+
+    return response;
+  }
+
+  AnalyticsItem analyticsItem(CocktailDetail cocktail, {int quantity = 1}) {
+    final variant = cocktail.variant;
+    return AnalyticsItem(
+      id: cocktail.id,
+      name: cocktail.name,
+      category: cocktail.category?.name ?? 'cocktail',
+      variant: variant?.name,
+      price: variant?.priceIncVat ?? 0,
+      quantity: quantity,
+      currency: variant?.currency ?? 'EGP',
     );
   }
 
@@ -115,6 +154,11 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
       } else {
         await ApiService.removeFavoriteCocktail(productId: productId);
       }
+
+      AnalyticsService.logFavoriteChanged(
+        item: analyticsItem(cocktail),
+        isFavorite: next,
+      );
 
       if (!mounted) return;
       setState(() => isTogglingFavorite = false);
@@ -230,6 +274,10 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
         selectedLiquorTypeId: effectiveSelectedLiquorTypeId(cocktail),
         removedRecipeItemIds: selectedRemovedRecipeItemIds,
         selectedAdditions: selectedAdditionsByVariantId.values.toList(),
+      );
+
+      AnalyticsService.logAddToCart(
+        analyticsItem(cocktail, quantity: selectedQuantity),
       );
 
       if (!mounted) return;

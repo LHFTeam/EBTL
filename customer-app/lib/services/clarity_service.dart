@@ -43,4 +43,16 @@ class ClarityService {
 
     return ClarityWidget(app: app, clarityConfig: config);
   }
+
+  /// Gives manually-routed Flutter screens stable names in Clarity.
+  static void setScreenName(String screenName) {
+    if (!isEnabled || screenName.trim().isEmpty) return;
+    Clarity.setCurrentScreenName(screenName);
+  }
+
+  /// Adds a PII-free funnel marker to the active Clarity recording.
+  static void recordEvent(String eventName) {
+    if (!isEnabled || eventName.trim().isEmpty) return;
+    Clarity.sendCustomEvent(eventName);
+  }
 }

@@ -97,6 +97,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.9"
+  facebook_app_events:
+    dependency: "direct main"
+    description:
+      name: facebook_app_events
+      sha256: "2c08c3ad67114b2303c604619f23186b76d93c912a0e47d5afadd6a0b4f744e9"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.30.3"
   fake_async:
     dependency: transitive
     description:
@@ -121,6 +129,30 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.1.2"
+  firebase_analytics:
+    dependency: "direct main"
+    description:
+      name: firebase_analytics
+      sha256: "47b68927bc4abd6d7b4e2ddfe7c64fe087cca5f96d0c2b8d9d6deb6120c10ad6"
+      url: "https://pub.dev"
+    source: hosted
+    version: "12.4.5"
+  firebase_analytics_platform_interface:
+    dependency: transitive
+    description:
+      name: firebase_analytics_platform_interface
+      sha256: "36ce5feb5a996381e6411792eaa00e89178e75943e54ac8f14a8296b6e9a3e88"
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.0.5"
+  firebase_analytics_web:
+    dependency: transitive
+    description:
+      name: firebase_analytics_web
+      sha256: c12358983c927093cd40d42feb0cb05c8594d3a9b56ab5ad303bec2b8838d252
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.6.1+11"
   firebase_core:
     dependency: "direct main"
     description:

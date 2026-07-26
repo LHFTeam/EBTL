@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/constants/onboarding_assets.dart';
 import '../../core/theme/ebtl_colors.dart';
+import '../../services/analytics_service.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key, required this.onCompleted});
@@ -19,6 +20,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
   bool _isCompleting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    AnalyticsService.logScreenView('onboarding');
+  }
 
   @override
   void dispose() {

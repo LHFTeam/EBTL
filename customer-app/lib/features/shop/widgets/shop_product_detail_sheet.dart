@@ -7,6 +7,7 @@ import '../../../core/theme/ebtl_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/product_models.dart';
 import '../../../models/shop_models.dart';
+import '../../../services/analytics_service.dart';
 import '../../../services/api_service.dart';
 import '../../../shared/widgets/app_state_widgets.dart';
 import '../../../shared/widgets/network_or_asset_image.dart';
@@ -70,6 +71,24 @@ class _ShopProductDetailSheetState extends State<ShopProductDetailSheet> {
     return null;
   }
 
+  @override
+  void initState() {
+    super.initState();
+
+    final variant = orderableVariant;
+    AnalyticsService.logViewItem(
+      AnalyticsItem(
+        id: product.id,
+        name: product.name,
+        category: product.category?.name ?? product.productType,
+        variant: variant?.name,
+        price: variant?.priceIncVat ?? product.startingPriceIncVat ?? 0,
+        quantity: 1,
+        currency: variant?.currency ?? product.currency,
+      ),
+    );
+  }
+
   void changeQuantity(int delta) {
     final next = (quantity + delta).clamp(1, 99);
     if (next == quantity) return;
@@ -106,6 +125,18 @@ class _ShopProductDetailSheetState extends State<ShopProductDetailSheet> {
         locationId: locationId,
       );
 
+      AnalyticsService.logAddToCart(
+        AnalyticsItem(
+          id: product.id,
+          name: product.name,
+          category: product.category?.name ?? product.productType,
+          variant: variant.name,
+          price: variant.priceIncVat,
+          quantity: quantity,
+          currency: variant.currency,
+        ),
+      );
+
       if (!mounted) return;
 
       widget.onCartChanged();
@@ -133,7 +164,9 @@ class _ShopProductDetailSheetState extends State<ShopProductDetailSheet> {
     final shortDescription = product.shortDescription?.trim() ?? '';
 
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Container(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.9,
@@ -281,7 +314,10 @@ class _ShopProductDetailSheetState extends State<ShopProductDetailSheet> {
             ),
             _ShopProductAddBar(
               priceLabel: variant != null
-                  ? formatMoney(variant.priceIncVat * quantity, variant.currency)
+                  ? formatMoney(
+                      variant.priceIncVat * quantity,
+                      variant.currency,
+                    )
                   : product.priceLabel,
               quantity: quantity,
               canAdd: canAdd,

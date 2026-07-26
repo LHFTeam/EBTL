@@ -25,14 +25,12 @@ export const ACTIVE_PAYMENT_PROVIDER = normalizeEnvValue(process.env.PAYMENT_PRO
   ? 'geidea'
   : 'stripe';
 
-// Marketing/analytics pixel IDs for the public landing page. Each is null when
-// unset; the client only initializes the platforms that have an ID. Served via
-// GET /api/public-config and consumed by public/landing-assets/tracking.js.
+// Google Tag Manager is the single loader for marketing/analytics tags on the
+// public landing page. The ID is public (it is present in every GTM snippet),
+// so the production container is a safe default while still being overridable
+// for preview/staging deployments. The employee SPA never consumes this config.
 export const LANDING_TRACKING = {
-  metaPixelId: process.env.META_PIXEL_ID || null,
-  tiktokPixelId: process.env.TIKTOK_PIXEL_ID || null,
-  snapchatPixelId: process.env.SNAPCHAT_PIXEL_ID || null,
-  ga4MeasurementId: process.env.GA4_MEASUREMENT_ID || null
+  gtmContainerId: process.env.GTM_CONTAINER_ID || 'GTM-WN6DZGBS'
 };
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
