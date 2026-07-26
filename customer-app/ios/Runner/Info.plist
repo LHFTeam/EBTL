@@ -8,6 +8,16 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
 	<string>EBTL</string>
+	<key>FacebookAppID</key>
+	<string>1611789933929380</string>
+	<key>FacebookClientToken</key>
+	<string>d5807fe5b93fece03788f6acc2fb2157</string>
+	<key>FacebookDisplayName</key>
+	<string>EBTL</string>
+	<key>FacebookAutoLogAppEventsEnabled</key>
+	<false/>
+	<key>FacebookAdvertiserIDCollectionEnabled</key>
+	<false/>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -80,6 +90,16 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>ebtl</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>facebook</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>fb1611789933929380</string>
 			</array>
 		</dict>
 	</array>

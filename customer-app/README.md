@@ -38,7 +38,7 @@ without any of them:
 | --- | --- | --- |
 | `--dart-define=API_BASE_URL=...` | Point at a different backend (e.g. staging) | Production Render URL |
 | `--dart-define=CLARITY_PROJECT_ID=...` | Microsoft Clarity session replay (release builds only); empty disables it | EBTL project |
-| `--dart-define=ANALYTICS_ENABLE_DEBUG=true` | Enables Firebase Analytics during a debug validation run | Disabled in debug |
+| `--dart-define=ANALYTICS_ENABLE_DEBUG=true` | Enables Firebase Analytics and Meta App Events during a debug validation run | Disabled in debug |
 | `google-services.json` / `GoogleService-Info.plist` | Enables Firebase push, Crashlytics, and Analytics | Firebase integrations disabled |
 
 Payments use Stripe's native Payment Sheet; the backend delivers the
@@ -66,3 +66,9 @@ per-checkout Stripe keys. See the root [`STRIPE_SETUP.md`](../STRIPE_SETUP.md).
   PII-free screen and commerce events through `AnalyticsService`; customer
   names, phone numbers, addresses, and payment details must never be added to
   event parameters.
+- Native Meta App Events uses Meta Developer App `1611789933929380` through
+  the same `AnalyticsService` boundary. The App ID and Client Token are public
+  native client configuration; the Meta App Secret must never be committed.
+- The app does not currently show Apple's App Tracking Transparency prompt.
+  Meta events still work, but iOS advertising-ID attribution remains subject
+  to the device's system permission.

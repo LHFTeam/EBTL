@@ -8,7 +8,7 @@ Employee login, dashboard, admin, and prep screens are intentionally excluded.
 | Surface | Integration |
 | --- | --- |
 | Public landing page (`admin-dashboard/public/landing.html`) | Web GTM container |
-| Customer Android/iOS app | Firebase Analytics + Microsoft Clarity |
+| Customer Android/iOS app | Firebase Analytics + Meta App Events + Microsoft Clarity |
 | Employee React SPA | None |
 
 No server-side GTM container, Conversions API gateway, additional service, or
@@ -25,6 +25,7 @@ public GTM container ID from `GET /api/public-config`.
 | Landing Meta Pixel / dataset | `1581863720182872` |
 | Customer Firebase project | `ebtl-37ddb` |
 | Customer Microsoft Clarity project | `xr1vveuqim` |
+| Customer Meta Developer App | `1611789933929380` |
 
 These identifiers are public client configuration, not server credentials.
 Never add a Meta App Secret, Firebase service-account key, Supabase key, or
@@ -78,7 +79,7 @@ download conversions.
 
 ## Customer app events
 
-Firebase Analytics and Clarity share the provider-neutral
+Firebase Analytics, Meta App Events, and Clarity share the provider-neutral
 `customer-app/lib/services/analytics_service.dart` boundary.
 
 | Event | When it fires |
@@ -103,25 +104,34 @@ DebugView validation build, pass:
 flutter run --dart-define=ANALYTICS_ENABLE_DEBUG=true
 ```
 
+## Consent behavior
+
+Per the product owner's direction on 2026-07-26, the implementation assumes
+customer consent has already been obtained outside these tracking surfaces.
+There is no consent banner or in-app analytics gate: web tags fire when the
+production landing page loads, and Firebase Analytics and Clarity run in
+release builds. Revisit this decision before serving customers in a region or
+storefront whose policy requires an explicit choice or withdrawal mechanism.
+
 ## Meta mobile prerequisite
 
 The Meta Pixel ID is only for the landing page. Native Android/iOS App Events
-still require:
+use Meta Developer App ID `1611789933929380`; its Client Token is embedded in
+the required Android and iOS native client configuration. The App Secret and
+the previously supplied User Access Token are not used or stored.
 
-- Meta Developer App ID
-- Meta Client Token
-
-Use one Meta Developer App for App Events now and Facebook Login later. Keep
-the existing Android package and iOS bundle ID (`wtf.ebtl.app`) attached to
-that Meta app. Once the two identifiers are available, add the native Meta SDK
-behind `AnalyticsService`; do not instrument screens a second time.
+Use this same Meta Developer App for Facebook Login later. Keep the existing
+Android package and iOS bundle ID (`wtf.ebtl.app`) attached to that Meta app;
+the `fb1611789933929380` URL scheme is already registered for that future
+login flow.
 
 ## Validation checklist
 
 - GTM Preview shows `landing_page_ready`, download, CTA, and scroll events.
 - GA4 DebugView receives landing and customer-app events with the expected
   names, EGP values, and no PII.
-- Meta Events Manager Test Events receives PageView and landing conversions.
+- Meta Events Manager Test Events receives PageView, landing conversions, and
+  customer-app activation, content, cart, checkout, and purchase events.
 - Clarity shows separate landing (`xsjp56x4va`) and mobile (`xr1vveuqim`)
   recordings.
 - Checkout/profile/payment text is masked in real Clarity recordings.
@@ -129,9 +139,11 @@ behind `AnalyticsService`; do not instrument screens a second time.
 - `/login`, `/dashboard`, `/admin`, and `/prep` load no GTM, Meta, GA, or
   Clarity scripts.
 
-## Remaining business inputs
+The app does not currently request Apple's App Tracking Transparency
+permission. Native Meta events still run, but iOS advertising-ID attribution
+remains subject to the device's system permission.
+
+## Remaining deployment inputs
 
 - Production landing-page domain.
 - Final App Store / Google Play / smart download URL.
-- Privacy-policy URL and the approved web/mobile analytics-consent behavior.
-- Meta Developer App ID and Client Token for native App Events.

@@ -90,6 +90,9 @@ dependencies:
   # Customer-app product analytics. Uses the same Firebase project as push and
   # Crashlytics and is disabled automatically in debug builds.
   firebase_analytics: ^12.4.5
+  # Native Meta App Events for campaign attribution and conversion audiences.
+  # Uses the same Meta Developer App that will support Facebook Login later.
+  facebook_app_events: ^0.30.3
   # Crash + uncaught-error reporting. Inert unless Firebase config is present at
   # build time (see lib/services/crash_reporting_service.dart).
   firebase_crashlytics: ^5.0.4

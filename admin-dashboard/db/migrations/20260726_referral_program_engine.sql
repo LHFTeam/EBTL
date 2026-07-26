@@ -2,9 +2,11 @@
 --
 -- The Postgres schema is managed in Supabase and is NOT otherwise tracked in
 -- this repo (see AGENTS.md). This file is a hand-written migration meant to be
--- applied to the Supabase project (dashboard SQL editor, `supabase db push`,
--- or the Supabase MCP `apply_migration`). It is written to be idempotent and
--- safe to re-run.
+-- applied to the Supabase project with the Supabase MCP `apply_migration`
+-- operation (preferred, because it records migration history) or the dashboard
+-- SQL editor. This repo does not use the standard `supabase/migrations` layout,
+-- so `supabase db push` will not discover this file automatically. It is
+-- written to be idempotent and safe to re-run.
 --
 -- Context: the customer app has no login — a customer is an anonymous session
 -- token mapped to a row in `customers`. This migration introduces a referral
@@ -23,7 +25,8 @@
 --   2. Creates `referral_settings` (single-row program config) with a seed row.
 --   3. Creates `referrals` (one row per attributed friend).
 --   4. Creates `customer_credit_ledger` (append-only store-credit wallet).
---   5. Adds supporting indexes.
+--   5. Adds order linkage, validation constraints, and supporting indexes.
+--   6. Enables RLS and limits the new tables to the service-role backend.
 
 begin;
 
@@ -65,7 +68,24 @@ create table if not exists public.referral_settings (
   reward_cap_per_referrer     integer,
   terms                       text,
   updated_at                  timestamptz not null default now(),
-  constraint referral_settings_singleton check (id = true)
+  constraint referral_settings_singleton check (id = true),
+  constraint referral_settings_referrer_reward_nonnegative_chk
+    check (referrer_reward_amount >= 0),
+  constraint referral_settings_referee_discount_type_chk
+    check (referee_discount_type in ('percentage', 'fixed_amount')),
+  constraint referral_settings_referee_discount_value_chk
+    check (
+      referee_discount_value >= 0
+      and (referee_discount_type <> 'percentage' or referee_discount_value <= 100)
+    ),
+  constraint referral_settings_referee_max_discount_nonnegative_chk
+    check (referee_max_discount_amount is null or referee_max_discount_amount >= 0),
+  constraint referral_settings_min_order_nonnegative_chk
+    check (min_qualifying_order_value >= 0),
+  constraint referral_settings_reward_cap_nonnegative_chk
+    check (reward_cap_per_referrer is null or reward_cap_per_referrer >= 0),
+  constraint referral_settings_terms_length_chk
+    check (terms is null or char_length(terms) <= 2000)
 );
 
 comment on table public.referral_settings is
@@ -96,7 +116,7 @@ create table if not exists public.referrals (
   referee_customer_id     uuid        not null unique references public.customers(id) on delete cascade,
   referral_code           text        not null,
   status                  text        not null default 'pending',
-  qualifying_order_id     uuid,
+  qualifying_order_id     uuid        references public.orders(id),
   referee_discount_amount numeric(12,2) not null default 0,
   referrer_reward_amount  numeric(12,2) not null default 0,
   created_at              timestamptz not null default now(),
@@ -105,7 +125,11 @@ create table if not exists public.referrals (
   constraint referrals_status_chk
     check (status in ('pending', 'qualified', 'rewarded', 'void')),
   constraint referrals_no_self_referral
-    check (referrer_customer_id <> referee_customer_id)
+    check (referrer_customer_id <> referee_customer_id),
+  constraint referrals_referee_discount_nonnegative_chk
+    check (referee_discount_amount >= 0),
+  constraint referrals_referrer_reward_nonnegative_chk
+    check (referrer_reward_amount >= 0)
 );
 
 comment on table public.referrals is
@@ -122,11 +146,17 @@ create table if not exists public.customer_credit_ledger (
   customer_id   uuid        not null references public.customers(id) on delete cascade,
   delta_amount  numeric(12,2) not null,
   reason        text        not null,
-  referral_id   uuid        references public.referrals(id) on delete set null,
-  order_id      uuid,
+  referral_id   uuid        references public.referrals(id),
+  order_id      uuid        references public.orders(id),
   created_at    timestamptz not null default now(),
   constraint customer_credit_ledger_reason_chk
-    check (reason in ('referral_reward', 'order_redemption', 'admin_adjustment'))
+    check (reason in ('referral_reward', 'order_redemption', 'admin_adjustment')),
+  constraint customer_credit_ledger_entry_shape_chk
+    check (
+      (reason = 'referral_reward' and delta_amount > 0 and referral_id is not null)
+      or (reason = 'order_redemption' and delta_amount < 0 and order_id is not null)
+      or (reason = 'admin_adjustment' and delta_amount <> 0)
+    )
 );
 
 comment on table public.customer_credit_ledger is
@@ -146,20 +176,88 @@ comment on column public.orders.credit_applied is
   'Store credit (EGP) spent on this order, redeemed from customer_credit_ledger on payment success.';
 
 -- ---------------------------------------------------------------------------
--- 6. Indexes
+-- 6. Validation on existing tables
+-- ---------------------------------------------------------------------------
+
+-- ADD CONSTRAINT has no IF NOT EXISTS form, so guard the check explicitly to
+-- keep the migration safe to re-run.
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_catalog.pg_constraint
+    where conname = 'orders_credit_applied_nonnegative_chk'
+      and conrelid = 'public.orders'::regclass
+  ) then
+    alter table public.orders
+      add constraint orders_credit_applied_nonnegative_chk
+      check (credit_applied >= 0);
+  end if;
+end
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 7. Data API access
+-- ---------------------------------------------------------------------------
+
+-- These tables are used only through the Express backend's service-role
+-- client. Keep them inaccessible to direct anon/authenticated Data API calls.
+alter table public.referral_settings enable row level security;
+alter table public.referrals enable row level security;
+alter table public.customer_credit_ledger enable row level security;
+
+revoke all on table
+  public.referral_settings,
+  public.referrals,
+  public.customer_credit_ledger
+from anon, authenticated;
+
+grant select, insert, update
+  on table public.referral_settings, public.referrals
+  to service_role;
+
+grant select, insert
+  on table public.customer_credit_ledger
+  to service_role;
+
+-- ---------------------------------------------------------------------------
+-- 8. Indexes
 -- ---------------------------------------------------------------------------
 
 create index if not exists referrals_referrer_idx
   on public.referrals (referrer_customer_id);
 
-create index if not exists referrals_referee_idx
-  on public.referrals (referee_customer_id);
+-- referrals.referee_customer_id already has an index from its UNIQUE
+-- constraint, so a second index on that column would be redundant.
 
-create index if not exists referrals_status_idx
-  on public.referrals (status);
+create index if not exists referrals_status_created_at_idx
+  on public.referrals (status, created_at desc);
+
+create index if not exists referrals_created_at_idx
+  on public.referrals (created_at desc);
+
+create index if not exists referrals_qualifying_order_idx
+  on public.referrals (qualifying_order_id)
+  where qualifying_order_id is not null;
 
 create index if not exists customer_credit_ledger_customer_idx
   on public.customer_credit_ledger (customer_id);
+
+create index if not exists customer_credit_ledger_referral_idx
+  on public.customer_credit_ledger (referral_id)
+  where referral_id is not null;
+
+create index if not exists customer_credit_ledger_order_idx
+  on public.customer_credit_ledger (order_id)
+  where order_id is not null;
+
+create index if not exists customers_referred_by_customer_idx
+  on public.customers (referred_by_customer_id)
+  where referred_by_customer_id is not null;
+
+create index if not exists orders_referral_id_idx
+  on public.orders (referral_id)
+  where referral_id is not null;
 
 -- One reward ledger row per referral (idempotent reward grant).
 create unique index if not exists customer_credit_ledger_referral_reward_uidx
