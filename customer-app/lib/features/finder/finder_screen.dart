@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/app_data.dart';
 import '../../models/cocktail_models.dart';
+import '../../services/analytics_service.dart';
 import '../../services/api_service.dart';
 import '../../core/network/api_exception.dart';
 import '../../shared/widgets/app_state_widgets.dart';
@@ -36,6 +37,7 @@ class _FinderScreenState extends State<FinderScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.logScreenView('cocktail_finder');
 
     final initialLiquorTypeId = widget.initialLiquorTypeId?.trim();
     if (initialLiquorTypeId != null && initialLiquorTypeId.isNotEmpty) {
@@ -168,7 +170,13 @@ class _FinderScreenState extends State<FinderScreen> {
           SliverToBoxAdapter(
             child: FinderSearchBox(
               controller: searchController,
-              onSubmitted: (_) => reloadResults(),
+              onSubmitted: (_) {
+                AnalyticsService.logSearch(
+                  surface: 'cocktail_finder',
+                  hasQuery: searchController.text.trim().isNotEmpty,
+                );
+                reloadResults();
+              },
               onClear: () {
                 searchController.clear();
                 reloadResults();

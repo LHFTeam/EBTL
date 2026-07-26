@@ -5,6 +5,7 @@ import '../../core/theme/ebtl_colors.dart';
 import '../../models/app_data.dart';
 import '../../models/product_models.dart';
 import '../../models/shop_models.dart';
+import '../../services/analytics_service.dart';
 import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import 'shop_category_picker_screen.dart';
@@ -283,6 +284,18 @@ class _ShopScreenState extends State<ShopScreen> {
         variantId: variant.id,
         quantity: 1,
         locationId: locationId,
+      );
+
+      AnalyticsService.logAddToCart(
+        AnalyticsItem(
+          id: product.id,
+          name: product.name,
+          category: product.category?.name ?? product.productType,
+          variant: variant.name,
+          price: variant.priceIncVat,
+          quantity: 1,
+          currency: variant.currency,
+        ),
       );
 
       if (!mounted) return;

@@ -31,6 +31,7 @@ import 'shared/widgets/ebtl_bottom_nav.dart';
 
 /* --------------------------------- SERVICES --------------------------------- */
 import 'services/api_service.dart';
+import 'services/analytics_service.dart';
 import 'services/clarity_service.dart';
 import 'services/crash_reporting_service.dart';
 import 'services/push_notification_service.dart';
@@ -40,6 +41,7 @@ Future<void> main() async {
   // Install global crash/error handlers before the first frame so startup
   // failures are captured too. No-op when Firebase is not configured.
   await CrashReportingService.initialize();
+  await AnalyticsService.initialize();
   runApp(ClarityService.wrap(const EbtlApp()));
 }
 
@@ -106,6 +108,7 @@ class _AppStartupGateState extends State<AppStartupGate> {
 
   Future<void> _completeOnboarding() async {
     await ApiService.markOnboardingCompleted();
+    AnalyticsService.logOnboardingCompleted();
     if (!mounted) return;
 
     setState(() {
@@ -158,6 +161,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.logScreenView('home');
     appDataFuture = ApiService.fetchAppData();
     WidgetsBinding.instance.addObserver(this);
     PushNotificationService.initialize();
@@ -280,9 +284,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
 
   void openActiveOrders() {
     Navigator.of(context)
-        .push(
-          MaterialPageRoute(builder: (_) => const ActiveOrdersScreen()),
-        )
+        .push(MaterialPageRoute(builder: (_) => const ActiveOrdersScreen()))
         // The set of active orders may have changed while the screen was open.
         .then((_) => _refreshActiveOrders());
   }
@@ -295,6 +297,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
 
   void openCart() {
     setState(() => selectedIndex = 3);
+    AnalyticsService.logScreenView('cart');
   }
 
   void openFinder({String? liquorTypeId}) {
@@ -307,9 +310,13 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
           : cleanLiquorTypeId;
       selectedIndex = 1;
     });
+    AnalyticsService.logScreenView('cocktail_finder');
   }
 
   void handleBottomNavTap(int index) {
+    const screenNames = ['home', 'cocktail_finder', 'shop', 'cart', 'profile'];
+    final safeIndex = index.clamp(0, screenNames.length - 1).toInt();
+
     setState(() {
       if (index == 1) {
         finderInitialLiquorTypeId = null;
@@ -317,12 +324,14 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
 
       // Active bottom tabs:
       // 0 Home, 1 Cocktail Finder, 2 Shop, 3 Cart, 4 Profile.
-      selectedIndex = index.clamp(0, 4).toInt();
+      selectedIndex = safeIndex;
     });
+    AnalyticsService.logScreenView(screenNames[safeIndex]);
   }
 
   Future<void> selectLocation(ServiceLocation location) async {
     await ApiService.saveSelectedLocation(location);
+    AnalyticsService.logLocationSelected(location.id);
     reloadAppData();
   }
 

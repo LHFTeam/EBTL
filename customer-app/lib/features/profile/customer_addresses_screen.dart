@@ -1,3 +1,4 @@
+import 'package:clarity_flutter/clarity_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -52,7 +53,10 @@ class _CustomerAddressesScreenState extends State<CustomerAddressesScreen> {
   }
 
   Future<void> openForm({CustomerAddress? existing}) async {
-    final saved = await showAddressFormSheet(context: context, existing: existing);
+    final saved = await showAddressFormSheet(
+      context: context,
+      existing: existing,
+    );
     if (saved == true) {
       await refreshList();
       if (!mounted) return;
@@ -90,7 +94,10 @@ class _CustomerAddressesScreenState extends State<CustomerAddressesScreen> {
       setState(() => mutatingIds.remove(address.id));
       showAppSnackBar(
         context,
-        apiErrorMessage(error, fallback: 'Could not update the default address.'),
+        apiErrorMessage(
+          error,
+          fallback: 'Could not update the default address.',
+        ),
       );
     }
   }
@@ -151,18 +158,20 @@ class _CustomerAddressesScreenState extends State<CustomerAddressesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: EbtlColors.cream,
-      body: SafeArea(
-        child: Column(
-          children: [
-            ProfileSubScreenHeader(
-              title: 'Delivery addresses',
-              onBack: () => Navigator.of(context).pop(),
-            ),
-            Expanded(child: buildContent()),
-            _AddAddressBar(onTap: () => openForm()),
-          ],
+    return ClarityMask(
+      child: Scaffold(
+        backgroundColor: EbtlColors.cream,
+        body: SafeArea(
+          child: Column(
+            children: [
+              ProfileSubScreenHeader(
+                title: 'Delivery addresses',
+                onBack: () => Navigator.of(context).pop(),
+              ),
+              Expanded(child: buildContent()),
+              _AddAddressBar(onTap: () => openForm()),
+            ],
+          ),
         ),
       ),
     );
@@ -172,7 +181,8 @@ class _CustomerAddressesScreenState extends State<CustomerAddressesScreen> {
     return FutureBuilder<CustomerAddressesResponse>(
       future: addressesFuture,
       builder: (context, snapshot) {
-        final items = addresses ?? snapshot.data?.addresses ?? <CustomerAddress>[];
+        final items =
+            addresses ?? snapshot.data?.addresses ?? <CustomerAddress>[];
 
         if (snapshot.connectionState == ConnectionState.waiting &&
             items.isEmpty) {
@@ -238,7 +248,10 @@ class _AddAddressBar extends StatelessWidget {
           icon: const Icon(Icons.add_location_alt_outlined, size: 20),
           label: Text(
             'Add address',
-            style: GoogleFonts.manrope(fontSize: 15, fontWeight: FontWeight.w900),
+            style: GoogleFonts.manrope(
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ),
       ),
@@ -498,13 +511,16 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
     super.initState();
     final existing = widget.existing;
     labelController = TextEditingController(text: existing?.label ?? '');
-    compoundController =
-        TextEditingController(text: existing?.compoundName ?? '');
+    compoundController = TextEditingController(
+      text: existing?.compoundName ?? '',
+    );
     beachController = TextEditingController(text: existing?.beachName ?? '');
     buildingController = TextEditingController(text: existing?.building ?? '');
     floorController = TextEditingController(text: existing?.floor ?? '');
     unitController = TextEditingController(text: existing?.unitNumber ?? '');
-    notesController = TextEditingController(text: existing?.deliveryNotes ?? '');
+    notesController = TextEditingController(
+      text: existing?.deliveryNotes ?? '',
+    );
     isDefault = existing?.isDefault ?? false;
   }
 
@@ -571,7 +587,9 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Container(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.92,
