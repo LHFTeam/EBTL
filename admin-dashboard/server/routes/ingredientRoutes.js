@@ -60,6 +60,7 @@ const iconKey = z.string()
 
 const ingredientCreateSchema = z.object({
   name: z.string().min(1),
+  name_ar: z.string().nullable().optional(),
   category: z.string().nullable().optional(),
   icon_key: iconKey,
   base_unit: z.string().min(1),

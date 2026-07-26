@@ -15,6 +15,16 @@ import {
 } from 'lucide-react';
 import { api } from '../api/client.js';
 import { connectPrepOrderSocket } from '../realtime/prepOrderSocket.js';
+import {
+  KdsLangContext,
+  allergenLabel,
+  loadStoredLang,
+  localizedName,
+  resolveItemName,
+  storeLang,
+  t,
+  useKdsLang
+} from '../i18n/kdsStrings.js';
 
 const ACTIVE_STATUS_GROUP = 'active';
 const COMPLETED_STATUS_GROUP = 'picked_up';
@@ -28,13 +38,6 @@ const FRESH_MS = 2 * 60 * 1000;
 const WARM_MS = 10 * 60 * 1000;
 
 const ACTIVE_STATUSES = ['confirmed', 'preparing', 'ready'];
-
-const STAGE_LABEL = {
-  confirmed: 'NEW',
-  preparing: 'PREPARING',
-  ready: 'READY',
-  completed: 'COMPLETED'
-};
 
 const cairoTimeFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: BUSINESS_TIME_ZONE,
@@ -57,6 +60,10 @@ const cairoOrderTimeFormatter = new Intl.DateTimeFormat('en-GB', {
   hour12: false
 });
 
+function stageLabel(status, lang) {
+  return t(`stage.${status}`, lang);
+}
+
 function orderStartedAt(order) {
   return order.confirmed_at || order.created_at || null;
 }
@@ -65,14 +72,15 @@ function orderCompletedAt(order) {
   return order.completed_at || order.updated_at || null;
 }
 
-function orderNumber(order) {
-  return order.order_number || 'Order';
+function orderNumber(order, lang) {
+  return order.order_number || t('common.order', lang);
 }
 
-function variantLabel(item) {
-  return item.variant_name_snapshot
-    || item.product_variants?.name
-    || (Number(item.serving_count || 1) > 1 ? `${item.serving_count} servings` : 'Standard');
+function variantLabel(item, lang) {
+  return resolveItemName(item.product_variants, item.variant_name_snapshot, lang)
+    || (Number(item.serving_count || 1) > 1
+      ? t('variant.servings', lang, { count: item.serving_count })
+      : t('variant.standard', lang));
 }
 
 function formatQuantity(value) {
@@ -154,18 +162,26 @@ function orderAllergens(order) {
   return [...new Set((order.items || []).flatMap(itemAllergens))];
 }
 
-function modificationLines(item) {
+function localizedAllergens(tokens, lang) {
+  return tokens.map((token) => allergenLabel(token, lang)).join(', ');
+}
+
+function modificationLines(item, lang) {
   const lines = [];
 
   for (const removed of item.removed_ingredients || []) {
-    const name = removed.ingredient_name_snapshot || removed.ingredients?.name;
-    if (name) lines.push(`NO ${name}`);
+    const name = resolveItemName(removed.ingredients, removed.ingredient_name_snapshot, lang);
+    if (name) lines.push(t('mod.no', lang, { name }));
   }
 
   for (const addition of item.additions || []) {
-    const name = addition.product_name_snapshot || addition.products?.name;
+    const name = resolveItemName(addition.products, addition.product_name_snapshot, lang);
     const quantity = totalAdditionQuantity(item, addition);
-    if (name) lines.push(`ADD ${name}${quantity > 1 ? ` x${quantity}` : ''}`);
+    if (name) {
+      lines.push(quantity > 1
+        ? t('mod.addQty', lang, { name, quantity })
+        : t('mod.add', lang, { name }));
+    }
   }
 
   if (!lines.length && item.customization_summary) {
@@ -200,14 +216,14 @@ function nextStatusFor(status) {
   return null;
 }
 
-function fulfillmentLabel(order) {
+function fulfillmentLabel(order, lang) {
   if (order.fulfillment_type === 'delivery_to_unit') {
     return order.customer_address_snapshot
-      ? `Deliver to ${order.customer_address_snapshot}`
-      : 'Delivery to unit';
+      ? t('fulfillment.deliverTo', lang, { address: order.customer_address_snapshot })
+      : t('fulfillment.deliveryToUnit', lang);
   }
 
-  return 'Pickup at cart';
+  return t('fulfillment.pickupAtCart', lang);
 }
 
 function isRecipeItemRemoved(item, recipeItem) {
@@ -224,20 +240,22 @@ function scaledIngredientQuantity(item, recipeItem) {
   return (Number(recipeItem.quantity || 0) / recipeYield) * servingCount * orderedQuantity;
 }
 
-function connectionCopy(state) {
-  if (state === 'live') return 'Live';
-  if (state === 'offline') return 'Offline';
-  return 'Reconnecting';
+function connectionCopy(state, lang) {
+  if (state === 'live') return t('connection.live', lang);
+  if (state === 'offline') return t('connection.offline', lang);
+  return t('connection.reconnecting', lang);
 }
 
 function TicketItem({ order, item, onOpenRecipe }) {
-  const modifications = modificationLines(item);
+  const lang = useKdsLang();
+  const modifications = modificationLines(item, lang);
+  const name = resolveItemName(item.products, item.product_name_snapshot, lang) || t('common.item', lang);
 
   return (
     <div className="prepKdsTicketItem">
       <span className="prepKdsTicketQty">&times;{formatQuantity(item.quantity)}</span>
       <span className="prepKdsTicketItemBody">
-        <span className="prepKdsTicketItemName">{item.product_name_snapshot || item.products?.name || 'Item'}</span>
+        <span className="prepKdsTicketItemName">{name}</span>
         {modifications.map((line) => (
           <span className="prepKdsTicketMod" key={line}>&#8627; {line}</span>
         ))}
@@ -250,24 +268,27 @@ function TicketItem({ order, item, onOpenRecipe }) {
           onOpenRecipe(order, item);
         }}
       >
-        Recipe
+        {t('button.recipe', lang)}
       </button>
     </div>
   );
 }
 
 function PrepTicket({ order, now, saving, highlighted, onAdvance, onOpenRecipe }) {
+  const lang = useKdsLang();
   const urgency = urgencyFor(order, now);
   const allergens = orderAllergens(order);
   const nextStatus = nextStatusFor(order.status);
   const FulfillmentIcon = order.fulfillment_type === 'delivery_to_unit' ? Truck : MapPin;
+  const code = orderNumber(order, lang);
+  const stage = stageLabel(order.status, lang);
 
   return (
     <article
       className={`prepKdsTicket prepKdsTicket-${urgency} prepKdsTicket-${order.status} ${highlighted ? 'prepKdsTicket-new' : ''} ${saving ? 'prepKdsTicket-saving' : ''}`}
       role="button"
       tabIndex={0}
-      aria-label={`${orderNumber(order)} - ${STAGE_LABEL[order.status]}. Press to advance.`}
+      aria-label={t('ticket.ariaAdvance', lang, { order: code, stage })}
       aria-busy={saving}
       onClick={() => nextStatus && onAdvance(order, nextStatus)}
       onKeyDown={(event) => {
@@ -278,7 +299,7 @@ function PrepTicket({ order, now, saving, highlighted, onAdvance, onOpenRecipe }
       }}
     >
       <div className={`prepKdsTicketHead prepKdsTicketHead-${urgency}`}>
-        <span className="prepKdsTicketCode">{orderNumber(order)}</span>
+        <span className="prepKdsTicketCode">{code}</span>
         <span className="prepKdsTicketTimer">
           {saving ? <RefreshCw className="spinIcon" size={18} /> : <Clock3 size={17} />}
           {formatTimer(elapsedMsFor(order, now))}
@@ -288,14 +309,14 @@ function PrepTicket({ order, now, saving, highlighted, onAdvance, onOpenRecipe }
       <div className="prepKdsTicketBody">
         <div className="prepKdsTicketFulfillment">
           <FulfillmentIcon size={15} />
-          <span>{fulfillmentLabel(order)}</span>
+          <span>{fulfillmentLabel(order, lang)}</span>
           <span className="prepKdsTicketReceived">{formatOrderTime(orderStartedAt(order))}</span>
         </div>
 
         {allergens.length > 0 && (
           <div className="prepKdsTicketAllergens" role="alert">
             <AlertTriangle size={15} />
-            <span><strong>ALLERGEN</strong> {allergens.join(', ')}</span>
+            <span><strong>{t('ticket.allergen', lang)}</strong> {localizedAllergens(allergens, lang)}</span>
           </div>
         )}
 
@@ -307,25 +328,27 @@ function PrepTicket({ order, now, saving, highlighted, onAdvance, onOpenRecipe }
 
         {order.customer_notes && (
           <div className="prepKdsTicketNote">
-            <strong>NOTE</strong>
+            <strong>{t('ticket.note', lang)}</strong>
             <span>{order.customer_notes}</span>
           </div>
         )}
       </div>
 
       <div className={`prepKdsTicketStage prepKdsTicketStage-${order.status}`}>
-        {STAGE_LABEL[order.status]}
+        {stage}
       </div>
     </article>
   );
 }
 
 function CompletedTicket({ order }) {
+  const lang = useKdsLang();
+
   return (
     <article className="prepKdsTicket prepKdsTicket-done">
       <div className="prepKdsTicketHead prepKdsTicketHead-done">
-        <span className="prepKdsTicketCode">{orderNumber(order)}</span>
-        <span className="prepKdsDoneBadge"><Check size={14} /> Done</span>
+        <span className="prepKdsTicketCode">{orderNumber(order, lang)}</span>
+        <span className="prepKdsDoneBadge"><Check size={14} /> {t('ticket.done', lang)}</span>
       </div>
 
       <div className="prepKdsTicketBody">
@@ -334,21 +357,22 @@ function CompletedTicket({ order }) {
             <div className="prepKdsTicketItem prepKdsTicketItem-done" key={item.id}>
               <span className="prepKdsTicketQty">&times;{formatQuantity(item.quantity)}</span>
               <span className="prepKdsTicketItemBody">
-                <span className="prepKdsTicketItemName">{item.product_name_snapshot || item.products?.name || 'Item'}</span>
+                <span className="prepKdsTicketItemName">{resolveItemName(item.products, item.product_name_snapshot, lang) || t('common.item', lang)}</span>
               </span>
             </div>
           ))}
         </div>
-        <span className="prepKdsCompletedAt">Completed {formatOrderTime(orderCompletedAt(order))} Cairo</span>
+        <span className="prepKdsCompletedAt">{t('ticket.completedAt', lang, { time: formatOrderTime(orderCompletedAt(order)) })}</span>
       </div>
 
-      <div className="prepKdsTicketStage prepKdsTicketStage-completed">COMPLETED</div>
+      <div className="prepKdsTicketStage prepKdsTicketStage-completed">{t('stage.completed', lang)}</div>
     </article>
   );
 }
 
 function PrepRecipeOverlay({ payload, now, onClose }) {
   const dialogRef = useRef(null);
+  const lang = useKdsLang();
 
   useEffect(() => {
     if (!payload) return undefined;
@@ -420,12 +444,12 @@ function PrepRecipeOverlay({ payload, now, onClose }) {
 
   const { order, item } = payload;
   const recipeItems = item.recipe_items || [];
-  const modifications = modificationLines(item);
+  const modifications = modificationLines(item, lang);
   const allergens = itemAllergens(item);
 
   return (
     <div className="prepKdsOverlay">
-      <button className="prepKdsOverlayScrim" type="button" aria-label="Close recipe details" onClick={onClose} />
+      <button className="prepKdsOverlayScrim" type="button" aria-label={t('recipe.closeAria', lang)} onClick={onClose} />
       <section
         ref={dialogRef}
         className="prepKdsRecipe"
@@ -436,34 +460,34 @@ function PrepRecipeOverlay({ payload, now, onClose }) {
       >
         <div className="prepKdsRecipeHead">
           <div>
-            <span className="prepKdsRecipeEyebrow">{orderNumber(order)} / Recipe</span>
-            <h2 id="prep-recipe-title">{item.product_name_snapshot || item.products?.name || 'Item'}</h2>
-            <p>{formatQuantity(item.quantity)} x {variantLabel(item)}</p>
+            <span className="prepKdsRecipeEyebrow">{t('recipe.eyebrow', lang, { order: orderNumber(order, lang) })}</span>
+            <h2 id="prep-recipe-title">{resolveItemName(item.products, item.product_name_snapshot, lang) || t('common.item', lang)}</h2>
+            <p>{formatQuantity(item.quantity)} x {variantLabel(item, lang)}</p>
           </div>
           <button className="prepKdsClose" type="button" onClick={onClose}>
             <X size={21} />
-            Close
+            {t('button.close', lang)}
           </button>
         </div>
 
         <div className="prepKdsRecipeContext">
-          <span><Clock3 size={18} /> {formatTimer(elapsedMsFor(order, now))} elapsed</span>
-          <span><MapPin size={18} /> {fulfillmentLabel(order)}</span>
+          <span><Clock3 size={18} /> {t('recipe.elapsed', lang, { timer: formatTimer(elapsedMsFor(order, now)) })}</span>
+          <span><MapPin size={18} /> {fulfillmentLabel(order, lang)}</span>
         </div>
 
         {allergens.length > 0 && (
           <div className="prepKdsRecipeAlert" role="alert">
             <AlertTriangle size={24} />
             <span>
-              <strong>ALLERGY WARNING</strong>
-              {allergens.join(', ')}
+              <strong>{t('recipe.allergyWarning', lang)}</strong>
+              {localizedAllergens(allergens, lang)}
             </span>
           </div>
         )}
 
         {modifications.length > 0 && (
           <section className="prepKdsRecipePanel prepKdsRecipeMods">
-            <h3>Customer modifications</h3>
+            <h3>{t('recipe.customerMods', lang)}</h3>
             <div>
               {modifications.map((line) => <strong key={line}>{line}</strong>)}
             </div>
@@ -471,14 +495,14 @@ function PrepRecipeOverlay({ payload, now, onClose }) {
         )}
 
         <section className="prepKdsRecipePanel">
-          <h3>Ingredients for this order</h3>
+          <h3>{t('recipe.ingredients', lang)}</h3>
           {recipeItems.length > 0 ? (
             <div className="prepKdsIngredients">
               {recipeItems.map((recipeItem) => {
                 const removed = isRecipeItemRemoved(item, recipeItem);
-                const ingredientName = recipeItem.ingredients?.name
+                const ingredientName = localizedName(recipeItem.ingredients, lang)
                   || recipeItem.ingredient_name_snapshot
-                  || 'Ingredient';
+                  || t('common.ingredient', lang);
                 const ingredientAllergens = asStringList(recipeItem.ingredients?.allergen_flags);
 
                 return (
@@ -487,15 +511,15 @@ function PrepRecipeOverlay({ payload, now, onClose }) {
                       <strong>{ingredientName}</strong>
                       <small>
                         {removed
-                          ? 'Removed from this order'
+                          ? t('recipe.removed', lang)
                           : [
-                              recipeItem.is_optional ? 'Optional' : '',
+                              recipeItem.is_optional ? t('recipe.optional', lang) : '',
                               recipeItem.is_customer_supplied || recipeItem.ingredients?.is_customer_supplied
-                                ? 'Customer supplied'
+                                ? t('recipe.customerSupplied', lang)
                                 : ''
-                            ].filter(Boolean).join(' / ') || 'Base recipe'}
+                            ].filter(Boolean).join(' / ') || t('recipe.baseRecipe', lang)}
                       </small>
-                      {ingredientAllergens.length > 0 && <em>Allergen: {ingredientAllergens.join(', ')}</em>}
+                      {ingredientAllergens.length > 0 && <em>{t('recipe.allergenLabel', lang, { list: localizedAllergens(ingredientAllergens, lang) })}</em>}
                     </span>
                     <b>
                       {formatQuantity(scaledIngredientQuantity(item, recipeItem))}
@@ -507,26 +531,26 @@ function PrepRecipeOverlay({ payload, now, onClose }) {
               })}
             </div>
           ) : (
-            <div className="prepKdsRecipeEmpty">No recipe ingredients are recorded for this item.</div>
+            <div className="prepKdsRecipeEmpty">{t('recipe.empty', lang)}</div>
           )}
         </section>
 
         {item.recipe?.notes && (
           <section className="prepKdsRecipePanel">
-            <h3>Preparation notes</h3>
+            <h3>{t('recipe.prepNotes', lang)}</h3>
             <p className="prepKdsPreparationNotes">{item.recipe.notes}</p>
           </section>
         )}
 
         {(item.additions || []).length > 0 && (
           <section className="prepKdsRecipePanel">
-            <h3>Added extras</h3>
+            <h3>{t('recipe.addedExtras', lang)}</h3>
             <div className="prepKdsExtras">
               {item.additions.map((addition) => (
                 <div key={addition.id}>
-                  <strong>{addition.product_name_snapshot || addition.products?.name || 'Extra'}</strong>
+                  <strong>{resolveItemName(addition.products, addition.product_name_snapshot, lang) || t('common.extra', lang)}</strong>
                   <span>
-                    {addition.variant_name_snapshot || 'Standard'}
+                    {addition.variant_name_snapshot || t('variant.standard', lang)}
                     {' / '}
                     x{formatQuantity(totalAdditionQuantity(item, addition))}
                   </span>
@@ -538,7 +562,7 @@ function PrepRecipeOverlay({ payload, now, onClose }) {
 
         {order.customer_notes && (
           <section className="prepKdsRecipePanel prepKdsRecipeOrderNote">
-            <h3>Order note</h3>
+            <h3>{t('recipe.orderNote', lang)}</h3>
             <p>{order.customer_notes}</p>
           </section>
         )}
@@ -554,6 +578,7 @@ export default function PrepOrders({ user, onLogout }) {
   const [location, setLocation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [lang, setLang] = useState(loadStoredLang);
   const [connectionState, setConnectionState] = useState(
     typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'reconnecting'
   );
@@ -574,16 +599,29 @@ export default function PrepOrders({ user, onLogout }) {
   const queuedRefreshTimerRef = useRef(null);
   const highlightTimerRef = useRef(null);
   const filterRef = useRef(filter);
+  const langRef = useRef(lang);
+
+  const dir = lang === 'ar' ? 'rtl' : 'ltr';
+  const tt = (key, params) => t(key, lang, params);
 
   useEffect(() => {
     filterRef.current = filter;
   }, [filter]);
 
   useEffect(() => {
+    langRef.current = lang;
+  }, [lang]);
+
+  useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
+  }, []);
+
+  const changeLang = useCallback((next) => {
+    setLang(next);
+    storeLang(next);
   }, []);
 
   const applyServerTime = useCallback((serverTime) => {
@@ -677,7 +715,7 @@ export default function PrepOrders({ user, onLogout }) {
             window.location.assign('/login');
             return;
           }
-          setLoadError(error.message || 'Could not load the kitchen queue.');
+          setLoadError(error.message || t('error.loadQueue', langRef.current));
         }
       } finally {
         if (mountedRef.current) setLoading(false);
@@ -727,7 +765,7 @@ export default function PrepOrders({ user, onLogout }) {
 
     const locationResult = results[0];
     if (locationResult.status === 'rejected') {
-      setLoadError(locationResult.reason?.message || 'Could not load the assigned prep location.');
+      setLoadError(locationResult.reason?.message || t('error.loadLocation', langRef.current));
     }
     setLoading(false);
   }, [loadLocation, loadOrders, loadCompleted]);
@@ -859,11 +897,13 @@ export default function PrepOrders({ user, onLogout }) {
 
       if (!mountedRef.current) return;
 
+      const code = orderNumber(order, langRef.current);
+
       if (status === 'completed') {
         setOrders((current) => current.filter((entry) => entry.id !== order.id));
         knownOrderIdsRef.current.delete(order.id);
         loadCompleted();
-        setToast({ type: 'success', message: `${orderNumber(order)} completed.` });
+        setToast({ type: 'success', message: t('toast.completed', langRef.current, { order: code }) });
       } else {
         setOrders((current) => current.map((entry) => (
           entry.id === order.id ? { ...entry, status } : entry
@@ -871,8 +911,8 @@ export default function PrepOrders({ user, onLogout }) {
         setToast({
           type: 'success',
           message: status === 'ready'
-            ? `${orderNumber(order)} is ready for handoff.`
-            : `${orderNumber(order)} moved to Preparing.`
+            ? t('toast.ready', langRef.current, { order: code })
+            : t('toast.preparing', langRef.current, { order: code })
         });
       }
 
@@ -884,8 +924,8 @@ export default function PrepOrders({ user, onLogout }) {
       setToast({
         type: 'error',
         message: conflict
-          ? `${orderNumber(order)} was already updated on another screen.`
-          : (error.message || 'Could not update this order.')
+          ? t('toast.conflict', langRef.current, { order: orderNumber(order, langRef.current) })
+          : (error.message || t('error.updateOrder', langRef.current))
       });
     } finally {
       if (mountedRef.current) {
@@ -908,21 +948,42 @@ export default function PrepOrders({ user, onLogout }) {
     } catch (error) {
       if (!mountedRef.current) return;
       setLoggingOut(false);
-      setToast({ type: 'error', message: error.message || 'Could not log out.' });
+      setToast({ type: 'error', message: error.message || t('error.logout', langRef.current) });
     }
   }
 
-  const connectionLabel = connectionCopy(connectionState);
+  const connectionLabel = connectionCopy(connectionState, lang);
   const ConnectionIcon = connectionState === 'live' ? Wifi : WifiOff;
   const messageIsError = toast ? toast.type === 'error' : Boolean(loadError);
 
+  const langToggle = (
+    <div className="prepKdsLangToggle" role="group" aria-label="Language">
+      <button
+        type="button"
+        className={lang === 'ar' ? 'prepKdsLangActive' : ''}
+        aria-pressed={lang === 'ar'}
+        onClick={() => changeLang('ar')}
+      >
+        عربي
+      </button>
+      <button
+        type="button"
+        className={lang === 'en' ? 'prepKdsLangActive' : ''}
+        aria-pressed={lang === 'en'}
+        onClick={() => changeLang('en')}
+      >
+        EN
+      </button>
+    </div>
+  );
+
   if (loading && !orders.length && !location) {
     return (
-      <div className="prepKdsRoot prepKdsBoot">
+      <div className="prepKdsRoot prepKdsBoot" dir={dir} lang={lang}>
         <div className="prepKdsBootCard">
           <ChefHat size={42} />
-          <strong>Opening order display</strong>
-          <span>Loading the assigned location and live queue...</span>
+          <strong>{tt('boot.title')}</strong>
+          <span>{tt('boot.subtitle')}</span>
         </div>
       </div>
     );
@@ -930,15 +991,16 @@ export default function PrepOrders({ user, onLogout }) {
 
   if (!location) {
     return (
-      <div className="prepKdsRoot prepKdsBoot">
+      <div className="prepKdsRoot prepKdsBoot" dir={dir} lang={lang}>
         <div className="prepKdsBootCard prepKdsBootError">
           <MapPin size={42} />
-          <strong>Prep location unavailable</strong>
-          <span>{toast?.message || loadError || 'This prep employee does not have an active assigned cart location.'}</span>
+          <strong>{tt('locationError.title')}</strong>
+          <span>{toast?.message || loadError || tt('locationError.subtitle')}</span>
           <div>
-            <button type="button" onClick={loadKitchen}><RefreshCw size={18} /> Try again</button>
-            <button type="button" onClick={handleLogout} disabled={loggingOut}><LogOut size={18} /> Logout</button>
+            <button type="button" onClick={loadKitchen}><RefreshCw size={18} /> {tt('button.tryAgain')}</button>
+            <button type="button" onClick={handleLogout} disabled={loggingOut}><LogOut size={18} /> {tt('button.logout')}</button>
           </div>
+          {langToggle}
         </div>
       </div>
     );
@@ -947,127 +1009,130 @@ export default function PrepOrders({ user, onLogout }) {
   const isCompleted = filter === 'completed';
 
   return (
-    <div className="prepKdsRoot">
-      <header className="prepKdsHeader">
-        <div className="prepKdsHeaderLead">
-          <div className="prepKdsHeaderLeadTop">
-            <span className="prepKdsHeaderEyebrow">Fulfillment</span>
-            <span className={`prepKdsConnection prepKdsConnection-${connectionState}`}>
-              <ConnectionIcon size={13} />
-              {connectionLabel}
+    <KdsLangContext.Provider value={lang}>
+      <div className="prepKdsRoot" dir={dir} lang={lang}>
+        <header className="prepKdsHeader">
+          <div className="prepKdsHeaderLead">
+            <div className="prepKdsHeaderLeadTop">
+              <span className="prepKdsHeaderEyebrow">{tt('header.fulfillment')}</span>
+              <span className={`prepKdsConnection prepKdsConnection-${connectionState}`}>
+                <ConnectionIcon size={13} />
+                {connectionLabel}
+              </span>
+              {langToggle}
+            </div>
+            <h1 className="prepKdsLocationName">{localizedName(location, lang)}</h1>
+          </div>
+
+          <div className="prepKdsFilter" role="tablist" aria-label={tt('filter.aria')}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={!isCompleted}
+              className={!isCompleted ? 'prepKdsFilterActive' : ''}
+              onClick={() => setFilter('active')}
+            >
+              {tt('filter.active')} &middot; {orders.length}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={isCompleted}
+              className={isCompleted ? 'prepKdsFilterActive' : ''}
+              onClick={showCompleted}
+            >
+              {tt('filter.completed')} &middot; {completedOrders.length}
+            </button>
+          </div>
+
+          <div className="prepKdsStageCounts">
+            <div className="prepKdsStageCount prepKdsStageCount-new">
+              <strong>{stageCounts.confirmed}</strong>
+              <small>{tt('count.new')}</small>
+            </div>
+            <div className="prepKdsStageCount prepKdsStageCount-preparing">
+              <strong>{stageCounts.preparing}</strong>
+              <small>{tt('count.preparing')}</small>
+            </div>
+            <div className="prepKdsStageCount prepKdsStageCount-ready">
+              <strong>{stageCounts.ready}</strong>
+              <small>{tt('count.ready')}</small>
+            </div>
+          </div>
+        </header>
+
+        {(toast || loadError) && (
+          <div className={`prepKdsToast ${messageIsError ? 'prepKdsToast-error' : 'prepKdsToast-success'}`} role="status">
+            <span>{toast?.message || loadError}</span>
+            {loadError && <button type="button" onClick={() => loadOrders({ initial: true })}>{tt('button.retry')}</button>}
+            <button type="button" aria-label={tt('toast.dismissAria')} onClick={() => {
+              setToast(null);
+              setLoadError('');
+            }}><X size={18} /></button>
+          </div>
+        )}
+
+        <main className="prepKdsBoard">
+          {!isCompleted && (
+            orders.length === 0 ? (
+              <div className="prepKdsEmpty">
+                <ChefHat size={38} />
+                <strong>{tt('empty.activeTitle')}</strong>
+                <span>{tt('empty.activeSubtitle')}</span>
+              </div>
+            ) : (
+              <div className="prepKdsWall">
+                {orders.map((order) => (
+                  <PrepTicket
+                    key={order.id}
+                    order={order}
+                    now={now}
+                    saving={savingOrderIds.has(order.id)}
+                    highlighted={highlightedOrderIds.has(order.id)}
+                    onAdvance={advanceOrder}
+                    onOpenRecipe={openRecipe}
+                  />
+                ))}
+              </div>
+            )
+          )}
+
+          {isCompleted && (
+            completedOrders.length === 0 ? (
+              <div className="prepKdsEmpty">
+                <Check size={38} />
+                <strong>{tt('empty.completedTitle')}</strong>
+                <span>{tt('empty.completedSubtitle')}</span>
+              </div>
+            ) : (
+              <div className="prepKdsWall">
+                {completedOrders.map((order) => (
+                  <CompletedTicket key={order.id} order={order} />
+                ))}
+              </div>
+            )
+          )}
+        </main>
+
+        <nav className="prepKdsNav">
+          <div className="prepKdsNavUser">
+            <span className="prepKdsAvatar">{initialsFor(user?.name || user?.username)}</span>
+            <span className="prepKdsNavUserCopy">
+              <strong>{user?.name || user?.username || tt('common.employee')}</strong>
+              <small>{tt('nav.stationOperator')} &middot; {localizedName(location, lang)}</small>
             </span>
           </div>
-          <h1 className="prepKdsLocationName">{location.name}</h1>
-        </div>
 
-        <div className="prepKdsFilter" role="tablist" aria-label="Order filter">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={!isCompleted}
-            className={!isCompleted ? 'prepKdsFilterActive' : ''}
-            onClick={() => setFilter('active')}
-          >
-            Active &middot; {orders.length}
+          <div className="prepKdsNavClock">{cairoTimeFormatter.format(new Date(now))}</div>
+
+          <button className="prepKdsLogout" type="button" onClick={handleLogout} disabled={loggingOut}>
+            {loggingOut ? <RefreshCw size={17} className="spinIcon" /> : <Power size={17} />}
+            {tt('button.logout')}
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={isCompleted}
-            className={isCompleted ? 'prepKdsFilterActive' : ''}
-            onClick={showCompleted}
-          >
-            Completed &middot; {completedOrders.length}
-          </button>
-        </div>
+        </nav>
 
-        <div className="prepKdsStageCounts">
-          <div className="prepKdsStageCount prepKdsStageCount-new">
-            <strong>{stageCounts.confirmed}</strong>
-            <small>New</small>
-          </div>
-          <div className="prepKdsStageCount prepKdsStageCount-preparing">
-            <strong>{stageCounts.preparing}</strong>
-            <small>Preparing</small>
-          </div>
-          <div className="prepKdsStageCount prepKdsStageCount-ready">
-            <strong>{stageCounts.ready}</strong>
-            <small>Ready</small>
-          </div>
-        </div>
-      </header>
-
-      {(toast || loadError) && (
-        <div className={`prepKdsToast ${messageIsError ? 'prepKdsToast-error' : 'prepKdsToast-success'}`} role="status">
-          <span>{toast?.message || loadError}</span>
-          {loadError && <button type="button" onClick={() => loadOrders({ initial: true })}>Retry</button>}
-          <button type="button" aria-label="Dismiss message" onClick={() => {
-            setToast(null);
-            setLoadError('');
-          }}><X size={18} /></button>
-        </div>
-      )}
-
-      <main className="prepKdsBoard">
-        {!isCompleted && (
-          orders.length === 0 ? (
-            <div className="prepKdsEmpty">
-              <ChefHat size={38} />
-              <strong>No active orders</strong>
-              <span>New orders will appear here automatically, in the order they arrive.</span>
-            </div>
-          ) : (
-            <div className="prepKdsWall">
-              {orders.map((order) => (
-                <PrepTicket
-                  key={order.id}
-                  order={order}
-                  now={now}
-                  saving={savingOrderIds.has(order.id)}
-                  highlighted={highlightedOrderIds.has(order.id)}
-                  onAdvance={advanceOrder}
-                  onOpenRecipe={openRecipe}
-                />
-              ))}
-            </div>
-          )
-        )}
-
-        {isCompleted && (
-          completedOrders.length === 0 ? (
-            <div className="prepKdsEmpty">
-              <Check size={38} />
-              <strong>No completed orders yet</strong>
-              <span>Orders you finish will appear here for the rest of your shift.</span>
-            </div>
-          ) : (
-            <div className="prepKdsWall">
-              {completedOrders.map((order) => (
-                <CompletedTicket key={order.id} order={order} />
-              ))}
-            </div>
-          )
-        )}
-      </main>
-
-      <nav className="prepKdsNav">
-        <div className="prepKdsNavUser">
-          <span className="prepKdsAvatar">{initialsFor(user?.name || user?.username)}</span>
-          <span className="prepKdsNavUserCopy">
-            <strong>{user?.name || user?.username || 'Employee'}</strong>
-            <small>Station operator &middot; {location.name}</small>
-          </span>
-        </div>
-
-        <div className="prepKdsNavClock">{cairoTimeFormatter.format(new Date(now))}</div>
-
-        <button className="prepKdsLogout" type="button" onClick={handleLogout} disabled={loggingOut}>
-          {loggingOut ? <RefreshCw size={17} className="spinIcon" /> : <Power size={17} />}
-          Log Out
-        </button>
-      </nav>
-
-      <PrepRecipeOverlay payload={recipePayload} now={now} onClose={closeRecipe} />
-    </div>
+        <PrepRecipeOverlay payload={recipePayload} now={now} onClose={closeRecipe} />
+      </div>
+    </KdsLangContext.Provider>
   );
 }

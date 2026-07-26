@@ -194,6 +194,7 @@ async function blockInvalidPrepLocationChange({ locationId, nextLocation, res })
 
 const createLocationSchema = z.object({
   name: z.preprocess(trimText, z.string().min(1, 'Location name is required.')),
+  name_ar: z.preprocess(optionalText, z.string().optional()),
   type: z.enum(locationTypes),
   compound_name: z.preprocess(optionalText, z.string().optional()),
   beach_name: z.preprocess(optionalText, z.string().optional()),
@@ -215,6 +216,7 @@ const createLocationSchema = z.object({
 
 const updateLocationSchema = z.object({
   name: z.preprocess(trimText, z.string().min(1, 'Location name is required.').optional()),
+  name_ar: z.preprocess(nullableText, z.string().nullable().optional()),
   type: z.enum(locationTypes).optional(),
   compound_name: z.preprocess(nullableText, z.string().nullable().optional()),
   beach_name: z.preprocess(nullableText, z.string().nullable().optional()),

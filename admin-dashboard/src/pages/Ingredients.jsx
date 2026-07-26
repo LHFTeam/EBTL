@@ -7,6 +7,7 @@ import { splitTags, toBool, yesNo } from '../utils/format.js';
 
 const blank = {
   name: '',
+  name_ar: '',
   category: '',
   icon_key: '',
   base_unit: 'ml',
@@ -129,6 +130,7 @@ export default function Ingredients() {
   function buildPayload() {
     const payload = {
       name: form.name.trim(),
+      name_ar: optionalText(form.name_ar),
       category: optionalText(form.category),
       icon_key: optionalIconKey(form.icon_key),
       base_unit: form.base_unit,
@@ -190,6 +192,7 @@ export default function Ingredients() {
     setForm({
       ...blank,
       ...row,
+      name_ar: row.name_ar || '',
       category: row.category || '',
       icon_key: row.icon_key || '',
       purchase_unit_name: row.purchase_unit_name || '',    
@@ -232,6 +235,7 @@ export default function Ingredients() {
     <Section title={editing ? 'Edit Ingredient' : 'Add Ingredient'} action={editing && <button onClick={resetForm}>Cancel edit</button>}>
       <form className="miniForm formGrid" onSubmit={save}>
         <input required placeholder="Name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/>
+        <input placeholder="Name (Arabic)" dir="rtl" lang="ar" value={form.name_ar || ''} onChange={e => setForm({ ...form, name_ar: e.target.value })}/>
         <input placeholder="Category" value={form.category || ''} onChange={e => setForm({ ...form, category: e.target.value })}/>
         <input
           list="ingredient-icon-key-options"

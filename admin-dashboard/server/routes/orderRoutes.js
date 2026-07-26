@@ -177,7 +177,7 @@ async function loadRecipeContext({ itemRows, additionRows }) {
       .in('id', uniqueRecipeIds),
     supabase
       .from('recipe_items')
-      .select('*, ingredients(id,name,base_unit,is_customer_supplied,allergen_flags)')
+      .select('*, ingredients(id,name,name_ar,base_unit,is_customer_supplied,allergen_flags)')
       .in('recipe_id', uniqueRecipeIds)
       .order('id', { ascending: true })
   ]);
@@ -234,6 +234,7 @@ function prepRecipeItems(recipeItems = []) {
     ingredients: recipeItem.ingredients ? {
       id: recipeItem.ingredients.id,
       name: recipeItem.ingredients.name,
+      name_ar: recipeItem.ingredients.name_ar,
       base_unit: recipeItem.ingredients.base_unit,
       is_customer_supplied: Boolean(recipeItem.ingredients.is_customer_supplied),
       allergen_flags: recipeItem.ingredients.allergen_flags
@@ -254,9 +255,14 @@ function prepOperationalItem(item) {
     serving_count: item.serving_count,
     products: item.products ? {
       name: item.products.name,
+      name_ar: item.products.name_ar,
       product_type: item.products.product_type,
       image_url: item.products.image_url,
       prep_time_minutes: item.products.prep_time_minutes
+    } : null,
+    product_variants: item.product_variants ? {
+      name: item.product_variants.name,
+      name_ar: item.product_variants.name_ar
     } : null,
     recipe: prepRecipe(item.recipe),
     recipe_items: prepRecipeItems(item.recipe_items),
@@ -423,7 +429,7 @@ orderRouter.get('/cart-operations/orders', requireArea('orders'), async (req, re
 
   const itemResult = await supabase
     .from('order_items')
-    .select('*, products(id,name,product_type,image_url,prep_time_minutes), product_variants(id,name,serving_count)')
+    .select('*, products(id,name,name_ar,product_type,image_url,prep_time_minutes), product_variants(id,name,name_ar,serving_count)')
     .in('order_id', orderIds)
     .order('created_at', { ascending: true });
 
