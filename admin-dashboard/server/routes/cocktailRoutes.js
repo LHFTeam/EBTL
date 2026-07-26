@@ -293,6 +293,7 @@ cocktailRouter.delete('/product-tags/:id', requireArea('cocktails'), async (req,
 
 const productCreateSchema = z.object({
   name: z.string().min(1),
+  name_ar: z.string().nullable().optional(),
   slug: z.string().min(1),
   product_type: z.enum(productTypes).optional(),
   description: markdownDescription,
@@ -304,6 +305,7 @@ const productCreateSchema = z.object({
   prep_time_minutes: z.coerce.number().int().nonnegative().optional(),
   tags: z.array(z.string()).optional(),
   variant_name: z.string().min(1).default('Standard'),
+  variant_name_ar: z.string().nullable().optional(),
   serving_count: z.coerce.number().int().positive().default(1),
   price_ex_vat: z.coerce.number().nonnegative().default(0),
   vat_rate: vatRate.default(0.14),
@@ -334,6 +336,7 @@ async function createProduct(req, res, { mode }) {
   const productPayload = clean({
     category_id: p.category_id,
     name: p.name,
+    name_ar: p.name_ar,
     slug: p.slug,
     product_type: productType,
     description: p.description,
@@ -353,6 +356,7 @@ async function createProduct(req, res, { mode }) {
   const variant = await supabase.from('product_variants').insert({
     product_id: product.data.id,
     name: p.variant_name,
+    name_ar: p.variant_name_ar,
     serving_count: p.serving_count,
     price_ex_vat: p.price_ex_vat,
     vat_rate: p.vat_rate,
@@ -401,6 +405,7 @@ cocktailRouter.post('/additional-products', requireArea('additional-products'), 
 cocktailRouter.patch('/cocktails/:id', requireArea('cocktails'), async (req, res) => {
   const parsed = z.object({
     name: z.string().min(1).optional(),
+    name_ar: z.string().nullable().optional(),
     slug: z.string().min(1).optional(),
     product_type: z.enum(productTypes).optional(),
     description: markdownDescription,
@@ -537,6 +542,7 @@ cocktailRouter.delete('/cocktails/:id', requireArea('cocktails'), async (req, re
 
 const variantCreateSchema = z.object({
   name: z.string().min(1),
+  name_ar: z.string().nullable().optional(),
   serving_count: z.coerce.number().int().positive(),
   price_ex_vat: z.coerce.number().nonnegative(),
   vat_rate: vatRate.default(0.14),
@@ -545,6 +551,7 @@ const variantCreateSchema = z.object({
 
 const variantUpdateSchema = z.object({
   name: z.string().min(1).optional(),
+  name_ar: z.string().nullable().optional(),
   serving_count: z.coerce.number().int().positive().optional(),
   price_ex_vat: z.coerce.number().nonnegative().optional(),
   vat_rate: vatRate.optional(),

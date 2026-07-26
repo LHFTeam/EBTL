@@ -7,6 +7,7 @@ import { money, slugify, toBool } from '../utils/format.js';
 
 const blankProduct = {
   name: '',
+  name_ar: '',
   slug: '',
   product_type: 'cocktail',
   category_id: '',
@@ -18,6 +19,7 @@ const blankProduct = {
   prep_time_minutes: 5,
   tags: [],
   variant_name: 'Standard',
+  variant_name_ar: '',
   serving_count: 1,
   price_ex_vat: '',
   vat_rate: 0.14,
@@ -26,7 +28,7 @@ const blankProduct = {
   recipe_items: [{ ingredient_id: '', quantity: '', unit: '' }]
 };
 
-const blankVariant = { name: '', serving_count: 1, price_ex_vat: '', vat_rate: 0.14, is_active: true };
+const blankVariant = { name: '', name_ar: '', serving_count: 1, price_ex_vat: '', vat_rate: 0.14, is_active: true };
 const blankRecipe = { status: 'draft', yield_servings: 1, notes: '' };
 const blankRecipeItem = { ingredient_id: '', quantity: '', unit: '', is_optional: false, is_customer_supplied: false };
 
@@ -374,6 +376,7 @@ export default function Cocktails({
 
     setProductEdit({
       name: selectedProduct.name || '',
+      name_ar: selectedProduct.name_ar || '',
       slug: selectedProduct.slug || '',
       product_type: selectedProduct.product_type || productType,
       category_id: selectedProduct.category_id || '',
@@ -388,6 +391,7 @@ export default function Cocktails({
 
     setVariantEdits(Object.fromEntries(productVariants.map((variant) => [variant.id, {
       name: variant.name || '',
+      name_ar: variant.name_ar || '',
       serving_count: variant.serving_count ?? 1,
       price_ex_vat: variant.price_ex_vat ?? '',
       vat_rate: variant.vat_rate ?? 0.14,
@@ -562,6 +566,8 @@ export default function Cocktails({
 
     const payload = {
       ...form,
+      name_ar: nullableText(form.name_ar),
+      variant_name_ar: nullableText(form.variant_name_ar),
       product_type: form.product_type || productType,
       category_id: nullableUuid(form.category_id),
       short_description: nullableText(form.short_description),
@@ -615,6 +621,7 @@ export default function Cocktails({
         method: 'PATCH',
         body: JSON.stringify({
           name: productEdit.name,
+          name_ar: nullableText(productEdit.name_ar),
           slug: productEdit.slug,
           ...(showProductTypeField ? { product_type: productEdit.product_type } : {}),
           category_id: nullableUuid(productEdit.category_id),
@@ -827,6 +834,15 @@ export default function Cocktails({
         />
 
         <input
+          aria-label="Name (Arabic)"
+          placeholder="Name (Arabic)"
+          dir="rtl"
+          lang="ar"
+          value={form.name_ar || ''}
+          onChange={(e) => setForm({ ...form, name_ar: e.target.value })}
+        />
+
+        <input
           required
           aria-label="Slug"
           placeholder="Slug"
@@ -924,6 +940,15 @@ export default function Cocktails({
           placeholder="Variant name"
           value={form.variant_name}
           onChange={(e) => setForm({ ...form, variant_name: e.target.value })}
+        />
+
+        <input
+          aria-label="Variant name (Arabic)"
+          placeholder="Variant name (Arabic)"
+          dir="rtl"
+          lang="ar"
+          value={form.variant_name_ar || ''}
+          onChange={(e) => setForm({ ...form, variant_name_ar: e.target.value })}
         />
 
         <input
@@ -1106,6 +1131,15 @@ export default function Cocktails({
           />
 
           <input
+            placeholder="Name (Arabic)"
+            aria-label="Name (Arabic)"
+            dir="rtl"
+            lang="ar"
+            value={productEdit.name_ar || ''}
+            onChange={(e) => setProductEdit({ ...productEdit, name_ar: e.target.value })}
+          />
+
+          <input
             required
             value={productEdit.slug || ''}
             onChange={(e) => setProductEdit({ ...productEdit, slug: e.target.value })}
@@ -1197,6 +1231,17 @@ export default function Cocktails({
                   />
 
                   <input
+                    placeholder="Arabic"
+                    dir="rtl"
+                    lang="ar"
+                    value={draft.name_ar || ''}
+                    onChange={(e) => setVariantEdits({
+                      ...variantEdits,
+                      [variant.id]: { ...draft, name_ar: e.target.value }
+                    })}
+                  />
+
+                  <input
                     type="number"
                     min="1"
                     value={numericInput(draft.serving_count)}
@@ -1269,6 +1314,14 @@ export default function Cocktails({
                 placeholder="New variant name"
                 value={newVariant.name}
                 onChange={(e) => setNewVariant({ ...newVariant, name: e.target.value })}
+              />
+
+              <input
+                placeholder="Arabic name"
+                dir="rtl"
+                lang="ar"
+                value={newVariant.name_ar || ''}
+                onChange={(e) => setNewVariant({ ...newVariant, name_ar: e.target.value })}
               />
 
               <input

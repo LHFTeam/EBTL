@@ -77,8 +77,7 @@ function orderNumber(order, lang) {
 }
 
 function variantLabel(item, lang) {
-  return item.variant_name_snapshot
-    || item.product_variants?.name
+  return resolveItemName(item.product_variants, item.variant_name_snapshot, lang)
     || (Number(item.serving_count || 1) > 1
       ? t('variant.servings', lang, { count: item.serving_count })
       : t('variant.standard', lang));

@@ -6,6 +6,7 @@ import { humanize, toBool } from '../utils/format.js';
 
 const blank = {
   name: '',
+  name_ar: '',
   type: 'beach_cart',
   compound_name: '',
   beach_name: '',
@@ -97,7 +98,7 @@ function buildPayload(form, isEditing) {
 
   if (!isEditing) return payload;
 
-  for (const key of ['compound_name', 'beach_name', 'address', 'latitude', 'longitude']) {
+  for (const key of ['name_ar', 'compound_name', 'beach_name', 'address', 'latitude', 'longitude']) {
     payload[key] = emptyToNull(payload[key]);
   }
 
@@ -293,6 +294,7 @@ export default function Locations() {
     setForm({
       ...blank,
       ...row,
+      name_ar: row.name_ar ?? '',
       compound_name: row.compound_name ?? '',
       beach_name: row.beach_name ?? '',
       address: row.address ?? '',
@@ -456,6 +458,14 @@ export default function Locations() {
             value={form.name}
             disabled={editingProtectedCentralWarehouse}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
+
+          <input
+            placeholder="Name (Arabic)"
+            dir="rtl"
+            lang="ar"
+            value={form.name_ar ?? ''}
+            onChange={(e) => setForm({ ...form, name_ar: e.target.value })}
           />
 
           <select
