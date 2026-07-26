@@ -30,11 +30,11 @@
 
       if (!/^GTM-[A-Z0-9]+$/.test(containerId)) return;
 
+      loadGtm(containerId);
       pushEvent('landing_page_ready', {
         page_type: 'marketing_landing',
       });
       wireEvents();
-      loadGtm(containerId);
     })
     .catch(function () {
       // Tracking is best-effort and must never interfere with the landing page.
@@ -93,6 +93,8 @@
       .querySelectorAll('.primary-cta, .secondary-cta')
       .forEach(function (cta) {
         cta.addEventListener('click', function () {
+          if (cta.classList.contains('app-link')) return;
+
           pushEvent('cta_click', {
             cta_label: (cta.textContent || '').trim().slice(0, 60),
             placement: placementFor(cta),

@@ -32,15 +32,23 @@ other private credential to this file.
 
 ## GTM container configuration
 
-The repository loads `GTM-WN6DZGBS` only on the production landing page. Create
-the following tags in that **Web** container:
+The repository loads `GTM-WN6DZGBS` only on the production landing page. A
+ready-to-import container export is available at:
+
+`admin-dashboard/gtm/ebtl-landing-gtm-container.json`
+
+In GTM, open **Admin > Import Container**, choose the JSON file, create a new
+workspace, and select **Merge > Overwrite conflicting tags, triggers, and
+variables**. Review the detailed changes and use Preview before publishing.
+
+The import creates the following tags in that **Web** container:
 
 1. **Google tag — EBTL landing**
    - Tag ID: `G-Z4SQ6235CJ`
    - Trigger: Initialization — All Pages
    - Keep automatic page-view measurement enabled.
 2. **Microsoft Clarity — EBTL landing**
-   - Use the `Microsoft Clarity - Official` community template.
+   - Uses Microsoft's standard Clarity loader in a portable Custom HTML tag.
    - Project ID: `xsjp56x4va`
    - Trigger: All Pages.
 3. **Meta Pixel — EBTL landing**
