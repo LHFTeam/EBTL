@@ -2984,7 +2984,7 @@ textarea {
 }
 
 .prepKdsFilter {
-  margin-left: auto;
+  margin-inline-start: auto;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -3126,7 +3126,7 @@ textarea {
   box-shadow: var(--kds-shadow-card);
   overflow: hidden;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   animation: prepKdsTicketIn 220ms ease;
   transition: transform 120ms ease, box-shadow 120ms ease;
 }
@@ -3255,7 +3255,7 @@ textarea {
 }
 
 .prepKdsTicketReceived {
-  margin-left: auto;
+  margin-inline-start: auto;
   flex: 0 0 auto;
   color: var(--kds-muted);
   font-weight: 800;
@@ -3350,7 +3350,7 @@ textarea {
   flex-direction: column;
   gap: 3px;
   padding: 8px 10px;
-  border-left: 4px solid var(--kds-coral);
+  border-inline-start: 4px solid var(--kds-coral);
   border-radius: 9px;
   background: #fff2ed;
   color: #603329;
@@ -3436,7 +3436,8 @@ textarea {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 9px 10px 9px 15px;
+  padding-block: 9px;
+  padding-inline: 15px 10px;
   border-radius: 14px;
   color: var(--kds-white);
   background: var(--kds-teal);
@@ -3895,6 +3896,63 @@ textarea {
   font-size: 14px;
   line-height: 1.5;
   color: var(--kds-ink);
+}
+
+/* ---- Language toggle + Arabic (RTL) ---- */
+
+.prepKdsLangToggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--kds-sand);
+  border: 1px solid var(--kds-border);
+}
+
+.prepKdsLangToggle button {
+  min-width: 34px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--kds-muted);
+  background: transparent;
+}
+
+.prepKdsLangToggle button:hover {
+  color: var(--kds-navy);
+}
+
+.prepKdsLangToggle .prepKdsLangActive,
+.prepKdsLangToggle .prepKdsLangActive:hover {
+  background: var(--kds-navy);
+  color: var(--kds-white);
+}
+
+/* Arabic needs a webfont with Arabic glyphs; Inter/Playfair are Latin-only.
+   Scoped to the KDS so the rest of the (LTR) dashboard is untouched. */
+.prepKdsRoot[lang="ar"] {
+  --font-ui: "Cairo", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-display: "Cairo", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+}
+
+/* Mirror the slide-in recipe drawer for RTL. */
+.prepKdsRoot[dir="rtl"] .prepKdsRecipe {
+  box-shadow: 18px 0 44px rgba(0, 0, 0, 0.25);
+  animation-name: prepKdsRecipeInRtl;
+}
+
+@keyframes prepKdsRecipeInRtl {
+  from {
+    transform: translateX(-24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
 }
 
 /* ---- Animations & responsive ---- */
