@@ -14,12 +14,16 @@ class FinderHeader extends StatelessWidget {
   final ValueChanged<String> onToggle;
   final VoidCallback onClear;
 
+  /// Replaces the logo with a back button when the Finder is a pushed route.
+  final VoidCallback? onBack;
+
   const FinderHeader({
     super.key,
     required this.liquorTypes,
     required this.selectedLiquorTypeIds,
     required this.onToggle,
     required this.onClear,
+    this.onBack,
   });
 
   @override
@@ -52,7 +56,10 @@ class FinderHeader extends StatelessWidget {
             top: 14,
             child: Row(
               children: [
-                const EbtlLogo(),
+                if (onBack != null)
+                  CircleIconButton(icon: Icons.arrow_back, onTap: onBack!)
+                else
+                  const EbtlLogo(),
                 const Spacer(),
                 CircleIconButton(icon: Icons.search, onTap: () {}),
                 const SizedBox(width: 12),

@@ -87,6 +87,10 @@ class _ShopProductDetailSheetState extends State<ShopProductDetailSheet> {
         currency: variant?.currency ?? product.currency,
       ),
     );
+
+    // Feeds the Explore "Recently viewed" rail. Fire-and-forget: a storage
+    // failure must never take the sheet down with it.
+    ApiService.recordRecentlyViewed(product.slug).ignore();
   }
 
   void changeQuantity(int delta) {
