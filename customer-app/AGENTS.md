@@ -66,11 +66,13 @@ Notes:
 - Lints come from `package:flutter_lints/flutter.yaml` via
   `analysis_options.yaml` with no custom rules. `flutter analyze` must pass
   cleanly for any change.
-- `test/widget_test.dart` is the **stale Flutter template counter test** and
-  does not reflect the app (it pumps an empty `Scaffold` and expects a
-  counter). It fails as written. Do not treat it as a regression baseline;
-  if you touch tests, replace it with something meaningful rather than
-  patching it to keep failing template assertions.
+- `flutter test` is green and **is** a regression baseline. The suite covers
+  the app shell smoke test (`widget_test.dart`), JSON parsing
+  (`notification_models_test.dart`), the checkout result states, the bottom
+  nav's tab set and badge placement (`ebtl_bottom_nav_test.dart`), and the
+  Explore hero/badges (`explore_widgets_test.dart`). Screens that call
+  `ApiService` statics directly are not testable without a backend — test the
+  widgets they compose instead, as those files do.
 - Some CI/agent environments do not have the Flutter SDK installed. If
   `flutter` is unavailable, say so explicitly in your report instead of
   claiming analysis/tests passed.
@@ -98,8 +100,8 @@ lib/
     crash_reporting_service.dart    # Crashlytics + global uncaught-error hooks.
     clarity_service.dart    # Microsoft Clarity session replay (release-only).
   features/<feature>/       # One folder per screen/flow:
-                            # home, finder, shop, cocktail_detail, cart,
-                            # checkout (includes OrderConfirmedScreen),
+                            # home, explore, finder, shop, cocktail_detail,
+                            # cart, checkout (includes OrderConfirmedScreen),
                             # profile (orders, favorites, edit sheet), onboarding
     .../widgets/            # Feature-private widgets, when split out
   shared/widgets/           # Reusable UI: loading/error/empty states, cards,
@@ -135,9 +137,16 @@ tree):
    storage flag `onboarding_completed_v1`) and shows `OnboardingScreen` on
    first launch, else `RootShell`.
 3. `RootShell` owns `appDataFuture = ApiService.fetchAppData()` and the
-   bottom-nav index. Tabs (fixed order): **0 Home, 1 Cocktail Finder,
-   2 Shop, 3 Cart, 4 Profile**. Detail screens (cocktail detail, checkout)
-   are pushed on top with `Navigator.push`.
+   bottom-nav index. Tabs (fixed order): **0 Home, 1 Explore, 2 Cart,
+   3 Profile** — declared once as `EbtlBottomNav.homeIndex` /
+   `.exploreIndex` / `.cartIndex` / `.profileIndex`. **Use those constants,
+   never bare indices**: the nav positions its cart-count badge and profile
+   unread dot by index, so a literal that drifts lands the badge on the wrong
+   icon. Detail screens (cocktail detail, checkout) and the **Cocktail
+   Finder** — which has no tab of its own; `RootShell.openFinder()` pushes it,
+   usually from the Explore hero — go on top with `Navigator.push`.
+   `ShopScreen` still exists but is no longer wired into the nav; Explore
+   replaced it.
 
 ### Data flow pattern (follow it for new screens)
 

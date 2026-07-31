@@ -10,6 +10,7 @@ import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import 'shop_category_picker_screen.dart';
 import 'shop_category_products_screen.dart';
+import 'shop_product_loading.dart';
 import 'widgets/shop_loading_state.dart';
 import 'widgets/shop_product_detail_sheet.dart';
 import 'widgets/shop_product_widgets.dart';
@@ -127,94 +128,10 @@ class _ShopScreenState extends State<ShopScreen> {
       return dedupeShopProducts(fallback);
     }
 
-    final products = <ShopProduct>[];
-    var page = 1;
-    var hasMore = true;
-
-    while (hasMore) {
-      final response = await ApiService.fetchShopCategoryProducts(
-        identifier: category.identifier,
-        locationId: widget.data.selectedLocationId,
-        page: page,
-        pageSize: 100,
-        sort: 'display_order',
-      );
-
-      products.addAll(response.results);
-      hasMore = response.meta.hasMore;
-      page = response.meta.page + 1;
-
-      if (response.results.isEmpty) {
-        break;
-      }
-    }
-
-    return dedupeShopProducts(products);
-  }
-
-  ShopCategory? categoryForTarget(ShopResponse shop, String target) {
-    return shop.categoryByTarget(target) ??
-        shop.categoryByTarget(singularCategoryTarget(target));
-  }
-
-  String singularCategoryTarget(String target) {
-    final clean = target.trim().toLowerCase();
-
-    if (clean.endsWith('ies') && clean.length > 3) {
-      return '${clean.substring(0, clean.length - 3)}y';
-    }
-
-    if (clean.endsWith('s') && clean.length > 1) {
-      return clean.substring(0, clean.length - 1);
-    }
-
-    return clean;
-  }
-
-  List<ShopProduct> productsMatchingCategoryTarget(
-    Iterable<ShopProduct> products,
-    String target,
-  ) {
-    final cleanTarget = target.trim().toLowerCase();
-    final singularTarget = singularCategoryTarget(cleanTarget);
-
-    return dedupeShopProducts(
-      products.where((product) {
-        final categoryName = product.category?.name.trim().toLowerCase() ?? '';
-        final categorySlug = product.category?.slug?.trim().toLowerCase() ?? '';
-        final productType = product.productType.trim().toLowerCase();
-
-        return categoryName == cleanTarget ||
-            categoryName == singularTarget ||
-            categoryName.contains(cleanTarget) ||
-            categoryName.contains(singularTarget) ||
-            categorySlug == cleanTarget ||
-            categorySlug == singularTarget ||
-            categorySlug.contains(cleanTarget) ||
-            categorySlug.contains(singularTarget) ||
-            productType == cleanTarget ||
-            productType == singularTarget;
-      }).toList(),
+    return loadAllProductsInCategory(
+      category,
+      locationId: widget.data.selectedLocationId,
     );
-  }
-
-  List<ShopProduct> dedupeShopProducts(List<ShopProduct> products) {
-    final byId = <String, ShopProduct>{};
-
-    for (final product in products) {
-      byId[product.id] = product;
-    }
-
-    final deduped = byId.values.toList();
-
-    deduped.sort((a, b) {
-      final orderCompare = a.displayOrder.compareTo(b.displayOrder);
-      if (orderCompare != 0) return orderCompare;
-
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
-
-    return deduped;
   }
 
   Future<void> refreshShop() async {

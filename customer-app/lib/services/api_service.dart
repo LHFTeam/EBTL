@@ -31,6 +31,10 @@ class ApiService {
   static const _selectedLocationIdKey = 'selected_location_id';
   static const _selectedLocationNameKey = 'selected_location_name';
   static const _onboardingCompletedKey = 'onboarding_completed_v1';
+  static const _recentlyViewedKey = 'recently_viewed_slugs_v1';
+
+  /// How many product slugs the "Recently viewed" rail remembers.
+  static const int recentlyViewedLimit = 10;
 
   static const Duration _defaultRequestTimeout = Duration(seconds: 45);
   static const Duration _sessionRequestTimeout = Duration(seconds: 90);
@@ -708,6 +712,49 @@ class ApiService {
   static Future<void> saveSelectedLocation(ServiceLocation location) async {
     await _storage.write(key: _selectedLocationIdKey, value: location.id);
     await _storage.write(key: _selectedLocationNameKey, value: location.name);
+  }
+
+  /// Product slugs the customer opened, most recent first.
+  ///
+  /// Only slugs are stored — the Explore screen resolves them against the
+  /// catalog it has already loaded, so prices and availability stay live and
+  /// products that disappear from the catalog simply drop out of the rail.
+  static Future<List<String>> loadRecentlyViewedSlugs() async {
+    final raw = await _storage.read(key: _recentlyViewedKey);
+    if (raw == null || raw.trim().isEmpty) return const [];
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const [];
+
+      return decoded
+          .map((value) => value is String ? value.trim() : '')
+          .where((slug) => slug.isNotEmpty)
+          .take(recentlyViewedLimit)
+          .toList();
+    } on FormatException {
+      // A malformed cache is not worth surfacing — drop it and start over.
+      await _storage.delete(key: _recentlyViewedKey);
+      return const [];
+    }
+  }
+
+  /// Records a viewed product, moving it to the front and capping the list.
+  static Future<void> recordRecentlyViewed(String slug) async {
+    final cleanSlug = slug.trim();
+    if (cleanSlug.isEmpty) return;
+
+    final existing = await loadRecentlyViewedSlugs();
+    final updated = <String>[
+      cleanSlug,
+      ...existing.where((value) => value != cleanSlug),
+    ].take(recentlyViewedLimit).toList();
+
+    await _storage.write(key: _recentlyViewedKey, value: jsonEncode(updated));
+  }
+
+  static Future<void> clearRecentlyViewed() async {
+    await _storage.delete(key: _recentlyViewedKey);
   }
 
   static Future<void> _persistSession(CustomerSession session) async {

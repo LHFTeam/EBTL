@@ -7,6 +7,7 @@ import '../../services/api_service.dart';
 import '../../core/network/api_exception.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import '../../shared/widgets/detail_card.dart';
+import '../../shared/widgets/ebtl_bottom_nav.dart';
 import '../../shared/widgets/network_or_asset_image.dart';
 import '../cocktail_detail/cocktail_detail_screen.dart';
 import 'widgets/profile_widgets.dart';
@@ -86,7 +87,8 @@ class _FavoriteCocktailsScreenState extends State<FavoriteCocktailsScreen> {
           locationId: widget.locationId,
           locationName: null,
           liquorTypeId: null,
-          selectedNavIndex: 3,
+          // Favorites is reached from Profile, so that is the tab to return to.
+          selectedNavIndex: EbtlBottomNav.profileIndex,
           initialCartQuantity: 0,
           onCartChanged: () {},
           onBottomNavTap: (index) => Navigator.of(context).pop(),

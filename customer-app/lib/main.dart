@@ -17,7 +17,7 @@ import 'models/notification_models.dart';
 /* -------------------------------- SCREENS -------------------------------- */
 import 'features/home/home_screen.dart';
 import 'features/finder/finder_screen.dart';
-import 'features/shop/shop_screen.dart';
+import 'features/explore/explore_screen.dart';
 import 'features/cocktail_detail/cocktail_detail_screen.dart';
 import 'features/cart/cart_screen.dart';
 import 'features/checkout/checkout_screen.dart';
@@ -145,8 +145,7 @@ class RootShell extends StatefulWidget {
 class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   static const Duration _notificationsPollInterval = Duration(seconds: 30);
 
-  int selectedIndex = 0;
-  String? finderInitialLiquorTypeId;
+  int selectedIndex = EbtlBottomNav.homeIndex;
   late Future<AppData> appDataFuture;
 
   Timer? _notificationsTimer;
@@ -296,37 +295,66 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   }
 
   void openCart() {
-    setState(() => selectedIndex = 3);
+    setState(() => selectedIndex = EbtlBottomNav.cartIndex);
     AnalyticsService.logScreenView('cart');
   }
 
+  /// The Cocktail Finder no longer has a tab of its own — it is pushed on top
+  /// of whatever is showing, most often from the Explore hero.
   void openFinder({String? liquorTypeId}) {
     final cleanLiquorTypeId = liquorTypeId?.trim();
 
-    setState(() {
-      finderInitialLiquorTypeId =
-          cleanLiquorTypeId == null || cleanLiquorTypeId.isEmpty
-          ? null
-          : cleanLiquorTypeId;
-      selectedIndex = 1;
-    });
     AnalyticsService.logScreenView('cocktail_finder');
+
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => FutureBuilder<AppData>(
+              future: appDataFuture,
+              builder: (context, snapshot) {
+                final data = snapshot.data;
+                if (data == null) return theLoadingScaffold();
+
+                return Scaffold(
+                  backgroundColor: EbtlColors.cream,
+                  body: FinderScreen(
+                    data: data,
+                    initialLiquorTypeId:
+                        cleanLiquorTypeId == null || cleanLiquorTypeId.isEmpty
+                        ? null
+                        : cleanLiquorTypeId,
+                    onBack: () => Navigator.of(context).pop(),
+                    onOpenCocktail: (cocktail, liquorTypeId) =>
+                        openCocktailDetail(
+                          data,
+                          cocktail,
+                          liquorTypeId: liquorTypeId,
+                        ),
+                  ),
+                );
+              },
+            ),
+          ),
+        )
+        .then((_) {
+          if (!mounted) return;
+          AnalyticsService.logScreenView(_screenNames[selectedIndex]);
+        });
   }
 
+  static const List<String> _screenNames = [
+    'home',
+    'explore',
+    'cart',
+    'profile',
+  ];
+
   void handleBottomNavTap(int index) {
-    const screenNames = ['home', 'cocktail_finder', 'shop', 'cart', 'profile'];
-    final safeIndex = index.clamp(0, screenNames.length - 1).toInt();
+    final safeIndex = index.clamp(0, EbtlBottomNav.tabCount - 1).toInt();
 
-    setState(() {
-      if (index == 1) {
-        finderInitialLiquorTypeId = null;
-      }
-
-      // Active bottom tabs:
-      // 0 Home, 1 Cocktail Finder, 2 Shop, 3 Cart, 4 Profile.
-      selectedIndex = safeIndex;
-    });
-    AnalyticsService.logScreenView(screenNames[safeIndex]);
+    // Active bottom tabs: 0 Home, 1 Explore, 2 Cart, 3 Profile.
+    setState(() => selectedIndex = safeIndex);
+    AnalyticsService.logScreenView(_screenNames[safeIndex]);
   }
 
   Future<void> selectLocation(ServiceLocation location) async {
@@ -335,17 +363,17 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     reloadAppData();
   }
 
-  void openCocktailDetail(
+  Future<void> openCocktailDetail(
     AppData data,
     Cocktail cocktail, {
     String? liquorTypeId,
   }) {
     if (cocktail.slug.trim().isEmpty) {
       showAppSnackBar(context, 'This cocktail is missing a detail link.');
-      return;
+      return Future.value();
     }
 
-    Navigator.of(context).push(
+    return Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => CocktailDetailScreen(
           slug: cocktail.slug,
@@ -356,7 +384,9 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
           initialCartQuantity: data.cartSummary?.totalQuantity ?? 0,
           onCartChanged: reloadAppData,
           onBottomNavTap: (index) {
-            Navigator.of(context).pop();
+            // The Finder may also be on the stack, so unwind back to the shell
+            // rather than popping a single route.
+            Navigator.of(context).popUntil((route) => route.isFirst);
             handleBottomNavTap(index);
           },
         ),
@@ -402,19 +432,12 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
             activeOrdersCount: activeOrdersCount,
             onOpenActiveOrders: openActiveOrders,
           ),
-          FinderScreen(
-            data: data,
-            initialLiquorTypeId: finderInitialLiquorTypeId,
-            onOpenCocktail: (cocktail, liquorTypeId) =>
-                openCocktailDetail(data, cocktail, liquorTypeId: liquorTypeId),
-          ),
-          ShopScreen(
+          ExploreScreen(
             data: data,
             onCartChanged: reloadAppData,
-            onSwitchTab: (index) => setState(() => selectedIndex = index),
-            onOpenProduct: (product) {
-              openCocktailDetail(data, Cocktail.fromShopProduct(product));
-            },
+            onOpenFinder: () => openFinder(),
+            onOpenProduct: (product) =>
+                openCocktailDetail(data, Cocktail.fromShopProduct(product)),
             unreadNotificationCount: unreadNotificationCount,
             onOpenNotifications: openNotifications,
             activeOrdersCount: activeOrdersCount,
@@ -423,7 +446,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
           CartScreen(
             data: data,
             onOpenFinder: () => openFinder(),
-            onGoHome: () => setState(() => selectedIndex = 0),
+            onGoHome: () =>
+                setState(() => selectedIndex = EbtlBottomNav.homeIndex),
             onCartChanged: reloadAppData,
             onOpenCheckout:
                 ({
@@ -441,7 +465,9 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
                         onOrderCompleted: () {
                           Navigator.of(context).pop();
                           if (!mounted) return;
-                          setState(() => selectedIndex = 0);
+                          setState(
+                            () => selectedIndex = EbtlBottomNav.homeIndex,
+                          );
                           reloadAppData();
                           _refreshActiveOrders();
                         },
@@ -455,7 +481,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
             unreadNotificationCount: unreadNotificationCount,
             onOpenNotifications: openNotifications,
             onLoggedOut: () {
-              setState(() => selectedIndex = 0);
+              setState(() => selectedIndex = EbtlBottomNav.homeIndex);
               reloadAppData();
             },
           ),

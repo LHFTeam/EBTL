@@ -73,13 +73,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
 
   @override
   void dispose() {
-    const parentScreens = [
-      'home',
-      'cocktail_finder',
-      'shop',
-      'cart',
-      'profile',
-    ];
+    const parentScreens = ['home', 'explore', 'cart', 'profile'];
     final parentIndex = widget.selectedNavIndex
         .clamp(0, parentScreens.length - 1)
         .toInt();
@@ -97,6 +91,9 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
     final cocktail = response.cocktail;
     if (trackedSlugs.add(cocktail.slug)) {
       AnalyticsService.logViewItem(analyticsItem(cocktail));
+      // Feeds the Explore "Recently viewed" rail. Fire-and-forget: a storage
+      // failure must never take the detail screen down with it.
+      ApiService.recordRecentlyViewed(cocktail.slug).ignore();
     }
 
     return response;
@@ -354,7 +351,8 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                       isFavorite: favoriteOverride ?? cocktail.isFavorite,
                       onBack: () => Navigator.of(context).pop(),
                       onFavorite: () => toggleFavorite(cocktail),
-                      onCart: () => widget.onBottomNavTap(3),
+                      onCart: () =>
+                          widget.onBottomNavTap(EbtlBottomNav.cartIndex),
                     ),
                   ),
                   SliverToBoxAdapter(

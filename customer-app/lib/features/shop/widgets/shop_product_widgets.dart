@@ -16,6 +16,10 @@ class ShopProductGridSection extends StatefulWidget {
   final ValueChanged<ShopProduct> onProductTap;
   final ValueChanged<ShopProduct> onQuickAdd;
 
+  /// How many tiles show before "View more". Browse-first screens (Explore)
+  /// pass a larger value than the shop's stacked sections.
+  final int initialVisibleCount;
+
   const ShopProductGridSection({
     super.key,
     required this.title,
@@ -23,6 +27,7 @@ class ShopProductGridSection extends StatefulWidget {
     required this.addingProductId,
     required this.onProductTap,
     required this.onQuickAdd,
+    this.initialVisibleCount = 6,
   });
 
   @override
@@ -30,8 +35,6 @@ class ShopProductGridSection extends StatefulWidget {
 }
 
 class _ShopProductGridSectionState extends State<ShopProductGridSection> {
-  static const int initialVisibleCount = 6;
-
   bool isExpanded = false;
 
   @override
@@ -60,9 +63,9 @@ class _ShopProductGridSectionState extends State<ShopProductGridSection> {
 
     final visibleItems = isExpanded
         ? widget.items
-        : widget.items.take(initialVisibleCount).toList();
+        : widget.items.take(widget.initialVisibleCount).toList();
 
-    final hiddenCount = widget.items.length - initialVisibleCount;
+    final hiddenCount = widget.items.length - widget.initialVisibleCount;
     final showViewMoreButton = !isExpanded && hiddenCount > 0;
 
     return Padding(

@@ -15,11 +15,16 @@ class FinderScreen extends StatefulWidget {
   final void Function(Cocktail cocktail, String? liquorTypeId) onOpenCocktail;
   final String? initialLiquorTypeId;
 
+  /// Set when the Finder is pushed as a route (it no longer has a nav tab),
+  /// which is when it needs a way back.
+  final VoidCallback? onBack;
+
   const FinderScreen({
     super.key,
     required this.data,
     required this.initialLiquorTypeId,
     required this.onOpenCocktail,
+    this.onBack,
   });
 
   @override
@@ -112,6 +117,7 @@ class _FinderScreenState extends State<FinderScreen> {
           SliverToBoxAdapter(
             child: FinderHeader(
               liquorTypes: widget.data.liquorTypes,
+              onBack: widget.onBack,
               selectedLiquorTypeIds: selectedLiquorTypeIds,
               onToggle: (liquorTypeId) {
                 setState(() {

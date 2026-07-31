@@ -4,6 +4,14 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/ebtl_colors.dart';
 
 class EbtlBottomNav extends StatelessWidget {
+  // Tab order lives here so the screens, the analytics names and the badge
+  // decorations below can't drift apart.
+  static const int homeIndex = 0;
+  static const int exploreIndex = 1;
+  static const int cartIndex = 2;
+  static const int profileIndex = 3;
+  static const int tabCount = 4;
+
   final int selectedIndex;
   final ValueChanged<int> onTap;
   final bool showProfileDot;
@@ -21,8 +29,7 @@ class EbtlBottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = [
       (Icons.home_outlined, Icons.home, 'Home'),
-      (Icons.search, Icons.search, 'Cocktail Finder'),
-      (Icons.shopping_bag_outlined, Icons.shopping_bag, 'Shop'),
+      (Icons.explore_outlined, Icons.explore, 'Explore'),
       (Icons.shopping_cart_outlined, Icons.shopping_cart, 'Cart'),
       (Icons.person_outline, Icons.person, 'Profile'),
     ];
@@ -52,7 +59,7 @@ class EbtlBottomNav extends StatelessWidget {
                         color: active ? EbtlColors.coral : Colors.black87,
                         size: 27,
                       ),
-                      if (index == 4 && showProfileDot)
+                      if (index == profileIndex && showProfileDot)
                         Positioned(
                           top: -1,
                           right: -5,
@@ -69,7 +76,7 @@ class EbtlBottomNav extends StatelessWidget {
                             ),
                           ),
                         ),
-                      if (index == 3 && cartItemCount > 0)
+                      if (index == cartIndex && cartItemCount > 0)
                         Positioned(
                           top: -6,
                           right: -10,
