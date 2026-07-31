@@ -165,6 +165,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     setState(() {
       quoteOverride = null;
       promoError = null;
+      activeIdempotencyKey = null;
       checkoutFuture = loadCheckout();
     });
   }
@@ -239,6 +240,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       setState(() {
         quoteOverride = null;
         promoError = null;
+        // The amount due changed, so a pending order placed under the old
+        // total must not be replayed. Force a fresh one.
+        activeIdempotencyKey = null;
       });
       return;
     }
@@ -263,6 +267,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         quoteOverride = quoteResponse.quote;
         isApplyingPromo = false;
         promoError = null;
+        activeIdempotencyKey = null;
       });
     } catch (error) {
       if (!mounted) return;
@@ -504,7 +509,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     } on stripe.StripeException catch (error) {
       if (!mounted) return;
       setState(() => isPlacingOrder = false);
-      // A user cancelling the sheet is not an error worth surfacing.
+      // A user cancelling the sheet is not an error worth surfacing. Their cart
+      // is untouched and activeIdempotencyKey is kept, so tapping Place Order
+      // again replays the same order and re-opens the same payment sheet.
       if (error.error.code != stripe.FailureCode.Canceled) {
         showAppSnackBar(
           context,
@@ -542,6 +549,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (!mounted) return;
 
     if (status.isPaid) {
+      // The backend empties the cart from the payment-success webhook, so this
+      // is the first point at which the cart is known to have changed.
+      widget.onCartChanged();
+
       openOrderConfirmed(
         response.order,
         location: checkout.location,
@@ -552,11 +563,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       return;
     }
 
+    // Held locally because pushReplacement disposes this screen.
+    final onCartChanged = widget.onCartChanged;
+
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => CheckoutResultScreen(
           status: status,
           onDone: () {
+            // The payment may still have settled after we stopped polling, in
+            // which case the cart was cleared server-side while we weren't
+            // looking. Re-read it rather than trusting the stale copy.
+            onCartChanged();
             Navigator.of(context).pop();
           },
         ),
@@ -595,14 +613,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       if (!mounted) return;
 
-      widget.onCartChanged();
-
       if (response.nextScreen == 'order_confirmed' ||
           response.payment.provider == 'demo' ||
           !response.payment.requiredPayment) {
+        // These orders are paid the moment they are placed, so the backend has
+        // already emptied the cart.
+        widget.onCartChanged();
         openOrderConfirmed(response.order, location: checkout.location);
         return;
       }
+
+      // For gateway orders the cart is deliberately still intact at this
+      // point — the customer has not paid yet. Nothing here may signal a cart
+      // change until the payment is confirmed.
 
       if (response.payment.isStripe ||
           response.nextScreen == 'stripe_payment') {
@@ -614,6 +637,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (!mounted) return;
 
       setState(() => isPlacingOrder = false);
+
+      // The order this key points at was expired by the backend because it went
+      // unpaid too long, and its payment session was cancelled with it. Retrying
+      // the same key would fail identically forever, so start a clean checkout.
+      if (error is ApiException && error.errorCode == 'checkout_expired') {
+        reloadCheckout();
+      }
 
       showAppSnackBar(context, errorMessage(error));
     }

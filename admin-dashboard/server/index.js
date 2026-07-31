@@ -1,11 +1,13 @@
 import { createServer } from 'http';
 import { PAYMENT_MODE, PORT } from './config/appConfig.js';
 import { createApp } from './app.js';
+import { startPendingOrderCleanup } from './lib/pendingOrderCleanup.js';
 import { attachPrepOrdersRealtime } from './realtime/prepOrdersRealtime.js';
 
 const app = createApp();
 const server = createServer(app);
 const prepOrdersRealtime = attachPrepOrdersRealtime(server);
+const pendingOrderCleanup = startPendingOrderCleanup();
 
 server.listen(PORT, () => console.log(`EBTL Admin running on port ${PORT} (${PAYMENT_MODE} payment mode)`));
 
@@ -23,6 +25,7 @@ function shutdown(signal) {
     forceExitTimer.unref();
 
     try {
+      pendingOrderCleanup.stop();
       await prepOrdersRealtime.close();
       if (server.listening) {
         await new Promise((resolve, reject) => {

@@ -47,7 +47,13 @@ class ApiService {
     return _defaultRequestTimeout;
   }
 
-  static Future<AppData> fetchAppData() async {
+  /// Loads everything the app shell needs.
+  ///
+  /// Pass [previous] on a refresh that only needs live data (cart totals,
+  /// availability). The cocktail-finder options are effectively static for the
+  /// lifetime of a session, so they are carried over instead of refetched,
+  /// which halves the request count on every cart change.
+  static Future<AppData> fetchAppData({AppData? previous}) async {
     await ensureSession();
 
     final selectedLocationId = await getSelectedLocationId();
@@ -59,6 +65,15 @@ class ApiService {
       query: {'location_id': selectedLocationId},
       attachToken: true,
     );
+
+    if (previous != null) {
+      return AppData.fromApi(
+        homeJson: homeJson,
+        reusedOptions: previous.finderOptions,
+        selectedLocationId: selectedLocationId,
+        selectedLocationName: selectedLocationName,
+      );
+    }
 
     final optionsJson = await _request(
       method: 'GET',
@@ -74,7 +89,35 @@ class ApiService {
     );
   }
 
-  static Future<CustomerSession> ensureSession() async {
+  /// Guards the one-time session bootstrap so concurrent callers share a single
+  /// POST instead of racing each other.
+  static Future<void>? _sessionBootstrap;
+
+  /// Ensures a customer session token exists before a request goes out.
+  ///
+  /// This runs ahead of every API call, so it must stay cheap: once a token is
+  /// stored there is nothing to do. Tokens are refreshed passively — [_request]
+  /// picks up both the `x-ebtl-customer-token` header and any `session` object
+  /// in a response body — and a token the backend has since rejected is
+  /// recovered from by the 401 handler in [_request].
+  static Future<void> ensureSession() async {
+    final existingToken = await getCustomerToken();
+    if (existingToken != null && existingToken.trim().isNotEmpty) return;
+
+    final inFlight = _sessionBootstrap;
+    if (inFlight != null) return inFlight;
+
+    final bootstrap = _createSession();
+    _sessionBootstrap = bootstrap;
+
+    try {
+      await bootstrap;
+    } finally {
+      _sessionBootstrap = null;
+    }
+  }
+
+  static Future<CustomerSession> _createSession() async {
     final existingToken = await getCustomerToken();
 
     final sessionJson = await _request(
@@ -772,6 +815,7 @@ class ApiService {
     Map<String, String?>? query,
     Map<String, dynamic>? body,
     bool attachToken = true,
+    bool allowSessionRetry = true,
   }) async {
     final uri = ApiConfig.endpoint(path, query);
     final headers = <String, String>{
@@ -844,6 +888,26 @@ class ApiService {
       await _storage.write(key: _tokenKey, value: headerToken.trim());
     }
 
+    // A stored token the backend no longer accepts is recoverable: drop it,
+    // mint a fresh session, and replay the request once. Without this, skipping
+    // the per-call session POST would turn an expired token into a dead end.
+    if (response.statusCode == 401 &&
+        attachToken &&
+        allowSessionRetry &&
+        path != '/api/customer/session') {
+      await clearCustomerSession();
+      await _createSession();
+
+      return _request(
+        method: method,
+        path: path,
+        query: query,
+        body: body,
+        attachToken: attachToken,
+        allowSessionRetry: false,
+      );
+    }
+
     final decoded = decodeJsonObject(response.body, endpoint: '$method $path');
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -854,6 +918,7 @@ class ApiService {
         ),
         endpoint: '$method $path',
         statusCode: response.statusCode,
+        errorCode: nullableString(decoded['error_code']),
         blockingReasons: readApiErrorDetails(
           decoded['blocking_reasons'],
           decoded['details'],

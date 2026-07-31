@@ -5,12 +5,7 @@ import '../../core/theme/ebtl_colors.dart';
 import 'brand_widgets.dart';
 import 'ebtl_loading_graphic.dart';
 
-/// The app's standard lightweight feedback: a plain text snackbar.
-void showAppSnackBar(BuildContext context, String message) {
-  ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text(message)));
-}
+export 'app_toast.dart';
 
 Widget theLoadingScaffold() {
   return const Scaffold(

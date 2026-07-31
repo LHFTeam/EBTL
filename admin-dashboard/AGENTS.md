@@ -210,6 +210,29 @@ design — **follow the local structure**; don't refactor it wholesale.
   (`POST /api/payments/geidea/callback`) is unauthenticated and trusts the
   HMAC signature, so never weaken `verifyGeideaCallbackSignature`. Orders carry
   an `idempotency_key`; payment status is polled by the app.
+- **Cart lifecycle:** placing a gateway order does **not** touch the cart — the
+  customer has not paid yet and may dismiss the payment sheet. The cart is
+  emptied and marked `converted` only from a payment-success path, via
+  `convertCartAfterPayment` (demo placement, Geidea callback, Stripe webhook),
+  using the `cart_id`/`cart_item_ids` recorded on `payments.raw_payload`. Do
+  not move cart clearing back to placement.
+- **Abandoned checkouts:** an order that never gets paid would stay at
+  `pending_payment` forever, so `lib/pendingOrderCleanup.js` sweeps them from an
+  unref'd timer started in `index.js` and marks them **`expired`**. Never
+  delete them — a payment that settles late must still find its order so the
+  money can be flagged and reconciled. Before expiring, it cancels the Stripe
+  PaymentIntent; if Stripe reports the intent `succeeded`/`processing`, or the
+  order has a `paid` payment row, or the cancel call fails, the order is left
+  pending for the next sweep. `PENDING_ORDER_MAX_AGE_MINUTES` (30) is the
+  customer's payment window, not a webhook grace period.
+- **Late payments:** `updateOrderForPaymentResult` returns `confirmed`, which is
+  false when the order was not sitting at `pending_payment`. Fulfillment side
+  effects (promotion redemption, referral/credit settlement, cart conversion)
+  run only when it is true. If the order is `expired`/`cancelled`,
+  `flagPaidOrderForReview` marks `payments.raw_payload.needs_reconciliation` and
+  logs — a human decides refund vs. reinstate. Replaying place-order against
+  such an order returns 409 `error_code: checkout_expired`, which the app uses
+  to start a fresh checkout.
 - **Notifications:** order status changes fan out through
   `lib/notifications.js` (`createCustomerNotification` → persist + push via FCM
   or Expo, gated by env). `notifyOrderReadyForPickup` dedupes on

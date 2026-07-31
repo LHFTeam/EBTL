@@ -27,17 +27,30 @@ class AppData {
     required this.selectedLocationName,
   });
 
+  /// Builds app data from the `/home` payload.
+  ///
+  /// Supply either [optionsJson] (a fresh cocktail-finder options response) or
+  /// [reusedOptions] (the options already held from an earlier load). The
+  /// options payload is static for the lifetime of a session, so refreshes that
+  /// only need live data can carry it over and skip a request.
   factory AppData.fromApi({
     required Map<String, dynamic> homeJson,
-    required Map<String, dynamic> optionsJson,
+    Map<String, dynamic>? optionsJson,
+    FinderOptions? reusedOptions,
     required String? selectedLocationId,
     required String? selectedLocationName,
   }) {
+    assert(
+      optionsJson != null || reusedOptions != null,
+      'AppData.fromApi needs either optionsJson or reusedOptions.',
+    );
+
     final homeLiquorTypes = sortLiquorTypes(
       readMapList(homeJson['liquorTypes']).map(LiquorType.fromJson).toList(),
     );
 
-    final options = FinderOptions.fromJson(optionsJson);
+    final options =
+        reusedOptions ?? FinderOptions.fromJson(optionsJson ?? const {});
 
     final effectiveLiquorTypes = options.liquorTypes.isNotEmpty
         ? options.liquorTypes
