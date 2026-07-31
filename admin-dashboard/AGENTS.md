@@ -210,6 +210,12 @@ design — **follow the local structure**; don't refactor it wholesale.
   (`POST /api/payments/geidea/callback`) is unauthenticated and trusts the
   HMAC signature, so never weaken `verifyGeideaCallbackSignature`. Orders carry
   an `idempotency_key`; payment status is polled by the app.
+- **Cart lifecycle:** placing a gateway order does **not** touch the cart — the
+  customer has not paid yet and may dismiss the payment sheet. The cart is
+  emptied and marked `converted` only from a payment-success path, via
+  `convertCartAfterPayment` (demo placement, Geidea callback, Stripe webhook),
+  using the `cart_id`/`cart_item_ids` recorded on `payments.raw_payload`. Do
+  not move cart clearing back to placement.
 - **Notifications:** order status changes fan out through
   `lib/notifications.js` (`createCustomerNotification` → persist + push via FCM
   or Expo, gated by env). `notifyOrderReadyForPickup` dedupes on

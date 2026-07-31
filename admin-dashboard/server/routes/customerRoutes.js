@@ -2830,6 +2830,93 @@ async function recordPromotionRedemptionIfNeeded({ order, payment }) {
   return inserted.data;
 }
 
+// Empties the cart an order was built from. This is deliberately tied to
+// *payment success* rather than order creation: clearing the cart the moment
+// the payment session was created meant a customer who dismissed the payment
+// sheet without paying lost everything they had added, with no way back.
+//
+// Only the cart items that were actually ordered are removed, so anything
+// added while the payment was in flight survives, and the cart is only retired
+// once nothing is left in it. Idempotent — safe to call from every
+// payment-success path, including webhook retries. Failures are logged but
+// never bubble up; a stale cart must not fail a payment confirmation.
+async function convertCartAfterPayment(payment) {
+  const cartId = payment?.raw_payload?.cart_id;
+  if (!cartId) return;
+
+  const orderedItemIds = (payment.raw_payload?.cart_item_ids || []).filter(Boolean);
+
+  let deletion = supabase
+    .from('cart_items')
+    .delete()
+    .eq('cart_id', cartId);
+
+  if (orderedItemIds.length) deletion = deletion.in('id', orderedItemIds);
+
+  const deleted = await deletion;
+
+  if (deleted.error) {
+    console.error('convertCartAfterPayment could not clear cart items', { cartId, error: deleted.error });
+    return;
+  }
+
+  const remaining = await supabase
+    .from('cart_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('cart_id', cartId);
+
+  if (remaining.error) {
+    console.error('convertCartAfterPayment could not count cart items', { cartId, error: remaining.error });
+    return;
+  }
+
+  if (Number(remaining.count || 0) > 0) return;
+
+  const converted = await supabase
+    .from('carts')
+    .update({ status: 'converted' })
+    .eq('id', cartId)
+    .eq('status', 'active');
+
+  if (converted.error) {
+    console.error('convertCartAfterPayment could not convert cart', { cartId, error: converted.error });
+  }
+}
+
+// Rebuilds the place-order `order` payload from a stored order row. The
+// idempotent replay of place-order (a customer retrying after dismissing the
+// payment sheet) has no quote to hand — the app still needs the same shape,
+// because it reads totals and location off it to render confirmation.
+function storedCheckoutOrderPayload(order, payment = null) {
+  const subtotalExVat = money(order.subtotal_ex_vat);
+  const vatAmount = money(order.vat_amount);
+
+  return {
+    id: order.id,
+    order_number: order.order_number,
+    status: order.status,
+    payment_status: order.payment_status,
+    fulfillment_type: order.fulfillment_type,
+    requested_fulfillment_at: order.requested_fulfillment_at,
+    created_at: order.created_at,
+    customer_phone: order.customer_phone_snapshot,
+    address: order.customer_address_snapshot,
+    location: publicLocation(order.locations),
+    totals: {
+      subtotal_ex_vat: subtotalExVat,
+      vat_amount: vatAmount,
+      subtotal_inc_vat: money(subtotalExVat + vatAmount),
+      discount_amount: money(order.discount_amount),
+      credit_applied: money(order.credit_applied),
+      delivery_fee: money(order.delivery_fee),
+      total_amount: money(order.total_amount),
+      currency: CURRENCY,
+      vat_included: true
+    },
+    promotion: payment?.raw_payload?.promotion || null
+  };
+}
+
 // Runs the referral + store-credit side effects for a paid order: grants the
 // referrer their reward if this order qualifies, and records any store credit
 // the customer spent. Both are idempotent, so this is safe to call from every
@@ -4945,7 +5032,7 @@ async function handleCustomerPlaceOrder(req, res) {
 
   const existingPayment = await supabase
     .from('payments')
-    .select('*, orders(*)')
+    .select('*, orders(*, locations(id,name,type,compound_name,beach_name,banner_image_url,delivery_fee))')
     .eq('idempotency_key', parsed.data.idempotency_key)
     .maybeSingle();
 
@@ -4972,7 +5059,7 @@ async function handleCustomerPlaceOrder(req, res) {
 
     return res.json({
       session: sessionPayload(ensured.customer.id, ensured.token),
-      order: existingPayment.data.orders,
+      order: storedCheckoutOrderPayload(existingPayment.data.orders, existingPayment.data),
       items: existingItems.data || [],
       payment: createCheckoutPaymentPayload({
         order: existingPayment.data.orders,
@@ -5184,6 +5271,13 @@ async function handleCustomerPlaceOrder(req, res) {
         payment_mode: PAYMENT_MODE,
         demo_confirmed_at: isDemoPaymentMode ? new Date().toISOString() : null,
         save_card: Boolean(parsed.data.save_card),
+        // Which cart (and exactly which of its items) this order was built
+        // from, so the cart can be emptied when the payment succeeds rather
+        // than when it merely starts. See convertCartAfterPayment.
+        cart_id: parsed.data.cart_id,
+        cart_item_ids: quote.data.quote.items
+          .map((item) => item.cart_item_id)
+          .filter(Boolean),
         promotion: quote.data.quote.promotion
           ? {
               id: quote.data.quote.promotion.id,
@@ -5231,15 +5325,9 @@ async function handleCustomerPlaceOrder(req, res) {
 
     await settleReferralAndCreditForOrder(confirmedOrder.data);
 
-    await supabase
-      .from('cart_items')
-      .delete()
-      .eq('cart_id', parsed.data.cart_id);
-
-    await supabase
-      .from('carts')
-      .update({ status: 'converted' })
-      .eq('id', parsed.data.cart_id);
+    // Demo orders are paid the moment they are placed, so the cart converts
+    // here. Gateway orders convert from the payment-success webhook instead.
+    await convertCartAfterPayment(payment.data);
 
     return res.json({
       session: sessionPayload(ensured.customer.id, ensured.token),
@@ -5382,15 +5470,10 @@ async function handleCustomerPlaceOrder(req, res) {
     });
   }
 
-  await supabase
-    .from('cart_items')
-    .delete()
-    .eq('cart_id', parsed.data.cart_id);
-
-  await supabase
-    .from('carts')
-    .update({ status: 'converted' })
-    .eq('id', parsed.data.cart_id);
+  // The cart is intentionally left untouched here. The customer has not paid
+  // yet — they are about to be shown the gateway's payment sheet, which they
+  // may well dismiss. The cart is emptied only once the payment-success
+  // webhook lands (see convertCartAfterPayment).
 
   res.json({
     session: sessionPayload(ensured.customer.id, ensured.token),
@@ -5759,6 +5842,8 @@ customerRouter.post('/payments/geidea/callback', async (req, res) => {
 
     await settleReferralAndCreditForOrder(updatedOrder.data);
 
+    await convertCartAfterPayment(updatedPayment.data);
+
     if (payment.data.raw_payload?.save_card) {
       const savedCard = await recordGeideaSavedCardIfNeeded({
         customerId: payment.data.orders.customer_id,
@@ -5893,6 +5978,8 @@ customerRouter.post('/payments/stripe/webhook', async (req, res) => {
     });
 
     await settleReferralAndCreditForOrder(updatedOrder.data);
+
+    await convertCartAfterPayment(updatedPayment.data);
 
     if (payment.data.raw_payload?.save_card) {
       const savedCard = await recordStripeSavedCardIfNeeded({
