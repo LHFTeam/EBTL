@@ -14,6 +14,10 @@ class ApiException implements Exception {
   final String message;
   final String endpoint;
   final int? statusCode;
+
+  /// Backend `error_code`, when the route returns one. Present only where the
+  /// app has to branch on *which* error it was rather than just show it.
+  final String? errorCode;
   final List<String> blockingReasons;
   final String? responseBody;
 
@@ -21,6 +25,7 @@ class ApiException implements Exception {
     required this.message,
     required this.endpoint,
     this.statusCode,
+    this.errorCode,
     this.blockingReasons = const [],
     this.responseBody,
   });

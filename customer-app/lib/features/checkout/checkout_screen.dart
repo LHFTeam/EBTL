@@ -638,6 +638,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       setState(() => isPlacingOrder = false);
 
+      // The order this key points at was expired by the backend because it went
+      // unpaid too long, and its payment session was cancelled with it. Retrying
+      // the same key would fail identically forever, so start a clean checkout.
+      if (error is ApiException && error.errorCode == 'checkout_expired') {
+        reloadCheckout();
+      }
+
       showAppSnackBar(context, errorMessage(error));
     }
   }

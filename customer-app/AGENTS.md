@@ -253,7 +253,11 @@ an endpoint, copy the existing shape:
   on placement. See root `STRIPE_SETUP.md` for the backend/webhook contract.
   Dismissing the Payment Sheet is a no-op: the cart is only emptied server-side
   once payment succeeds, so `onCartChanged` must not fire until the poll
-  reports the order paid, and a retry replays the same `idempotency_key`.
+  reports the order paid, and a retry replays the same `idempotency_key`. The
+  backend expires an unpaid order after 30 minutes and cancels its payment
+  intent; place-order then answers 409 with `ApiException.errorCode ==
+  'checkout_expired'`, which `placeOrder` handles by reloading checkout so the
+  next attempt starts from a fresh key.
 - **Favorites** — per-anonymous-customer favorite cocktails
   (`/api/customer/favorites`), surfaced on profile and cocktail cards.
 

@@ -854,6 +854,7 @@ class ApiService {
         ),
         endpoint: '$method $path',
         statusCode: response.statusCode,
+        errorCode: nullableString(decoded['error_code']),
         blockingReasons: readApiErrorDetails(
           decoded['blocking_reasons'],
           decoded['details'],

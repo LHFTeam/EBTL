@@ -51,7 +51,10 @@ export const roleAccess = {
 };
 
 export const employeeRoles = ['prep', 'cart_operator', 'warehouse', 'supervisor', 'manager', 'admin'];
-export const orderStatuses = ['draft', 'pending_payment', 'confirmed', 'preparing', 'ready', 'out_for_delivery', 'completed', 'cancelled', 'refunded'];
+// `expired` is terminal and is only ever set by the pending-order sweep
+// (lib/pendingOrderCleanup.js): a checkout that was never paid for. It is not a
+// state staff can move an order into or out of.
+export const orderStatuses = ['draft', 'pending_payment', 'expired', 'confirmed', 'preparing', 'ready', 'out_for_delivery', 'completed', 'cancelled', 'refunded'];
 export const paymentStatuses = ['unpaid', 'pending', 'paid', 'failed', 'refunded', 'partially_refunded'];
 export const transferStatuses = ['draft', 'picked', 'in_transit', 'received', 'cancelled'];
 export const productStatuses = ['draft', 'active', 'archived'];
