@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -25,14 +26,23 @@ class BottleImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Bottle art is drawn small (an 80pt card, or a 20pt compatibility chip);
+    // decoding the source at full resolution would waste most of the image
+    // cache on pixels that are never shown.
+    final decodeWidth = ((size ?? 96) * 3).round();
+
     final image = imageUrl == null
         ? BottlePlaceholder(name: name)
-        : Image.network(
-            imageUrl!,
+        : CachedNetworkImage(
+            imageUrl: imageUrl!,
             fit: BoxFit.contain,
             width: double.infinity,
             height: double.infinity,
-            errorBuilder: (_, _, _) => BottlePlaceholder(name: name),
+            memCacheWidth: decodeWidth,
+            maxWidthDiskCache: decodeWidth,
+            fadeInDuration: Duration.zero,
+            placeholder: (_, _) => BottlePlaceholder(name: name),
+            errorWidget: (_, _, _) => BottlePlaceholder(name: name),
           );
 
     final clippedImage = ClipRRect(

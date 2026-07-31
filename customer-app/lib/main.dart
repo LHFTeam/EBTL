@@ -146,7 +146,18 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   static const Duration _notificationsPollInterval = Duration(seconds: 30);
 
   int selectedIndex = EbtlBottomNav.homeIndex;
-  late Future<AppData> appDataFuture;
+
+  /// The last successfully loaded payload. Kept across refreshes so a reload
+  /// never unmounts the tab subtree — screens hold their own fetched state, and
+  /// tearing them down is what made every cart change refetch the whole app.
+  AppData? appData;
+  Object? appDataError;
+  bool isLoadingAppData = false;
+
+  /// Tabs that have been opened at least once. The [IndexedStack] keeps these
+  /// mounted so switching back to one does not re-run its `initState` (and its
+  /// fetch); unvisited tabs stay unbuilt so startup still pays for Home only.
+  final Set<int> visitedTabs = {EbtlBottomNav.homeIndex};
 
   Timer? _notificationsTimer;
   int unreadNotificationCount = 0;
@@ -161,7 +172,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     AnalyticsService.logScreenView('home');
-    appDataFuture = ApiService.fetchAppData();
+    loadAppData();
     WidgetsBinding.instance.addObserver(this);
     PushNotificationService.initialize();
     _startNotificationsPolling(notifyImmediately: false);
@@ -289,10 +300,48 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         .then((_) => _refreshActiveOrders());
   }
 
+  /// Loads app data, keeping whatever is already on screen visible while the
+  /// request is in flight.
+  ///
+  /// [reuseStatic] carries the cocktail-finder options over from the current
+  /// payload, turning a refresh into a single request. Only a cold start or a
+  /// location change needs the full load.
+  Future<void> loadAppData({bool reuseStatic = false}) async {
+    if (isLoadingAppData) return;
+    setState(() => isLoadingAppData = true);
+
+    try {
+      final data = await ApiService.fetchAppData(
+        previous: reuseStatic ? appData : null,
+      );
+      if (!mounted) return;
+
+      setState(() {
+        appData = data;
+        appDataError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      // A failed background refresh must not replace a working screen with an
+      // error page — only surface it when there is nothing to show.
+      setState(() {
+        if (appData == null) appDataError = error;
+      });
+    } finally {
+      if (mounted) setState(() => isLoadingAppData = false);
+    }
+  }
+
+  /// Full reload: use when the underlying catalog may have changed (location
+  /// switch, logout).
   void reloadAppData() {
-    setState(() {
-      appDataFuture = ApiService.fetchAppData();
-    });
+    loadAppData();
+  }
+
+  /// Cheap refresh for cart mutations — refetches live data only.
+  void refreshCartData() {
+    loadAppData(reuseStatic: true);
   }
 
   void openCart() {
@@ -307,33 +356,28 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
 
     AnalyticsService.logScreenView('cocktail_finder');
 
+    // Only reachable from screens that render behind loaded app data.
+    final data = appData;
+    if (data == null) return;
+
     Navigator.of(context)
         .push(
           MaterialPageRoute(
-            builder: (_) => FutureBuilder<AppData>(
-              future: appDataFuture,
-              builder: (context, snapshot) {
-                final data = snapshot.data;
-                if (data == null) return theLoadingScaffold();
-
-                return Scaffold(
-                  backgroundColor: EbtlColors.cream,
-                  body: FinderScreen(
-                    data: data,
-                    initialLiquorTypeId:
-                        cleanLiquorTypeId == null || cleanLiquorTypeId.isEmpty
-                        ? null
-                        : cleanLiquorTypeId,
-                    onBack: () => Navigator.of(context).pop(),
-                    onOpenCocktail: (cocktail, liquorTypeId) =>
-                        openCocktailDetail(
-                          data,
-                          cocktail,
-                          liquorTypeId: liquorTypeId,
-                        ),
-                  ),
-                );
-              },
+            builder: (_) => Scaffold(
+              backgroundColor: EbtlColors.cream,
+              body: FinderScreen(
+                data: data,
+                initialLiquorTypeId:
+                    cleanLiquorTypeId == null || cleanLiquorTypeId.isEmpty
+                    ? null
+                    : cleanLiquorTypeId,
+                onBack: () => Navigator.of(context).pop(),
+                onOpenCocktail: (cocktail, liquorTypeId) => openCocktailDetail(
+                  data,
+                  cocktail,
+                  liquorTypeId: liquorTypeId,
+                ),
+              ),
             ),
           ),
         )
@@ -397,111 +441,107 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<AppData>(
-      future: appDataFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return theLoadingScaffold();
-        }
+    final data = appData;
 
-        if (snapshot.hasError) {
-          return AppErrorScreen(
-            message: apiErrorMessage(snapshot.error!),
-            onRetry: reloadAppData,
-          );
-        }
-
-        if (!snapshot.hasData) {
-          return AppErrorScreen(
-            message: 'The backend returned no data.',
-            onRetry: reloadAppData,
-          );
-        }
-
-        final data = snapshot.data!;
-
-        final pages = [
-          HomeScreen(
-            data: data,
-            onOpenFinder: () => openFinder(),
-            onOpenFinderWithBottle: (liquor) =>
-                openFinder(liquorTypeId: liquor.id),
-            onLocationSelected: selectLocation,
-            onOpenCocktail: (cocktail) => openCocktailDetail(data, cocktail),
-            unreadNotificationCount: unreadNotificationCount,
-            onOpenNotifications: openNotifications,
-            activeOrdersCount: activeOrdersCount,
-            onOpenActiveOrders: openActiveOrders,
-          ),
-          ExploreScreen(
-            data: data,
-            onCartChanged: reloadAppData,
-            onOpenFinder: () => openFinder(),
-            onOpenProduct: (product) =>
-                openCocktailDetail(data, Cocktail.fromShopProduct(product)),
-            unreadNotificationCount: unreadNotificationCount,
-            onOpenNotifications: openNotifications,
-            activeOrdersCount: activeOrdersCount,
-            onOpenActiveOrders: openActiveOrders,
-          ),
-          CartScreen(
-            data: data,
-            onOpenFinder: () => openFinder(),
-            onGoHome: () =>
-                setState(() => selectedIndex = EbtlBottomNav.homeIndex),
-            onCartChanged: reloadAppData,
-            onOpenCheckout:
-                ({
-                  required locationId,
-                  required fulfillmentType,
-                  required onCartChanged,
-                }) {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => CheckoutScreen(
-                        locationId: locationId,
-                        fulfillmentType: fulfillmentType,
-                        onEditCart: () => Navigator.of(context).pop(),
-                        onCartChanged: onCartChanged,
-                        onOrderCompleted: () {
-                          Navigator.of(context).pop();
-                          if (!mounted) return;
-                          setState(
-                            () => selectedIndex = EbtlBottomNav.homeIndex,
-                          );
-                          reloadAppData();
-                          _refreshActiveOrders();
-                        },
-                      ),
-                    ),
-                  );
-                },
-          ),
-          ProfileScreen(
-            selectedLocationId: data.selectedLocationId,
-            unreadNotificationCount: unreadNotificationCount,
-            onOpenNotifications: openNotifications,
-            onLoggedOut: () {
-              setState(() => selectedIndex = EbtlBottomNav.homeIndex);
-              reloadAppData();
-            },
-          ),
-        ];
-
-        final safeSelectedIndex = selectedIndex
-            .clamp(0, pages.length - 1)
-            .toInt();
-
-        return Scaffold(
-          body: pages[safeSelectedIndex],
-          bottomNavigationBar: EbtlBottomNav(
-            selectedIndex: safeSelectedIndex,
-            onTap: handleBottomNavTap,
-            showProfileDot: unreadNotificationCount > 0,
-            cartItemCount: data.cartSummary?.totalQuantity ?? 0,
-          ),
+    if (data == null) {
+      final error = appDataError;
+      if (error != null) {
+        return AppErrorScreen(
+          message: apiErrorMessage(error),
+          onRetry: reloadAppData,
         );
-      },
+      }
+
+      return theLoadingScaffold();
+    }
+
+    final pages = [
+      HomeScreen(
+        data: data,
+        onOpenFinder: () => openFinder(),
+        onOpenFinderWithBottle: (liquor) => openFinder(liquorTypeId: liquor.id),
+        onLocationSelected: selectLocation,
+        onOpenCocktail: (cocktail) => openCocktailDetail(data, cocktail),
+        unreadNotificationCount: unreadNotificationCount,
+        onOpenNotifications: openNotifications,
+        activeOrdersCount: activeOrdersCount,
+        onOpenActiveOrders: openActiveOrders,
+      ),
+      ExploreScreen(
+        data: data,
+        onCartChanged: refreshCartData,
+        onOpenFinder: () => openFinder(),
+        onOpenProduct: (product) =>
+            openCocktailDetail(data, Cocktail.fromShopProduct(product)),
+        unreadNotificationCount: unreadNotificationCount,
+        onOpenNotifications: openNotifications,
+        activeOrdersCount: activeOrdersCount,
+        onOpenActiveOrders: openActiveOrders,
+      ),
+      CartScreen(
+        data: data,
+        onOpenFinder: () => openFinder(),
+        onGoHome: () => setState(() => selectedIndex = EbtlBottomNav.homeIndex),
+        onCartChanged: refreshCartData,
+        onOpenCheckout:
+            ({
+              required locationId,
+              required fulfillmentType,
+              required onCartChanged,
+            }) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => CheckoutScreen(
+                    locationId: locationId,
+                    fulfillmentType: fulfillmentType,
+                    onEditCart: () => Navigator.of(context).pop(),
+                    onCartChanged: onCartChanged,
+                    onOrderCompleted: () {
+                      Navigator.of(context).pop();
+                      if (!mounted) return;
+                      setState(() => selectedIndex = EbtlBottomNav.homeIndex);
+                      reloadAppData();
+                      _refreshActiveOrders();
+                    },
+                  ),
+                ),
+              );
+            },
+      ),
+      ProfileScreen(
+        selectedLocationId: data.selectedLocationId,
+        unreadNotificationCount: unreadNotificationCount,
+        onOpenNotifications: openNotifications,
+        onLoggedOut: () {
+          setState(() => selectedIndex = EbtlBottomNav.homeIndex);
+          reloadAppData();
+        },
+      ),
+    ];
+
+    final safeSelectedIndex = selectedIndex.clamp(0, pages.length - 1).toInt();
+    visitedTabs.add(safeSelectedIndex);
+
+    return Scaffold(
+      // IndexedStack keeps every visited tab mounted, so switching tabs shows
+      // the screen exactly as it was left instead of remounting it and
+      // refetching. Unvisited tabs render as empty placeholders until first
+      // opened, so startup cost is unchanged.
+      body: IndexedStack(
+        index: safeSelectedIndex,
+        children: List<Widget>.generate(
+          pages.length,
+          (index) => visitedTabs.contains(index)
+              ? pages[index]
+              : const SizedBox.shrink(),
+        ),
+      ),
+      bottomNavigationBar: EbtlBottomNav(
+        selectedIndex: safeSelectedIndex,
+        onTap: handleBottomNavTap,
+        showProfileDot: unreadNotificationCount > 0,
+        cartItemCount: data.cartSummary?.totalQuantity ?? 0,
+      ),
     );
   }
 }
