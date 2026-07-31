@@ -232,7 +232,9 @@ design — **follow the local structure**; don't refactor it wholesale.
   `flagPaidOrderForReview` marks `payments.raw_payload.needs_reconciliation` and
   logs — a human decides refund vs. reinstate. Replaying place-order against
   such an order returns 409 `error_code: checkout_expired`, which the app uses
-  to start a fresh checkout.
+  to start a fresh checkout. `expired` is a value of the `public.order_status`
+  **enum** (added by `db/migrations/20260731_expired_order_status.sql`, already
+  applied) — widening that enum is the only schema change it needed.
 - **Notifications:** order status changes fan out through
   `lib/notifications.js` (`createCustomerNotification` → persist + push via FCM
   or Expo, gated by env). `notifyOrderReadyForPickup` dedupes on
