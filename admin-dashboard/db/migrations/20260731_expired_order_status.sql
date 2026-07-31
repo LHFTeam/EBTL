@@ -1,4 +1,4 @@
--- EBTL: allow orders.status = 'expired'
+-- EBTL: add orders.status = 'expired'
 --
 -- The Postgres schema is managed in Supabase and is NOT otherwise tracked in
 -- this repo (see AGENTS.md). This file is a hand-written migration meant to be
@@ -13,72 +13,32 @@
 -- NOT deleted: if a payment settles late, the row must still be there for the
 -- webhook to find and flag, otherwise the money cannot be reconciled.
 --
--- NOT verified against the live schema — unlike the earlier migrations here,
--- this was written without database access. It therefore handles every shape
--- orders.status might have (enum type, text + CHECK, or unconstrained text) and
--- reports what it found. Check the NOTICE output after applying.
+-- Verified against the live schema (project pfcncajijvtvsdwgwbjl) before
+-- writing:
+--   * orders.status is enum public.order_status, values (draft,
+--     pending_payment, confirmed, preparing, ready, out_for_delivery,
+--     completed, cancelled, refunded). No 'expired' yet.
+--   * No CHECK constraint, RLS policy or function enumerates order statuses,
+--     so widening the enum is the only schema change needed.
+--   * The three triggers on orders are all inert for 'expired':
+--     set_order_confirmed_at only stamps confirmed_at for status in
+--     (confirmed, preparing, ready, out_for_delivery, completed), so a late
+--     payment marking an expired order paid does NOT confirm it;
+--     stamp_order_status_timestamps has no branch for it; and
+--     consume_inventory_when_order_completed only fires on 'completed', so
+--     expiring never touches stock.
+--   * v_daily_sales_by_location and v_product_sales filter to 'completed',
+--     v_order_prep_queue to (confirmed, preparing, ready) — none is affected.
+--   * transition_cart_order_status() requires payment_status = 'paid', so
+--     staff cannot walk an unpaid expired order back into the prep queue.
+--   * idx_orders_status_created is btree (status, created_at DESC), which
+--     already serves the sweep's lookup. No new index is needed.
 --
--- Deliberately NOT wrapped in begin/commit: ALTER TYPE ... ADD VALUE cannot be
--- used in the same transaction that adds it, so the enum branch would fail.
+-- ALTER TYPE ... ADD VALUE is allowed inside a transaction on PG 12+ as long as
+-- the new value is not *used* in the same transaction. This migration only adds
+-- it; the first use is a later UPDATE from the application.
 
-do $$
-declare
-  enum_type_name text;
-  status_constraint_name text;
-  status_constraint_def text;
-begin
-  -- Case 1: status is an enum type. Widen the type itself.
-  select t.typname
-    into enum_type_name
-  from pg_attribute a
-  join pg_type t on t.oid = a.atttypid
-  where a.attrelid = 'public.orders'::regclass
-    and a.attname = 'status'
-    and a.attnum > 0
-    and t.typtype = 'e';
+alter type public.order_status add value if not exists 'expired' after 'pending_payment';
 
-  if enum_type_name is not null then
-    execute format('alter type public.%I add value if not exists %L', enum_type_name, 'expired');
-    raise notice 'orders.status is enum %; ensured value ''expired''.', enum_type_name;
-    return;
-  end if;
-
-  -- Case 2: status is text with a CHECK constraint enumerating the statuses.
-  select c.conname, pg_get_constraintdef(c.oid)
-    into status_constraint_name, status_constraint_def
-  from pg_constraint c
-  where c.conrelid = 'public.orders'::regclass
-    and c.contype = 'c'
-    and pg_get_constraintdef(c.oid) ilike '%pending_payment%'
-  limit 1;
-
-  -- Case 3: nothing constrains it, so nothing needs widening.
-  if status_constraint_name is null then
-    raise notice 'orders.status has no enumerating CHECK constraint; nothing to widen.';
-    return;
-  end if;
-
-  if status_constraint_def ilike '%expired%' then
-    raise notice 'Constraint % already allows ''expired''.', status_constraint_name;
-    return;
-  end if;
-
-  execute format('alter table public.orders drop constraint %I', status_constraint_name);
-
-  execute format(
-    'alter table public.orders add constraint %I check (status in (%s))',
-    status_constraint_name,
-    $list$'draft','pending_payment','expired','confirmed','preparing','ready','out_for_delivery','completed','cancelled','refunded'$list$
-  );
-
-  raise notice 'Rebuilt constraint % to allow ''expired''. Previous definition: %',
-    status_constraint_name, status_constraint_def;
-end $$;
-
--- The sweep reads (status, payment_status, created_at) to find candidates.
-create index if not exists orders_pending_payment_created_at_idx
-  on public.orders (created_at)
-  where status = 'pending_payment';
-
-comment on index public.orders_pending_payment_created_at_idx is
-  'Backs the abandoned-checkout sweep in server/lib/pendingOrderCleanup.js.';
+comment on type public.order_status is
+  'Order lifecycle. `expired` is terminal and set only by the abandoned-checkout sweep in server/lib/pendingOrderCleanup.js; it means the checkout was never paid for.';
