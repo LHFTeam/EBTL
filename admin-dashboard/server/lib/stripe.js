@@ -229,6 +229,43 @@ export async function createStripePaymentIntent({
   };
 }
 
+// Intent states that mean money is either already ours or still moving. Stripe
+// refuses to cancel these, and so should we — an intent in one of these states
+// is not an abandoned checkout.
+const MONEY_IN_FLIGHT_INTENT_STATUSES = new Set(['succeeded', 'processing', 'requires_capture']);
+
+// Closes the payment window on an abandoned checkout, so a customer who left
+// the sheet open cannot pay for an order we have already given up on.
+//
+// Never throws. The return value distinguishes the three outcomes that matter:
+// cancelled (or already cancelled), `moneyInFlight` — Stripe refused because
+// the intent is succeeding or has succeeded, which means the order must NOT be
+// expired — and a plain failure, which is safe to retry on the next sweep.
+export async function cancelStripePaymentIntent(paymentIntentId, { reason = 'abandoned' } = {}) {
+  if (!paymentIntentId) return { cancelled: false, skipped: 'no_payment_intent' };
+  if (!stripeIsConfigured()) return { cancelled: false, skipped: 'stripe_not_configured' };
+
+  try {
+    const intent = await stripeRequest(`/v1/payment_intents/${encodeURIComponent(paymentIntentId)}/cancel`, {
+      body: { cancellation_reason: reason }
+    });
+
+    return { cancelled: true, status: intent?.status || 'canceled' };
+  } catch (error) {
+    const status = error?.stripeBody?.error?.payment_intent?.status || null;
+
+    // Cancelling an already-cancelled intent is an error to Stripe but a
+    // success to us — the window is shut either way.
+    if (status === 'canceled') return { cancelled: true, status };
+
+    if (status && MONEY_IN_FLIGHT_INTENT_STATUSES.has(status)) {
+      return { cancelled: false, status, moneyInFlight: true };
+    }
+
+    return { cancelled: false, status, error };
+  }
+}
+
 export function extractStripeAmount(paymentIntent) {
   const obj = paymentIntent && typeof paymentIntent === 'object' ? paymentIntent : {};
   return {

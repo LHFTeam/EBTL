@@ -2830,6 +2830,93 @@ async function recordPromotionRedemptionIfNeeded({ order, payment }) {
   return inserted.data;
 }
 
+// Empties the cart an order was built from. This is deliberately tied to
+// *payment success* rather than order creation: clearing the cart the moment
+// the payment session was created meant a customer who dismissed the payment
+// sheet without paying lost everything they had added, with no way back.
+//
+// Only the cart items that were actually ordered are removed, so anything
+// added while the payment was in flight survives, and the cart is only retired
+// once nothing is left in it. Idempotent — safe to call from every
+// payment-success path, including webhook retries. Failures are logged but
+// never bubble up; a stale cart must not fail a payment confirmation.
+async function convertCartAfterPayment(payment) {
+  const cartId = payment?.raw_payload?.cart_id;
+  if (!cartId) return;
+
+  const orderedItemIds = (payment.raw_payload?.cart_item_ids || []).filter(Boolean);
+
+  let deletion = supabase
+    .from('cart_items')
+    .delete()
+    .eq('cart_id', cartId);
+
+  if (orderedItemIds.length) deletion = deletion.in('id', orderedItemIds);
+
+  const deleted = await deletion;
+
+  if (deleted.error) {
+    console.error('convertCartAfterPayment could not clear cart items', { cartId, error: deleted.error });
+    return;
+  }
+
+  const remaining = await supabase
+    .from('cart_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('cart_id', cartId);
+
+  if (remaining.error) {
+    console.error('convertCartAfterPayment could not count cart items', { cartId, error: remaining.error });
+    return;
+  }
+
+  if (Number(remaining.count || 0) > 0) return;
+
+  const converted = await supabase
+    .from('carts')
+    .update({ status: 'converted' })
+    .eq('id', cartId)
+    .eq('status', 'active');
+
+  if (converted.error) {
+    console.error('convertCartAfterPayment could not convert cart', { cartId, error: converted.error });
+  }
+}
+
+// Rebuilds the place-order `order` payload from a stored order row. The
+// idempotent replay of place-order (a customer retrying after dismissing the
+// payment sheet) has no quote to hand — the app still needs the same shape,
+// because it reads totals and location off it to render confirmation.
+function storedCheckoutOrderPayload(order, payment = null) {
+  const subtotalExVat = money(order.subtotal_ex_vat);
+  const vatAmount = money(order.vat_amount);
+
+  return {
+    id: order.id,
+    order_number: order.order_number,
+    status: order.status,
+    payment_status: order.payment_status,
+    fulfillment_type: order.fulfillment_type,
+    requested_fulfillment_at: order.requested_fulfillment_at,
+    created_at: order.created_at,
+    customer_phone: order.customer_phone_snapshot,
+    address: order.customer_address_snapshot,
+    location: publicLocation(order.locations),
+    totals: {
+      subtotal_ex_vat: subtotalExVat,
+      vat_amount: vatAmount,
+      subtotal_inc_vat: money(subtotalExVat + vatAmount),
+      discount_amount: money(order.discount_amount),
+      credit_applied: money(order.credit_applied),
+      delivery_fee: money(order.delivery_fee),
+      total_amount: money(order.total_amount),
+      currency: CURRENCY,
+      vat_included: true
+    },
+    promotion: payment?.raw_payload?.promotion || null
+  };
+}
+
 // Runs the referral + store-credit side effects for a paid order: grants the
 // referrer their reward if this order qualifies, and records any store credit
 // the customer spent. Both are idempotent, so this is safe to call from every
@@ -4945,7 +5032,7 @@ async function handleCustomerPlaceOrder(req, res) {
 
   const existingPayment = await supabase
     .from('payments')
-    .select('*, orders(*)')
+    .select('*, orders(*, locations(id,name,type,compound_name,beach_name,banner_image_url,delivery_fee))')
     .eq('idempotency_key', parsed.data.idempotency_key)
     .maybeSingle();
 
@@ -4957,6 +5044,17 @@ async function handleCustomerPlaceOrder(req, res) {
     if (existingPayment.data.orders.customer_id !== ensured.customer.id) {
       return res.status(409).json({
         error: 'This idempotency key was already used.'
+      });
+    }
+
+    // Replaying an expired order would hand back a payment session whose intent
+    // the sweep has already cancelled — the sheet would fail, and retrying
+    // would fail identically forever. Tell the app to start a fresh checkout;
+    // `error_code` is what it keys off to reset its idempotency key.
+    if (UNREVIVABLE_ORDER_STATUSES.has(existingPayment.data.orders.status)) {
+      return res.status(409).json({
+        error: 'This checkout expired because it was not paid in time. Please place the order again.',
+        error_code: 'checkout_expired'
       });
     }
 
@@ -4972,7 +5070,7 @@ async function handleCustomerPlaceOrder(req, res) {
 
     return res.json({
       session: sessionPayload(ensured.customer.id, ensured.token),
-      order: existingPayment.data.orders,
+      order: storedCheckoutOrderPayload(existingPayment.data.orders, existingPayment.data),
       items: existingItems.data || [],
       payment: createCheckoutPaymentPayload({
         order: existingPayment.data.orders,
@@ -5184,6 +5282,13 @@ async function handleCustomerPlaceOrder(req, res) {
         payment_mode: PAYMENT_MODE,
         demo_confirmed_at: isDemoPaymentMode ? new Date().toISOString() : null,
         save_card: Boolean(parsed.data.save_card),
+        // Which cart (and exactly which of its items) this order was built
+        // from, so the cart can be emptied when the payment succeeds rather
+        // than when it merely starts. See convertCartAfterPayment.
+        cart_id: parsed.data.cart_id,
+        cart_item_ids: quote.data.quote.items
+          .map((item) => item.cart_item_id)
+          .filter(Boolean),
         promotion: quote.data.quote.promotion
           ? {
               id: quote.data.quote.promotion.id,
@@ -5231,15 +5336,9 @@ async function handleCustomerPlaceOrder(req, res) {
 
     await settleReferralAndCreditForOrder(confirmedOrder.data);
 
-    await supabase
-      .from('cart_items')
-      .delete()
-      .eq('cart_id', parsed.data.cart_id);
-
-    await supabase
-      .from('carts')
-      .update({ status: 'converted' })
-      .eq('id', parsed.data.cart_id);
+    // Demo orders are paid the moment they are placed, so the cart converts
+    // here. Gateway orders convert from the payment-success webhook instead.
+    await convertCartAfterPayment(payment.data);
 
     return res.json({
       session: sessionPayload(ensured.customer.id, ensured.token),
@@ -5382,15 +5481,10 @@ async function handleCustomerPlaceOrder(req, res) {
     });
   }
 
-  await supabase
-    .from('cart_items')
-    .delete()
-    .eq('cart_id', parsed.data.cart_id);
-
-  await supabase
-    .from('carts')
-    .update({ status: 'converted' })
-    .eq('id', parsed.data.cart_id);
+  // The cart is intentionally left untouched here. The customer has not paid
+  // yet — they are about to be shown the gateway's payment sheet, which they
+  // may well dismiss. The cart is emptied only once the payment-success
+  // webhook lands (see convertCartAfterPayment).
 
   res.json({
     session: sessionPayload(ensured.customer.id, ensured.token),
@@ -5627,8 +5721,12 @@ async function updateOrderForPaymentResult({ orderId, isSuccess }) {
       .maybeSingle();
 
     if (confirmed.error) return { error: confirmed.error };
-    if (confirmed.data) return { data: confirmed.data };
+    if (confirmed.data) return { data: confirmed.data, confirmed: true };
 
+    // The order was not awaiting payment. Record the money either way — the
+    // payment status has to stay truthful — but leave the order where it is.
+    // It is either an already-confirmed order seeing a replayed event, or an
+    // expired one that must not be revived behind a human's back.
     const paid = await supabase
       .from('orders')
       .update({ payment_status: 'paid' })
@@ -5636,7 +5734,7 @@ async function updateOrderForPaymentResult({ orderId, isSuccess }) {
       .select()
       .single();
 
-    return paid.error ? { error: paid.error } : { data: paid.data };
+    return paid.error ? { error: paid.error } : { data: paid.data, confirmed: false };
   }
 
   const failed = await supabase
@@ -5648,7 +5746,7 @@ async function updateOrderForPaymentResult({ orderId, isSuccess }) {
     .maybeSingle();
 
   if (failed.error) return { error: failed.error };
-  if (failed.data) return { data: failed.data };
+  if (failed.data) return { data: failed.data, confirmed: false };
 
   const current = await supabase
     .from('orders')
@@ -5656,7 +5754,50 @@ async function updateOrderForPaymentResult({ orderId, isSuccess }) {
     .eq('id', orderId)
     .single();
 
-  return current.error ? { error: current.error } : { data: current.data };
+  return current.error ? { error: current.error } : { data: current.data, confirmed: false };
+}
+
+// Order states we will not resurrect on a late payment. Anything else that
+// fails to confirm is simply an order that had already moved on — a replayed
+// webhook, or staff who advanced it — and needs no attention.
+const UNREVIVABLE_ORDER_STATUSES = new Set(['expired', 'cancelled']);
+
+// A payment succeeded against an order we had already given up on. The money is
+// real and the order is not being honoured, so this needs a human: refund it, or
+// reinstate the order deliberately. Marks the payment for review and logs it
+// loudly. Never throws — the webhook must still return 200 so the gateway does
+// not retry a payment we have already recorded.
+async function flagPaidOrderForReview({ order, payment, reason }) {
+  console.error('PAYMENT RECEIVED FOR AN ORDER THAT WILL NOT BE FULFILLED', {
+    orderId: order?.id,
+    orderNumber: order?.order_number,
+    orderStatus: order?.status,
+    paymentId: payment?.id,
+    providerPaymentId: payment?.provider_payment_id,
+    amount: payment?.amount,
+    currency: payment?.currency,
+    reason
+  });
+
+  if (!payment?.id) return;
+
+  const flagged = await supabase
+    .from('payments')
+    .update({
+      raw_payload: {
+        ...(payment.raw_payload || {}),
+        needs_reconciliation: {
+          reason,
+          order_status: order?.status || null,
+          flagged_at: new Date().toISOString()
+        }
+      }
+    })
+    .eq('id', payment.id);
+
+  if (flagged.error) {
+    console.error('Could not flag payment for reconciliation', { paymentId: payment.id, error: flagged.error });
+  }
 }
 
 customerRouter.post('/payments/geidea/callback', async (req, res) => {
@@ -5752,13 +5893,28 @@ customerRouter.post('/payments/geidea/callback', async (req, res) => {
   });
 
   if (isSuccess) {
-    await recordPromotionRedemptionIfNeeded({
-      order: updatedOrder.data,
-      payment: updatedPayment.data
-    });
+    // Only an order that actually moved into `confirmed` gets the fulfillment
+    // side effects. An expired one is flagged instead: the money arrived after
+    // we closed the checkout, so a human decides between refund and reinstate.
+    if (updatedOrder.confirmed) {
+      await recordPromotionRedemptionIfNeeded({
+        order: updatedOrder.data,
+        payment: updatedPayment.data
+      });
 
-    await settleReferralAndCreditForOrder(updatedOrder.data);
+      await settleReferralAndCreditForOrder(updatedOrder.data);
 
+      await convertCartAfterPayment(updatedPayment.data);
+    } else if (UNREVIVABLE_ORDER_STATUSES.has(updatedOrder.data?.status)) {
+      await flagPaidOrderForReview({
+        order: updatedOrder.data,
+        payment: updatedPayment.data,
+        reason: 'geidea_callback_succeeded_after_checkout_closed'
+      });
+    }
+
+    // The saved card belongs to the customer, not to this order, so it is
+    // recorded either way.
     if (payment.data.raw_payload?.save_card) {
       const savedCard = await recordGeideaSavedCardIfNeeded({
         customerId: payment.data.orders.customer_id,
@@ -5887,13 +6043,28 @@ customerRouter.post('/payments/stripe/webhook', async (req, res) => {
   if (updatedOrder.error) return res.status(400).json({ ok: false, error: updatedOrder.error.message });
 
   if (isSuccess) {
-    await recordPromotionRedemptionIfNeeded({
-      order: updatedOrder.data,
-      payment: updatedPayment.data
-    });
+    // Only an order that actually moved into `confirmed` gets the fulfillment
+    // side effects. An expired one is flagged instead: the money arrived after
+    // we closed the checkout, so a human decides between refund and reinstate.
+    if (updatedOrder.confirmed) {
+      await recordPromotionRedemptionIfNeeded({
+        order: updatedOrder.data,
+        payment: updatedPayment.data
+      });
 
-    await settleReferralAndCreditForOrder(updatedOrder.data);
+      await settleReferralAndCreditForOrder(updatedOrder.data);
 
+      await convertCartAfterPayment(updatedPayment.data);
+    } else if (UNREVIVABLE_ORDER_STATUSES.has(updatedOrder.data?.status)) {
+      await flagPaidOrderForReview({
+        order: updatedOrder.data,
+        payment: updatedPayment.data,
+        reason: 'stripe_payment_succeeded_after_checkout_closed'
+      });
+    }
+
+    // The saved card belongs to the customer, not to this order, so it is
+    // recorded either way.
     if (payment.data.raw_payload?.save_card) {
       const savedCard = await recordStripeSavedCardIfNeeded({
         customerId: payment.data.orders.customer_id,
