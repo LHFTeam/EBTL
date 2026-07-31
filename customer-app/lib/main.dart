@@ -224,16 +224,17 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
       }
 
       if (isNew && canNotify) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${latest.title}: ${latest.body}'),
-            action: SnackBarAction(
-              label: 'View',
-              onPressed: () {
-                if (mounted) openNotifications();
-              },
-            ),
-          ),
+        showAppToast(
+          context,
+          type: latest.orderId != null
+              ? AppToastType.order
+              : AppToastType.info,
+          title: latest.title,
+          message: latest.body,
+          actionText: 'View',
+          onAction: () {
+            if (mounted) openNotifications();
+          },
         );
       }
     } catch (_) {
@@ -249,7 +250,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   }
 
   void openNotifications() {
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    hideAppToast();
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => CustomerNotificationsScreen(
