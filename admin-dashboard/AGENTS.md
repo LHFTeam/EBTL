@@ -216,6 +216,13 @@ design — **follow the local structure**; don't refactor it wholesale.
   `convertCartAfterPayment` (demo placement, Geidea callback, Stripe webhook),
   using the `cart_id`/`cart_item_ids` recorded on `payments.raw_payload`. Do
   not move cart clearing back to placement.
+- **Abandoned orders:** an order that never gets paid stays at
+  `pending_payment` forever, so `lib/pendingOrderCleanup.js` sweeps and deletes
+  them once they are older than `PENDING_ORDER_MAX_AGE_HOURS` (48h), hourly,
+  from an unref'd timer started in `index.js`. It only touches orders whose
+  payment status is unpaid *and* that have no `paid` payment row, so a webhook
+  that half-landed can never cost a real order. Order items and payment rows go
+  with them via the schema's cascade.
 - **Notifications:** order status changes fan out through
   `lib/notifications.js` (`createCustomerNotification` → persist + push via FCM
   or Expo, gated by env). `notifyOrderReadyForPickup` dedupes on
