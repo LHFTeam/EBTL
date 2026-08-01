@@ -604,6 +604,10 @@ class CheckoutOrder {
           : CheckoutPromotion.fromJson(promotionMap),
     );
   }
+
+  /// Matches [PaymentStatusResponse.isPaid]: demo orders come back already
+  /// settled from place-order, gateway orders only reach this through polling.
+  bool get isPaid => paymentStatus == 'paid' && status == 'confirmed';
 }
 
 class CheckoutPayment {

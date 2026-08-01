@@ -8,6 +8,7 @@ import '../../models/app_data.dart';
 import '../../models/cart_models.dart';
 import '../../models/common_models.dart';
 import '../../services/api_service.dart';
+import '../../services/cart_revision.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import '../../shared/widgets/brand_widgets.dart';
 import '../../shared/widgets/network_or_asset_image.dart';
@@ -30,31 +31,41 @@ String cartSummarySignature(CartSummary? summary) {
   return '${summary.cartId}|${summary.itemCount}|${summary.totalQuantity}';
 }
 
-/// What a mounted cart tab does when the app-level cart summary moves.
+/// What a mounted cart tab does with the cart it is already showing.
 enum CartRefreshDecision {
-  /// The cart on screen already matches the summary.
+  /// The loaded cart still holds, or it is stale but out of sight — a
+  /// background tab is left stale on purpose and reloaded when it is opened,
+  /// so five items added from the shop cost one request, not five.
   keep,
 
-  /// A fetch started for this change is already in flight — take its result as
-  /// covering the new summary rather than firing a second request.
+  /// Only the summary moved, and the fetch that will answer for it is already
+  /// in flight: take its result rather than firing a second request.
   adopt,
 
   /// The cart on screen is out of date and visible: refetch it.
   reload,
 }
 
+/// [revisionChanged] is the authoritative signal: [CartRevision] moves in the
+/// same code path as the successful write, so any cart change this app made is
+/// caught whether or not the screen that made it refreshed anything else.
+///
+/// [summaryChanged] is the backstop for cart changes the app did not make —
+/// it only says that the app-level summary has drifted from what this screen
+/// loaded for.
 CartRefreshDecision cartRefreshDecision({
-  required String loadedSignature,
-  required String currentSignature,
+  required bool revisionChanged,
+  required bool summaryChanged,
   required bool isFetching,
   required bool isActive,
 }) {
-  if (loadedSignature == currentSignature) return CartRefreshDecision.keep;
-  if (isFetching) return CartRefreshDecision.adopt;
+  if (!revisionChanged && !summaryChanged) return CartRefreshDecision.keep;
 
-  // Nothing to show while the tab is in the background. It stays stale and is
-  // refetched when it is opened, which is this same decision with `isActive`
-  // true.
+  // No write has landed since the fetch in flight was issued, so its response
+  // already covers the summary that just moved: this is the screen's own +/-
+  // buttons, which write, refetch, and then refresh the app data.
+  if (!revisionChanged && isFetching) return CartRefreshDecision.adopt;
+
   if (!isActive) return CartRefreshDecision.keep;
 
   return CartRefreshDecision.reload;
@@ -92,9 +103,11 @@ class _CartScreenState extends State<CartScreen> {
   final Set<String> mutatingItemIds = <String>{};
   bool isClearing = false;
 
-  /// The app-level cart summary the currently loaded (or in-flight) cart was
-  /// fetched for. When the summary moves past this, the cart on screen is out
-  /// of date and has to be refetched.
+  /// What the cart currently loaded (or in flight) was fetched for: the cart
+  /// revision at the time of the request, and the app-level summary it was
+  /// meant to match. Either one moving means the screen is showing a cart that
+  /// no longer holds.
+  int loadedRevision = CartRevision.current;
   String loadedSummarySignature = 'none';
   bool isFetchingCart = false;
 
@@ -102,6 +115,28 @@ class _CartScreenState extends State<CartScreen> {
   void initState() {
     super.initState();
     cartFuture = loadCart();
+    CartRevision.notifier.addListener(handleCartRevisionChanged);
+  }
+
+  @override
+  void dispose() {
+    CartRevision.notifier.removeListener(handleCartRevisionChanged);
+    super.dispose();
+  }
+
+  /// A cart write succeeded somewhere in the app. Nothing else has to happen
+  /// for this to arrive — no callback wiring, no app-data refresh — so an item
+  /// that made it into the cart is always an item this screen knows to load.
+  void handleCartRevisionChanged() {
+    if (!mounted) return;
+
+    // A background tab does not refetch here: it is left stale and reloaded by
+    // [didUpdateWidget] when it becomes the visible tab.
+    if (!widget.isActive || loadedRevision == CartRevision.current) return;
+
+    setState(() {
+      cartFuture = loadCart();
+    });
   }
 
   @override
@@ -116,16 +151,13 @@ class _CartScreenState extends State<CartScreen> {
     final signature = cartSummarySignature(widget.data.cartSummary);
 
     switch (cartRefreshDecision(
-      loadedSignature: loadedSummarySignature,
-      currentSignature: signature,
+      revisionChanged: loadedRevision != CartRevision.current,
+      summaryChanged: loadedSummarySignature != signature,
       isFetching: isFetchingCart,
       isActive: widget.isActive,
     )) {
       case CartRefreshDecision.keep:
         break;
-      // Cart mutations refresh the app data, so the request already in flight
-      // is the one that produced this summary: it will come back with the cart
-      // the summary describes.
       case CartRefreshDecision.adopt:
         loadedSummarySignature = signature;
       case CartRefreshDecision.reload:
@@ -134,6 +166,9 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   Future<CartPageResponse> loadCart() {
+    // Read before the request goes out: anything that lands after this point
+    // moves the revision past what we are about to load, and is caught.
+    loadedRevision = CartRevision.current;
     loadedSummarySignature = cartSummarySignature(widget.data.cartSummary);
     isFetchingCart = true;
 
@@ -143,14 +178,17 @@ class _CartScreenState extends State<CartScreen> {
     ).whenComplete(() => isFetchingCart = false);
   }
 
-  void reloadCart({bool refreshAppData = false}) {
+  void reloadCart() {
     setState(() {
       cartFuture = loadCart();
     });
+  }
 
-    if (refreshAppData) {
-      widget.onCartChanged();
-    }
+  /// Called after one of this screen's own writes. The refetch it needs has
+  /// already been started by the revision listener, so all that is left is the
+  /// app-level refresh that repaints the bottom-nav badge.
+  void afterCartWrite() {
+    widget.onCartChanged();
   }
 
   void setFulfillmentType(String value) {
@@ -184,7 +222,7 @@ class _CartScreenState extends State<CartScreen> {
 
       if (!mounted) return;
       setState(() => mutatingItemIds.remove(item.id));
-      reloadCart(refreshAppData: true);
+      afterCartWrite();
     } catch (error) {
       if (!mounted) return;
       setState(() => mutatingItemIds.remove(item.id));
@@ -202,7 +240,7 @@ class _CartScreenState extends State<CartScreen> {
 
       if (!mounted) return;
       setState(() => mutatingItemIds.remove(item.id));
-      reloadCart(refreshAppData: true);
+      afterCartWrite();
     } catch (error) {
       if (!mounted) return;
       setState(() => mutatingItemIds.remove(item.id));
@@ -220,7 +258,7 @@ class _CartScreenState extends State<CartScreen> {
 
       if (!mounted) return;
       setState(() => isClearing = false);
-      reloadCart(refreshAppData: true);
+      afterCartWrite();
     } catch (error) {
       if (!mounted) return;
       setState(() => isClearing = false);
@@ -244,7 +282,7 @@ class _CartScreenState extends State<CartScreen> {
       fulfillmentType: fulfillmentType,
       onCartChanged: () {
         widget.onCartChanged();
-        reloadCart(refreshAppData: false);
+        reloadCart();
       },
     );
   }

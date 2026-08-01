@@ -22,6 +22,7 @@ import '../models/order_detail_models.dart';
 import '../models/profile_models.dart';
 import '../models/referral_models.dart';
 import '../models/shop_models.dart';
+import 'cart_revision.dart';
 
 class ApiService {
   static const _storage = FlutterSecureStorage();
@@ -419,7 +420,22 @@ class ApiService {
       attachToken: true,
     );
 
-    return PlaceOrderResponse.fromJson(json);
+    final response = PlaceOrderResponse.fromJson(json);
+    _noteOrderPaid(response.order.id, isPaid: response.order.isPaid);
+    return response;
+  }
+
+  /// The backend empties the cart once an order is paid — immediately for demo
+  /// orders, from the payment webhook for gateway ones. That is a cart change
+  /// the app never made itself, so a paid order invalidates loaded carts too.
+  /// Deduplicated per order because the payment status is polled.
+  static final Set<String> _paidOrders = <String>{};
+
+  static void _noteOrderPaid(String orderId, {required bool isPaid}) {
+    if (!isPaid || orderId.isEmpty) return;
+    if (!_paidOrders.add(orderId)) return;
+
+    CartRevision.bump();
   }
 
   static Future<PaymentStatusResponse> fetchOrderPaymentStatus({
@@ -434,7 +450,9 @@ class ApiService {
       attachToken: true,
     );
 
-    return PaymentStatusResponse.fromJson(json);
+    final response = PaymentStatusResponse.fromJson(json);
+    _noteOrderPaid(response.orderId, isPaid: response.isPaid);
+    return response;
   }
 
   static Future<CustomerNotificationsResponse> fetchCustomerNotifications({
@@ -932,6 +950,22 @@ class ApiService {
       await _persistSession(CustomerSession.fromJson(rawSession));
     }
 
+    _noteCartWrite(method: method, path: path);
+
     return decoded;
+  }
+
+  /// Invalidates loaded carts once a request that changed the cart is known to
+  /// have succeeded.
+  ///
+  /// This sits in [_request], past the error check, rather than in the
+  /// individual cart methods: every cart write goes through here, so the
+  /// invalidation cannot be left off a new one, and a request that threw never
+  /// reaches it. That is the guarantee the cart tab leans on — an item that
+  /// made it into the cart is an item the cart tab knows to reload.
+  static void _noteCartWrite({required String method, required String path}) {
+    if (!isCartWriteRequest(method: method, path: path)) return;
+
+    CartRevision.bump();
   }
 }
