@@ -6,6 +6,7 @@ import '../../core/network/api_exception.dart';
 import '../../core/theme/ebtl_colors.dart';
 import '../../models/app_data.dart';
 import '../../models/cart_models.dart';
+import '../../models/common_models.dart';
 import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import '../../shared/widgets/brand_widgets.dart';
@@ -19,8 +20,52 @@ typedef OpenCheckoutCallback =
       required VoidCallback onCartChanged,
     });
 
+/// Identity of the cart as the app-level summary (the one behind the bottom-nav
+/// badge) describes it. The cart tab stays mounted while other tabs are used, so
+/// comparing this against the summary the screen last loaded for is how it
+/// notices items that were added somewhere else — a shop sheet, a cocktail
+/// detail — while it was in the background.
+String cartSummarySignature(CartSummary? summary) {
+  if (summary == null) return 'none';
+  return '${summary.cartId}|${summary.itemCount}|${summary.totalQuantity}';
+}
+
+/// What a mounted cart tab does when the app-level cart summary moves.
+enum CartRefreshDecision {
+  /// The cart on screen already matches the summary.
+  keep,
+
+  /// A fetch started for this change is already in flight — take its result as
+  /// covering the new summary rather than firing a second request.
+  adopt,
+
+  /// The cart on screen is out of date and visible: refetch it.
+  reload,
+}
+
+CartRefreshDecision cartRefreshDecision({
+  required String loadedSignature,
+  required String currentSignature,
+  required bool isFetching,
+  required bool isActive,
+}) {
+  if (loadedSignature == currentSignature) return CartRefreshDecision.keep;
+  if (isFetching) return CartRefreshDecision.adopt;
+
+  // Nothing to show while the tab is in the background. It stays stale and is
+  // refetched when it is opened, which is this same decision with `isActive`
+  // true.
+  if (!isActive) return CartRefreshDecision.keep;
+
+  return CartRefreshDecision.reload;
+}
+
 class CartScreen extends StatefulWidget {
   final AppData data;
+
+  /// Whether the cart tab is the one currently on screen. A stale cart is only
+  /// refetched when it is visible, so background tabs cost nothing.
+  final bool isActive;
   final VoidCallback onOpenFinder;
   final VoidCallback onGoHome;
   final VoidCallback onCartChanged;
@@ -29,6 +74,7 @@ class CartScreen extends StatefulWidget {
   const CartScreen({
     super.key,
     required this.data,
+    this.isActive = true,
     required this.onOpenFinder,
     required this.onGoHome,
     required this.onCartChanged,
@@ -46,6 +92,12 @@ class _CartScreenState extends State<CartScreen> {
   final Set<String> mutatingItemIds = <String>{};
   bool isClearing = false;
 
+  /// The app-level cart summary the currently loaded (or in-flight) cart was
+  /// fetched for. When the summary moves past this, the cart on screen is out
+  /// of date and has to be refetched.
+  String loadedSummarySignature = 'none';
+  bool isFetchingCart = false;
+
   @override
   void initState() {
     super.initState();
@@ -58,14 +110,37 @@ class _CartScreenState extends State<CartScreen> {
 
     if (oldWidget.data.selectedLocationId != widget.data.selectedLocationId) {
       cartFuture = loadCart();
+      return;
+    }
+
+    final signature = cartSummarySignature(widget.data.cartSummary);
+
+    switch (cartRefreshDecision(
+      loadedSignature: loadedSummarySignature,
+      currentSignature: signature,
+      isFetching: isFetchingCart,
+      isActive: widget.isActive,
+    )) {
+      case CartRefreshDecision.keep:
+        break;
+      // Cart mutations refresh the app data, so the request already in flight
+      // is the one that produced this summary: it will come back with the cart
+      // the summary describes.
+      case CartRefreshDecision.adopt:
+        loadedSummarySignature = signature;
+      case CartRefreshDecision.reload:
+        cartFuture = loadCart();
     }
   }
 
   Future<CartPageResponse> loadCart() {
+    loadedSummarySignature = cartSummarySignature(widget.data.cartSummary);
+    isFetchingCart = true;
+
     return ApiService.fetchCart(
       locationId: widget.data.selectedLocationId,
       fulfillmentType: fulfillmentType,
-    );
+    ).whenComplete(() => isFetchingCart = false);
   }
 
   void reloadCart({bool refreshAppData = false}) {

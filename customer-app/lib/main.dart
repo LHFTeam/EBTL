@@ -455,6 +455,11 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
       return theLoadingScaffold();
     }
 
+    final safeSelectedIndex = selectedIndex
+        .clamp(0, EbtlBottomNav.tabCount - 1)
+        .toInt();
+    visitedTabs.add(safeSelectedIndex);
+
     final pages = [
       HomeScreen(
         data: data,
@@ -480,6 +485,10 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
       ),
       CartScreen(
         data: data,
+        // The cart tab stays mounted once opened, so it has to be told when it
+        // is the visible tab to refetch a cart that changed while it was in
+        // the background.
+        isActive: safeSelectedIndex == EbtlBottomNav.cartIndex,
         onOpenFinder: () => openFinder(),
         onGoHome: () => setState(() => selectedIndex = EbtlBottomNav.homeIndex),
         onCartChanged: refreshCartData,
@@ -518,9 +527,6 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         },
       ),
     ];
-
-    final safeSelectedIndex = selectedIndex.clamp(0, pages.length - 1).toInt();
-    visitedTabs.add(safeSelectedIndex);
 
     return Scaffold(
       // IndexedStack keeps every visited tab mounted, so switching tabs shows
