@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -39,7 +41,16 @@ class _CustomerNotificationsScreenState
     // notification as read. This is the common "notification center" pattern:
     // opening the list counts as seeing the notifications, so the unread badge
     // clears without the customer having to tap each card individually.
-    future.then((response) async {
+    unawaited(_markLoadedNotificationsRead(future));
+
+    return future;
+  }
+
+  Future<void> _markLoadedNotificationsRead(
+    Future<CustomerNotificationsResponse> future,
+  ) async {
+    try {
+      final response = await future;
       if (!mounted) return;
 
       if (response.unreadCount > 0) {
@@ -53,9 +64,9 @@ class _CustomerNotificationsScreenState
       }
 
       if (mounted) widget.onUnreadCountChanged?.call(0);
-    }).catchError((_) {});
-
-    return future;
+    } catch (_) {
+      // The FutureBuilder renders fetch failures; this side effect stays quiet.
+    }
   }
 
   void reload() {
