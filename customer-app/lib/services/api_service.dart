@@ -297,38 +297,55 @@ class ApiService {
     return CartPageResponse.fromJson(json);
   }
 
-  static Future<void> updateCartItemQuantity({
+  /// The cart summary a cart write answers with, or null if the response
+  /// carried none. Callers hand it to the shell so the bottom-nav badge updates
+  /// from this response instead of a follow-up `/home` fetch.
+  static CartSummary? _cartSummaryFrom(Map<String, dynamic> json) {
+    final summaryMap = asMap(json['cartSummary'] ?? json['cart_summary']);
+    return summaryMap.isEmpty ? null : CartSummary.fromJson(summaryMap);
+  }
+
+  static Future<CartSummary?> updateCartItemQuantity({
     required String itemId,
     required int quantity,
   }) async {
     await ensureSession();
 
-    await _request(
+    final json = await _request(
       method: 'PATCH',
       path: '/api/customer/cart/items/${Uri.encodeComponent(itemId)}',
       body: {'quantity': quantity.clamp(0, 99)},
       attachToken: true,
     );
+
+    return _cartSummaryFrom(json);
   }
 
-  static Future<void> deleteCartItem({required String itemId}) async {
+  static Future<CartSummary?> deleteCartItem({required String itemId}) async {
     await ensureSession();
 
-    await _request(
+    final json = await _request(
       method: 'DELETE',
       path: '/api/customer/cart/items/${Uri.encodeComponent(itemId)}',
       attachToken: true,
     );
+
+    return _cartSummaryFrom(json);
   }
 
-  static Future<void> clearCart() async {
+  static Future<CartSummary?> clearCart() async {
     await ensureSession();
 
-    await _request(
+    final json = await _request(
       method: 'DELETE',
       path: '/api/customer/cart',
       attachToken: true,
     );
+
+    // This endpoint answers with `{cart_id, cleared: true}` rather than a
+    // summary: an emptied cart has only one shape.
+    final cartId = readString(json['cart_id']);
+    return cartId.isEmpty ? null : CartSummary.emptied(cartId);
   }
 
   static Future<CheckoutPageResponse> fetchCheckout({

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ebtl_customer_app/models/app_data.dart';
+import 'package:ebtl_customer_app/models/common_models.dart';
 import 'package:ebtl_customer_app/models/finder_models.dart';
 
 const _homeJson = <String, dynamic>{
@@ -85,6 +86,55 @@ void main() {
       );
 
       expect(data.liquorTypes.map((type) => type.id), ['gin']);
+    });
+  });
+
+  group('AppData.withCartSummary', () {
+    AppData loaded() {
+      return AppData.fromApi(
+        homeJson: _homeJson,
+        optionsJson: _optionsJson,
+        selectedLocationId: 'north-coast',
+        selectedLocationName: 'North Coast',
+      );
+    }
+
+    test('swaps in the summary a cart write answered with', () {
+      // The point of the whole exercise: the badge learns the new count from
+      // the write's own response, with no /home request behind it.
+      final data = loaded().withCartSummary(
+        CartSummary.fromJson(const {
+          'cart_id': 'cart-1',
+          'total_quantity': 7,
+          'item_count': 4,
+        }),
+      );
+
+      expect(data.cartSummary?.totalQuantity, 7);
+      expect(data.cartSummary?.itemCount, 4);
+    });
+
+    test('leaves the rest of the payload untouched', () {
+      final first = loaded();
+      final data = first.withCartSummary(CartSummary.emptied('cart-1'));
+
+      expect(data.cartSummary?.totalQuantity, 0);
+      expect(data.finderOptions, same(first.finderOptions));
+      expect(data.hero, same(first.hero));
+      expect(data.featuredCocktails, same(first.featuredCocktails));
+      expect(data.selectedLocationId, 'north-coast');
+      expect(data.selectedLocationName, 'North Coast');
+    });
+  });
+
+  group('CartSummary.emptied', () {
+    test('describes a cart with nothing in it', () {
+      final summary = CartSummary.emptied('cart-1');
+
+      expect(summary.cartId, 'cart-1');
+      expect(summary.itemCount, 0);
+      expect(summary.totalQuantity, 0);
+      expect(summary.subtotalIncVat, 0);
     });
   });
 }

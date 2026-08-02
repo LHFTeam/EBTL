@@ -18,7 +18,7 @@ typedef OpenCheckoutCallback =
     void Function({
       required String locationId,
       required String fulfillmentType,
-      required VoidCallback onCartChanged,
+      required CartChangedCallback onCartChanged,
     });
 
 /// Identity of the cart as the app-level summary (the one behind the bottom-nav
@@ -79,7 +79,7 @@ class CartScreen extends StatefulWidget {
   final bool isActive;
   final VoidCallback onOpenFinder;
   final VoidCallback onGoHome;
-  final VoidCallback onCartChanged;
+  final CartChangedCallback onCartChanged;
   final OpenCheckoutCallback onOpenCheckout;
 
   const CartScreen({
@@ -184,11 +184,12 @@ class _CartScreenState extends State<CartScreen> {
     });
   }
 
-  /// Called after one of this screen's own writes. The refetch it needs has
-  /// already been started by the revision listener, so all that is left is the
-  /// app-level refresh that repaints the bottom-nav badge.
-  void afterCartWrite() {
-    widget.onCartChanged();
+  /// Called after one of this screen's own writes, with the summary the write
+  /// answered with. The refetch this screen needs has already been started by
+  /// the revision listener; the summary is what repaints the bottom-nav badge,
+  /// and passing it saves the shell a request.
+  void afterCartWrite(CartSummary? summary) {
+    widget.onCartChanged(summary);
   }
 
   void setFulfillmentType(String value) {
@@ -215,14 +216,14 @@ class _CartScreenState extends State<CartScreen> {
     setState(() => mutatingItemIds.add(item.id));
 
     try {
-      await ApiService.updateCartItemQuantity(
+      final summary = await ApiService.updateCartItemQuantity(
         itemId: item.id,
         quantity: quantity.clamp(0, 99),
       );
 
       if (!mounted) return;
       setState(() => mutatingItemIds.remove(item.id));
-      afterCartWrite();
+      afterCartWrite(summary);
     } catch (error) {
       if (!mounted) return;
       setState(() => mutatingItemIds.remove(item.id));
@@ -236,11 +237,11 @@ class _CartScreenState extends State<CartScreen> {
     setState(() => mutatingItemIds.add(item.id));
 
     try {
-      await ApiService.deleteCartItem(itemId: item.id);
+      final summary = await ApiService.deleteCartItem(itemId: item.id);
 
       if (!mounted) return;
       setState(() => mutatingItemIds.remove(item.id));
-      afterCartWrite();
+      afterCartWrite(summary);
     } catch (error) {
       if (!mounted) return;
       setState(() => mutatingItemIds.remove(item.id));
@@ -254,11 +255,11 @@ class _CartScreenState extends State<CartScreen> {
     setState(() => isClearing = true);
 
     try {
-      await ApiService.clearCart();
+      final summary = await ApiService.clearCart();
 
       if (!mounted) return;
       setState(() => isClearing = false);
-      afterCartWrite();
+      afterCartWrite(summary);
     } catch (error) {
       if (!mounted) return;
       setState(() => isClearing = false);
@@ -280,8 +281,8 @@ class _CartScreenState extends State<CartScreen> {
     widget.onOpenCheckout(
       locationId: locationId,
       fulfillmentType: fulfillmentType,
-      onCartChanged: () {
-        widget.onCartChanged();
+      onCartChanged: ([summary]) {
+        widget.onCartChanged(summary);
         reloadCart();
       },
     );

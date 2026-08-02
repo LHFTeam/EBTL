@@ -339,9 +339,20 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     loadAppData();
   }
 
-  /// Cheap refresh for cart mutations — refetches live data only.
-  void refreshCartData() {
-    loadAppData(reuseStatic: true);
+  /// The cart changed somewhere in the app.
+  ///
+  /// Cart writes answer with the new summary, so the badge is updated straight
+  /// from that response — no request at all. Callers that only know the cart
+  /// moved pass nothing and pay for a refresh of the live data.
+  void handleCartChanged([CartSummary? summary]) {
+    final data = appData;
+
+    if (summary == null || data == null) {
+      loadAppData(reuseStatic: true);
+      return;
+    }
+
+    setState(() => appData = data.withCartSummary(summary));
   }
 
   void openCart() {
@@ -427,7 +438,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
           liquorTypeId: liquorTypeId,
           selectedNavIndex: selectedIndex,
           initialCartQuantity: data.cartSummary?.totalQuantity ?? 0,
-          onCartChanged: reloadAppData,
+          onCartChanged: handleCartChanged,
           onBottomNavTap: (index) {
             // The Finder may also be on the stack, so unwind back to the shell
             // rather than popping a single route.
@@ -474,7 +485,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
       ),
       ExploreScreen(
         data: data,
-        onCartChanged: refreshCartData,
+        onCartChanged: handleCartChanged,
         onOpenFinder: () => openFinder(),
         onOpenProduct: (product) =>
             openCocktailDetail(data, Cocktail.fromShopProduct(product)),
@@ -491,7 +502,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         isActive: safeSelectedIndex == EbtlBottomNav.cartIndex,
         onOpenFinder: () => openFinder(),
         onGoHome: () => setState(() => selectedIndex = EbtlBottomNav.homeIndex),
-        onCartChanged: refreshCartData,
+        onCartChanged: handleCartChanged,
         onOpenCheckout:
             ({
               required locationId,

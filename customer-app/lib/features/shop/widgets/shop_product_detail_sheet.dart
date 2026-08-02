@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/theme/ebtl_colors.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../models/common_models.dart';
 import '../../../models/product_models.dart';
 import '../../../models/shop_models.dart';
 import '../../../services/analytics_service.dart';
@@ -22,7 +23,7 @@ Future<void> showShopProductDetailSheet({
   required BuildContext context,
   required ShopProduct product,
   required String? locationId,
-  required VoidCallback onCartChanged,
+  required CartChangedCallback onCartChanged,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -39,7 +40,7 @@ Future<void> showShopProductDetailSheet({
 class ShopProductDetailSheet extends StatefulWidget {
   final ShopProduct product;
   final String? locationId;
-  final VoidCallback onCartChanged;
+  final CartChangedCallback onCartChanged;
 
   const ShopProductDetailSheet({
     super.key,
@@ -143,7 +144,7 @@ class _ShopProductDetailSheetState extends State<ShopProductDetailSheet> {
 
       if (!mounted) return;
 
-      widget.onCartChanged();
+      widget.onCartChanged(result.totals);
       showAppSnackBar(context, result.successMessage);
       Navigator.of(context).pop();
     } catch (error) {

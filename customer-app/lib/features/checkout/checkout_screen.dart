@@ -9,6 +9,7 @@ import '../../core/network/api_exception.dart';
 import '../../core/theme/ebtl_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/checkout_models.dart';
+import '../../models/common_models.dart';
 import '../../services/analytics_service.dart';
 import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
@@ -21,7 +22,7 @@ class CheckoutScreen extends StatefulWidget {
   final String locationId;
   final String fulfillmentType;
   final VoidCallback onEditCart;
-  final VoidCallback onCartChanged;
+  final CartChangedCallback onCartChanged;
   final VoidCallback onOrderCompleted;
 
   const CheckoutScreen({
