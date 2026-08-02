@@ -237,9 +237,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
       if (isNew && canNotify) {
         showAppToast(
           context,
-          type: latest.orderId != null
-              ? AppToastType.order
-              : AppToastType.info,
+          type: latest.orderId != null ? AppToastType.order : AppToastType.info,
           title: latest.title,
           message: latest.body,
           actionText: 'View',
@@ -339,9 +337,20 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     loadAppData();
   }
 
-  /// Cheap refresh for cart mutations — refetches live data only.
-  void refreshCartData() {
-    loadAppData(reuseStatic: true);
+  /// The cart changed somewhere in the app.
+  ///
+  /// Cart writes answer with the new summary, so the badge is updated straight
+  /// from that response — no request at all. Callers that only know the cart
+  /// moved pass nothing and pay for a refresh of the live data.
+  void handleCartChanged([CartSummary? summary]) {
+    final data = appData;
+
+    if (summary == null || data == null) {
+      loadAppData(reuseStatic: true);
+      return;
+    }
+
+    setState(() => appData = data.withCartSummary(summary));
   }
 
   void openCart() {
@@ -427,7 +436,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
           liquorTypeId: liquorTypeId,
           selectedNavIndex: selectedIndex,
           initialCartQuantity: data.cartSummary?.totalQuantity ?? 0,
-          onCartChanged: reloadAppData,
+          onCartChanged: handleCartChanged,
           onBottomNavTap: (index) {
             // The Finder may also be on the stack, so unwind back to the shell
             // rather than popping a single route.
@@ -455,6 +464,11 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
       return theLoadingScaffold();
     }
 
+    final safeSelectedIndex = selectedIndex
+        .clamp(0, EbtlBottomNav.tabCount - 1)
+        .toInt();
+    visitedTabs.add(safeSelectedIndex);
+
     final pages = [
       HomeScreen(
         data: data,
@@ -469,7 +483,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
       ),
       ExploreScreen(
         data: data,
-        onCartChanged: refreshCartData,
+        onCartChanged: handleCartChanged,
         onOpenFinder: () => openFinder(),
         onOpenProduct: (product) =>
             openCocktailDetail(data, Cocktail.fromShopProduct(product)),
@@ -480,9 +494,13 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
       ),
       CartScreen(
         data: data,
+        // The cart tab stays mounted once opened, so it has to be told when it
+        // is the visible tab to refetch a cart that changed while it was in
+        // the background.
+        isActive: safeSelectedIndex == EbtlBottomNav.cartIndex,
         onOpenFinder: () => openFinder(),
         onGoHome: () => setState(() => selectedIndex = EbtlBottomNav.homeIndex),
-        onCartChanged: refreshCartData,
+        onCartChanged: handleCartChanged,
         onOpenCheckout:
             ({
               required locationId,
@@ -518,9 +536,6 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         },
       ),
     ];
-
-    final safeSelectedIndex = selectedIndex.clamp(0, pages.length - 1).toInt();
-    visitedTabs.add(safeSelectedIndex);
 
     return Scaffold(
       // IndexedStack keeps every visited tab mounted, so switching tabs shows

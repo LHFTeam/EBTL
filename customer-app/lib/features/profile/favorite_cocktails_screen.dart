@@ -90,7 +90,7 @@ class _FavoriteCocktailsScreenState extends State<FavoriteCocktailsScreen> {
           // Favorites is reached from Profile, so that is the tab to return to.
           selectedNavIndex: EbtlBottomNav.profileIndex,
           initialCartQuantity: 0,
-          onCartChanged: () {},
+          onCartChanged: ([_]) {},
           onBottomNavTap: (index) => Navigator.of(context).pop(),
         ),
       ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/theme/ebtl_colors.dart';
 import '../../models/app_data.dart';
+import '../../models/common_models.dart';
 import '../../models/product_models.dart';
 import '../../models/shop_models.dart';
 import '../../services/analytics_service.dart';
@@ -36,7 +37,7 @@ class _ShopScreenPayload {
 
 class ShopScreen extends StatefulWidget {
   final AppData data;
-  final VoidCallback onCartChanged;
+  final CartChangedCallback onCartChanged;
   final ValueChanged<int> onSwitchTab;
   final ValueChanged<ShopProduct> onOpenProduct;
   final int unreadNotificationCount;
@@ -218,7 +219,7 @@ class _ShopScreenState extends State<ShopScreen> {
       if (!mounted) return;
 
       showMessage(result.successMessage);
-      widget.onCartChanged();
+      widget.onCartChanged(result.totals);
 
       setState(() {
         addingProductId = null;

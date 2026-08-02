@@ -7,6 +7,7 @@ import '../../core/theme/ebtl_colors.dart';
 import '../../core/theme/ebtl_text_styles.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/cocktail_detail_models.dart';
+import '../../models/common_models.dart';
 import '../../services/analytics_service.dart';
 import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
@@ -26,7 +27,7 @@ class CocktailDetailScreen extends StatefulWidget {
   final String? liquorTypeId;
   final int selectedNavIndex;
   final int initialCartQuantity;
-  final VoidCallback onCartChanged;
+  final CartChangedCallback onCartChanged;
   final ValueChanged<int> onBottomNavTap;
 
   const CocktailDetailScreen({
@@ -286,7 +287,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
             result.totals?.totalQuantity ?? cartQuantityOverride;
       });
 
-      widget.onCartChanged();
+      widget.onCartChanged(result.totals);
 
       showAppSnackBar(context, result.successMessage);
       Navigator.of(context).pop();

@@ -27,6 +27,25 @@ class AppData {
     required this.selectedLocationName,
   });
 
+  /// The same payload with a newer cart summary.
+  ///
+  /// Cart writes return the new summary, so the shell can swap it in rather
+  /// than refetching `/home` — the rest of the payload (hero, catalog, finder
+  /// options) cannot have changed as a result of a cart write.
+  AppData withCartSummary(CartSummary? summary) {
+    return AppData(
+      hero: hero,
+      serviceAreas: serviceAreas,
+      featuredCocktails: featuredCocktails,
+      categories: categories,
+      liquorTypes: liquorTypes,
+      finderOptions: finderOptions,
+      cartSummary: summary,
+      selectedLocationId: selectedLocationId,
+      selectedLocationName: selectedLocationName,
+    );
+  }
+
   /// Builds app data from the `/home` payload.
   ///
   /// Supply either [optionsJson] (a fresh cocktail-finder options response) or

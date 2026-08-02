@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/network/api_exception.dart';
 import '../../core/theme/ebtl_colors.dart';
+import '../../models/common_models.dart';
 import '../../models/shop_models.dart';
 import '../../services/analytics_service.dart';
 import '../../services/api_service.dart';
@@ -14,7 +15,7 @@ class ShopCategoryProductsScreen extends StatefulWidget {
   final ShopCategory category;
   final String? locationId;
   final String? locationName;
-  final VoidCallback onCartChanged;
+  final CartChangedCallback onCartChanged;
   final ValueChanged<int> onSwitchTab;
   final ValueChanged<ShopProduct> onOpenProduct;
 
@@ -173,7 +174,7 @@ class _ShopCategoryProductsScreenState
       if (!mounted) return;
 
       showMessage(result.successMessage);
-      widget.onCartChanged();
+      widget.onCartChanged(result.totals);
 
       setState(() => addingProductId = null);
     } catch (error) {

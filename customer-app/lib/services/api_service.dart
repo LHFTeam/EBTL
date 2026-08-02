@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
@@ -22,6 +23,7 @@ import '../models/order_detail_models.dart';
 import '../models/profile_models.dart';
 import '../models/referral_models.dart';
 import '../models/shop_models.dart';
+import 'cart_revision.dart';
 
 class ApiService {
   static const _storage = FlutterSecureStorage();
@@ -38,6 +40,20 @@ class ApiService {
 
   static const Duration _defaultRequestTimeout = Duration(seconds: 45);
   static const Duration _sessionRequestTimeout = Duration(seconds: 90);
+
+  /// The client every request goes through.
+  ///
+  /// Exists so tests can answer requests without a network: the guarantees this
+  /// class carries — a cart write invalidating loaded carts, a 401 replaying
+  /// exactly once — are properties of [_request], and there is no way to assert
+  /// them against the top-level `http.get`/`http.post` functions.
+  static http.Client _client = http.Client();
+
+  @visibleForTesting
+  static set client(http.Client client) => _client = client;
+
+  @visibleForTesting
+  static void resetClient() => _client = http.Client();
 
   static Duration _timeoutFor(String method, String path) {
     if (method.toUpperCase() == 'POST' && path == '/api/customer/session') {
@@ -296,38 +312,55 @@ class ApiService {
     return CartPageResponse.fromJson(json);
   }
 
-  static Future<void> updateCartItemQuantity({
+  /// The cart summary a cart write answers with, or null if the response
+  /// carried none. Callers hand it to the shell so the bottom-nav badge updates
+  /// from this response instead of a follow-up `/home` fetch.
+  static CartSummary? _cartSummaryFrom(Map<String, dynamic> json) {
+    final summaryMap = asMap(json['cartSummary'] ?? json['cart_summary']);
+    return summaryMap.isEmpty ? null : CartSummary.fromJson(summaryMap);
+  }
+
+  static Future<CartSummary?> updateCartItemQuantity({
     required String itemId,
     required int quantity,
   }) async {
     await ensureSession();
 
-    await _request(
+    final json = await _request(
       method: 'PATCH',
       path: '/api/customer/cart/items/${Uri.encodeComponent(itemId)}',
       body: {'quantity': quantity.clamp(0, 99)},
       attachToken: true,
     );
+
+    return _cartSummaryFrom(json);
   }
 
-  static Future<void> deleteCartItem({required String itemId}) async {
+  static Future<CartSummary?> deleteCartItem({required String itemId}) async {
     await ensureSession();
 
-    await _request(
+    final json = await _request(
       method: 'DELETE',
       path: '/api/customer/cart/items/${Uri.encodeComponent(itemId)}',
       attachToken: true,
     );
+
+    return _cartSummaryFrom(json);
   }
 
-  static Future<void> clearCart() async {
+  static Future<CartSummary?> clearCart() async {
     await ensureSession();
 
-    await _request(
+    final json = await _request(
       method: 'DELETE',
       path: '/api/customer/cart',
       attachToken: true,
     );
+
+    // This endpoint answers with `{cart_id, cleared: true}` rather than a
+    // summary: an emptied cart has only one shape.
+    final cartId = readString(json['cart_id']);
+    return cartId.isEmpty ? null : CartSummary.emptied(cartId);
   }
 
   static Future<CheckoutPageResponse> fetchCheckout({
@@ -419,7 +452,22 @@ class ApiService {
       attachToken: true,
     );
 
-    return PlaceOrderResponse.fromJson(json);
+    final response = PlaceOrderResponse.fromJson(json);
+    _noteOrderPaid(response.order.id, isPaid: response.order.isPaid);
+    return response;
+  }
+
+  /// The backend empties the cart once an order is paid — immediately for demo
+  /// orders, from the payment webhook for gateway ones. That is a cart change
+  /// the app never made itself, so a paid order invalidates loaded carts too.
+  /// Deduplicated per order because the payment status is polled.
+  static final Set<String> _paidOrders = <String>{};
+
+  static void _noteOrderPaid(String orderId, {required bool isPaid}) {
+    if (!isPaid || orderId.isEmpty) return;
+    if (!_paidOrders.add(orderId)) return;
+
+    CartRevision.bump();
   }
 
   static Future<PaymentStatusResponse> fetchOrderPaymentStatus({
@@ -434,7 +482,9 @@ class ApiService {
       attachToken: true,
     );
 
-    return PaymentStatusResponse.fromJson(json);
+    final response = PaymentStatusResponse.fromJson(json);
+    _noteOrderPaid(response.orderId, isPaid: response.isPaid);
+    return response;
   }
 
   static Future<CustomerNotificationsResponse> fetchCustomerNotifications({
@@ -836,22 +886,22 @@ class ApiService {
     try {
       switch (method.toUpperCase()) {
         case 'GET':
-          response = await http
+          response = await _client
               .get(uri, headers: headers)
               .timeout(requestTimeout);
           break;
         case 'POST':
-          response = await http
+          response = await _client
               .post(uri, headers: headers, body: jsonEncode(body ?? const {}))
               .timeout(requestTimeout);
           break;
         case 'PATCH':
-          response = await http
+          response = await _client
               .patch(uri, headers: headers, body: jsonEncode(body ?? const {}))
               .timeout(requestTimeout);
           break;
         case 'DELETE':
-          response = await http
+          response = await _client
               .delete(uri, headers: headers)
               .timeout(requestTimeout);
           break;
@@ -932,6 +982,22 @@ class ApiService {
       await _persistSession(CustomerSession.fromJson(rawSession));
     }
 
+    _noteCartWrite(method: method, path: path);
+
     return decoded;
+  }
+
+  /// Invalidates loaded carts once a request that changed the cart is known to
+  /// have succeeded.
+  ///
+  /// This sits in [_request], past the error check, rather than in the
+  /// individual cart methods: every cart write goes through here, so the
+  /// invalidation cannot be left off a new one, and a request that threw never
+  /// reaches it. That is the guarantee the cart tab leans on — an item that
+  /// made it into the cart is an item the cart tab knows to reload.
+  static void _noteCartWrite({required String method, required String path}) {
+    if (!isCartWriteRequest(method: method, path: path)) return;
+
+    CartRevision.bump();
   }
 }

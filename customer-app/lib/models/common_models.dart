@@ -164,7 +164,30 @@ class CartSummary {
       currency: readString(json['currency'], fallback: 'EGP'),
     );
   }
+
+  /// A cart that was just emptied. Clearing the cart is the one cart write the
+  /// backend answers without a summary — an empty cart has only one shape, so
+  /// there is nothing to fetch back.
+  factory CartSummary.emptied(String cartId) {
+    return CartSummary(
+      cartId: cartId,
+      itemCount: 0,
+      totalQuantity: 0,
+      subtotalIncVat: 0,
+      currency: 'EGP',
+    );
+  }
 }
+
+/// Announces that the cart changed, carrying the new summary when the caller
+/// has it.
+///
+/// Every cart write comes back with the authoritative new summary, so passing
+/// it lets the shell update the bottom-nav badge from that response instead of
+/// refetching `/home` to learn what the write already said. Callers with
+/// nothing to hand — a screen that only knows the cart moved — call it with no
+/// argument and the shell refetches.
+typedef CartChangedCallback = void Function([CartSummary? summary]);
 
 class LiquorType {
   final String id;
