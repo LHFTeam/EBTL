@@ -320,6 +320,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }) {
     if (!mounted) return;
 
+    // A checkout text field can still own focus while the native payment
+    // sheet is closing. Release it before replacing the route so its keyboard
+    // inset and automatic focus scrolling cannot carry into confirmation.
+    FocusManager.instance.primaryFocus?.unfocus();
+
     final effectivePaymentStatus =
         (paymentStatusOverride ?? order.paymentStatus).trim().toLowerCase();
     if (effectivePaymentStatus == 'paid' ||
@@ -1828,7 +1833,7 @@ class CheckoutWarningBox extends StatelessWidget {
   }
 }
 
-class OrderConfirmedScreen extends StatelessWidget {
+class OrderConfirmedScreen extends StatefulWidget {
   final CheckoutOrder order;
   final CheckoutLocation? location;
   final double? paidAmount;
@@ -1846,10 +1851,25 @@ class OrderConfirmedScreen extends StatelessWidget {
     this.paymentStatusOverride,
   });
 
+  @override
+  State<OrderConfirmedScreen> createState() => _OrderConfirmedScreenState();
+}
+
+class _OrderConfirmedScreenState extends State<OrderConfirmedScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   String get paymentStatus {
-    final status = paymentStatusOverride?.trim();
+    final status = widget.paymentStatusOverride?.trim();
     if (status != null && status.isNotEmpty) return status;
-    return order.paymentStatus.trim().isEmpty ? 'paid' : order.paymentStatus;
+    return widget.order.paymentStatus.trim().isEmpty
+        ? 'paid'
+        : widget.order.paymentStatus;
   }
 
   String get paymentStatusLabel {
@@ -1864,23 +1884,26 @@ class OrderConfirmedScreen extends StatelessWidget {
   }
 
   String get pickupLocationName {
-    final locationName = location?.name.trim();
+    final locationName = widget.location?.name.trim();
     if (locationName != null && locationName.isNotEmpty) return locationName;
 
-    final address = order.address?.trim();
+    final address = widget.order.address?.trim();
     if (address != null && address.isNotEmpty) return address;
 
     return 'your selected EBTL cart';
   }
 
   bool get hasTotalPaid {
-    if (order.hasTotals) return true;
-    return paidAmount != null;
+    if (widget.order.hasTotals) return true;
+    return widget.paidAmount != null;
   }
 
   String get totalPaidLabel {
-    if (order.hasTotals) return order.totals.totalLabel;
-    return formatMoney(paidAmount ?? 0, paidAmountCurrency ?? 'EGP');
+    if (widget.order.hasTotals) return widget.order.totals.totalLabel;
+    return formatMoney(
+      widget.paidAmount ?? 0,
+      widget.paidAmountCurrency ?? 'EGP',
+    );
   }
 
   @override
@@ -1896,6 +1919,10 @@ class OrderConfirmedScreen extends StatelessWidget {
                 final compactHeight = constraints.maxHeight < 720;
 
                 return SingleChildScrollView(
+                  controller: _scrollController,
+                  primary: false,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: EdgeInsets.fromLTRB(
                     28,
                     compactHeight ? 18 : 26,
@@ -1958,7 +1985,7 @@ class OrderConfirmedScreen extends StatelessWidget {
                         ),
                         SizedBox(height: compactHeight ? 22 : 30),
                         _OrderConfirmationSummaryCard(
-                          orderNumber: order.orderNumber,
+                          orderNumber: widget.order.orderNumber,
                           totalPaidLabel: hasTotalPaid ? totalPaidLabel : null,
                           paymentStatusLabel: paymentStatusLabel,
                         ),
@@ -1990,7 +2017,7 @@ class OrderConfirmedScreen extends StatelessWidget {
                         SizedBox(
                           height: 58,
                           child: ElevatedButton(
-                            onPressed: onDone,
+                            onPressed: widget.onDone,
                             style: ebtlCoralButtonStyle(
                               radius: 30,
                               shadowColor: Colors.transparent,
