@@ -1,0 +1,38 @@
+-- EBTL baseline schema — table and column comments.
+
+COMMENT ON TABLE public.customer_credit_ledger IS 'Append-only store-credit wallet. Positive delta = credit earned, negative = credit spent. Balance = sum(delta_amount) per customer.';
+COMMENT ON COLUMN public.customers.referral_attributed_at IS 'When this customer was attributed to a referrer (first successful code apply).';
+COMMENT ON COLUMN public.customers.referral_code IS 'The customer''s own shareable referral code (e.g. EBTL-XXXXX). Lazily generated.';
+COMMENT ON COLUMN public.customers.referred_by_customer_id IS 'The customer who referred this customer, if they applied a referral code.';
+COMMENT ON COLUMN public.ingredients.icon_key IS 'Customer-app ingredient icon key. Flutter maps this key to a bundled local SVG/vector icon. Example: lime, grapefruit, syrup, salt, mint, mixer.';
+COMMENT ON COLUMN public.ingredients.name_ar IS 'Arabic display name (optional); falls back to name when null. Used by the KDS.';
+COMMENT ON TABLE public.location_opening_hours IS 'Weekly opening hours for beach carts. day_of_week follows JavaScript getDay(): 0=Sunday, 1=Monday, ... 6=Saturday.';
+COMMENT ON COLUMN public.locations.banner_image_url IS 'Public WebP banner image URL for customer app location/cart cards.';
+COMMENT ON COLUMN public.locations.name_ar IS 'Arabic display name (optional); falls back to name when null. Used by the KDS.';
+COMMENT ON TABLE public.order_number_counters IS 'Private per-day counter backing orders.order_number. Numbering starts at 100 and resets each Africa/Cairo business date.';
+COMMENT ON COLUMN public.orders.business_date IS 'Cairo business date used with order_number; resets at Africa/Cairo midnight.';
+COMMENT ON COLUMN public.orders.completed_at IS 'When the order was marked completed / picked up.';
+COMMENT ON COLUMN public.orders.credit_applied IS 'Store credit (EGP) spent on this order, redeemed from customer_credit_ledger on payment success.';
+COMMENT ON COLUMN public.orders.preparing_at IS 'When the order first moved to status = preparing.';
+COMMENT ON COLUMN public.orders.ready_at IS 'When the order first moved to status = ready.';
+COMMENT ON COLUMN public.orders.referral_id IS 'The referral this order fulfilled the referee side of (earned the referee a first-order discount).';
+COMMENT ON COLUMN public.product_categories.image_url IS 'Public WebP image URL for the customer app shop category row.';
+COMMENT ON COLUMN public.product_variants.name_ar IS 'Arabic display name (optional); falls back to name when null. Used by the KDS.';
+COMMENT ON COLUMN public.products.description IS 'Full customer-facing product/cocktail description. Store Markdown text, not raw HTML.';
+COMMENT ON COLUMN public.products.name_ar IS 'Arabic display name (optional); falls back to name when null. Used by the KDS.';
+COMMENT ON COLUMN public.products.short_description IS 'Short customer-facing description. Plain text only, max 40 characters.';
+COMMENT ON COLUMN public.promotions.allowed_fulfillment_type IS 'Restrict the code to a fulfillment type: pickup_at_cart or delivery_to_unit. NULL = any.';
+COMMENT ON COLUMN public.promotions.description IS 'Internal-only note about the promo (never shown to customers).';
+COMMENT ON COLUMN public.promotions.first_order_only IS 'When true, only customers with no prior non-cancelled orders may redeem.';
+COMMENT ON COLUMN public.promotions.max_discount_amount IS 'Optional cap on the discount value in EGP. Most useful for percentage codes.';
+COMMENT ON COLUMN public.promotions.per_customer_limit IS 'Max times a single customer may redeem this code. NULL = unlimited.';
+COMMENT ON TABLE public.referral_settings IS 'Single-row referral program configuration. Backs the admin Referrals page and checkout/reward enforcement.';
+COMMENT ON COLUMN public.referral_settings.min_qualifying_order_value IS 'Minimum order subtotal (EGP) for a referee order to unlock the referrer reward.';
+COMMENT ON COLUMN public.referral_settings.referee_discount_type IS 'How the referee''s first-order discount is computed: percentage or fixed_amount.';
+COMMENT ON COLUMN public.referral_settings.referee_max_discount_amount IS 'Optional cap (EGP) on the referee discount. Most useful for percentage discounts.';
+COMMENT ON COLUMN public.referral_settings.referrer_reward_amount IS 'Store credit (EGP) granted to the referrer when a referee completes a qualifying paid first order.';
+COMMENT ON COLUMN public.referral_settings.reward_cap_per_referrer IS 'Max number of rewarded referrals a single referrer may earn. NULL = unlimited.';
+COMMENT ON TABLE public.referrals IS 'One row per attributed referral. status: pending (attributed) -> rewarded (referee''s first qualifying paid order granted the referrer credit). void = disqualified.';
+COMMENT ON COLUMN public.referrals.qualifying_order_id IS 'The referee order that unlocked the referrer reward (idempotency guard).';
+COMMENT ON TABLE public.shop_settings IS 'Global customer app shop-screen settings. Keep exactly one row with id=true.';
+COMMENT ON COLUMN public.shop_settings.banner_image_url IS 'Public WebP banner image URL for the customer app shop screen. Text/CTA stay static in the app.';

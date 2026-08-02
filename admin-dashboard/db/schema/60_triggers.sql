@@ -1,0 +1,37 @@
+-- EBTL baseline schema — triggers. Requires the functions in 50_functions.sql
+-- (public) and 05_private_schema.sql (private.generate_order_number).
+
+CREATE TRIGGER trg_carts_updated_at BEFORE UPDATE ON public.carts FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_customer_addresses_updated_at BEFORE UPDATE ON public.customer_addresses FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_customer_payment_methods_updated_at BEFORE UPDATE ON public.customer_payment_methods FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_customer_push_tokens_updated_at BEFORE UPDATE ON public.customer_push_tokens FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_customers_updated_at BEFORE UPDATE ON public.customers FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_employee_credentials_updated_at BEFORE UPDATE ON public.employee_credentials FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_employees_updated_at BEFORE UPDATE ON public.employees FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_ingredients_updated_at BEFORE UPDATE ON public.ingredients FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_liquor_types_updated_at BEFORE UPDATE ON public.liquor_types FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_location_opening_hours_updated_at BEFORE UPDATE ON public.location_opening_hours FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_locations_updated_at BEFORE UPDATE ON public.locations FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_order_items_updated_at BEFORE UPDATE ON public.order_items FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_order_prep_tasks_updated_at BEFORE UPDATE ON public.order_prep_tasks FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER set_order_confirmed_at BEFORE INSERT OR UPDATE OF status, payment_status, confirmed_at ON public.orders FOR EACH ROW EXECUTE FUNCTION set_order_confirmed_at();
+CREATE TRIGGER trg_consume_inventory_when_order_completed AFTER UPDATE OF status ON public.orders FOR EACH ROW EXECUTE FUNCTION consume_inventory_when_order_completed();
+CREATE TRIGGER trg_generate_order_number BEFORE INSERT ON public.orders FOR EACH ROW EXECUTE FUNCTION private.generate_order_number();
+CREATE TRIGGER trg_orders_updated_at BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_stamp_order_status_timestamps BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION stamp_order_status_timestamps();
+CREATE TRIGGER trg_payments_updated_at BEFORE UPDATE ON public.payments FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_prep_stations_updated_at BEFORE UPDATE ON public.prep_stations FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_product_categories_updated_at BEFORE UPDATE ON public.product_categories FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_product_tags_updated_at BEFORE UPDATE ON public.product_tags FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_product_variants_updated_at BEFORE UPDATE ON public.product_variants FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_products_updated_at BEFORE UPDATE ON public.products FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_promotions_updated_at BEFORE UPDATE ON public.promotions FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_purchase_orders_updated_at BEFORE UPDATE ON public.purchase_orders FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_validate_recipe_item_unit BEFORE INSERT OR UPDATE ON public.recipe_items FOR EACH ROW EXECUTE FUNCTION validate_recipe_item_unit();
+CREATE TRIGGER trg_recipes_updated_at BEFORE UPDATE ON public.recipes FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_shop_settings_updated_at BEFORE UPDATE ON public.shop_settings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_apply_stock_movement AFTER INSERT ON public.stock_movements FOR EACH ROW EXECUTE FUNCTION apply_stock_movement_to_balance();
+CREATE TRIGGER trg_generate_transfer_number BEFORE INSERT ON public.stock_transfers FOR EACH ROW EXECUTE FUNCTION generate_transfer_number();
+CREATE TRIGGER trg_post_stock_transfer_movements AFTER UPDATE OF status ON public.stock_transfers FOR EACH ROW EXECUTE FUNCTION post_stock_transfer_movements();
+CREATE TRIGGER trg_stock_transfers_updated_at BEFORE UPDATE ON public.stock_transfers FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_suppliers_updated_at BEFORE UPDATE ON public.suppliers FOR EACH ROW EXECUTE FUNCTION set_updated_at();

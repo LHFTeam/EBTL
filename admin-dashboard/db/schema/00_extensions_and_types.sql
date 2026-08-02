@@ -19,3 +19,9 @@ CREATE TYPE public.product_status AS ENUM ('draft', 'active', 'archived');
 CREATE TYPE public.product_type AS ENUM ('cocktail', 'snack', 'essential', 'bundle', 'add_on');
 CREATE TYPE public.promotion_discount_type AS ENUM ('percentage', 'fixed_amount', 'free_delivery');
 CREATE TYPE public.transfer_status AS ENUM ('draft', 'picked', 'in_transit', 'received', 'cancelled');
+
+-- Sequences. transfer_number_seq backs generate_transfer_number(); order_number_seq
+-- is no longer used by private.generate_order_number(), which counts per business
+-- date in order_number_counters instead, but the sequence still exists.
+CREATE SEQUENCE IF NOT EXISTS public.order_number_seq AS bigint START WITH 1 INCREMENT BY 1 NO CYCLE;
+CREATE SEQUENCE IF NOT EXISTS public.transfer_number_seq AS bigint START WITH 1 INCREMENT BY 1 NO CYCLE;
