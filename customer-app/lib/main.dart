@@ -237,9 +237,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
       if (isNew && canNotify) {
         showAppToast(
           context,
-          type: latest.orderId != null
-              ? AppToastType.order
-              : AppToastType.info,
+          type: latest.orderId != null ? AppToastType.order : AppToastType.info,
           title: latest.title,
           message: latest.body,
           actionText: 'View',

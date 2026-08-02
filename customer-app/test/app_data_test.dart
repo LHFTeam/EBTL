@@ -43,33 +43,36 @@ void main() {
       expect(data.cartSummary?.totalQuantity, 3);
     });
 
-    test('carries reused options over instead of requiring a fresh payload', () {
-      final first = AppData.fromApi(
-        homeJson: _homeJson,
-        optionsJson: _optionsJson,
-        selectedLocationId: 'north-coast',
-        selectedLocationName: 'North Coast',
-      );
+    test(
+      'carries reused options over instead of requiring a fresh payload',
+      () {
+        final first = AppData.fromApi(
+          homeJson: _homeJson,
+          optionsJson: _optionsJson,
+          selectedLocationId: 'north-coast',
+          selectedLocationName: 'North Coast',
+        );
 
-      // What a cart-only refresh does: new /home payload, no second request.
-      final refreshed = AppData.fromApi(
-        homeJson: {
-          ..._homeJson,
-          'cartSummary': {
-            'cart_id': 'cart-1',
-            'total_quantity': 5,
-            'item_count': 3,
+        // What a cart-only refresh does: new /home payload, no second request.
+        final refreshed = AppData.fromApi(
+          homeJson: {
+            ..._homeJson,
+            'cartSummary': {
+              'cart_id': 'cart-1',
+              'total_quantity': 5,
+              'item_count': 3,
+            },
           },
-        },
-        reusedOptions: first.finderOptions,
-        selectedLocationId: 'north-coast',
-        selectedLocationName: 'North Coast',
-      );
+          reusedOptions: first.finderOptions,
+          selectedLocationId: 'north-coast',
+          selectedLocationName: 'North Coast',
+        );
 
-      expect(refreshed.cartSummary?.totalQuantity, 5);
-      expect(refreshed.finderOptions, same(first.finderOptions));
-      expect(refreshed.liquorTypes.map((type) => type.id), ['rum', 'gin']);
-    });
+        expect(refreshed.cartSummary?.totalQuantity, 5);
+        expect(refreshed.finderOptions, same(first.finderOptions));
+        expect(refreshed.liquorTypes.map((type) => type.id), ['rum', 'gin']);
+      },
+    );
 
     test('falls back to home liquor types when options carry none', () {
       final data = AppData.fromApi(

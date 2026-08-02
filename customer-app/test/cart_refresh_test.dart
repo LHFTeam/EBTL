@@ -47,18 +47,21 @@ void main() {
       expect(CartRevision.current, isNot(loaded));
     });
 
-    test('notifies listeners so a visible cart tab reloads without a rebuild', () {
-      var notifications = 0;
-      void listener() => notifications++;
+    test(
+      'notifies listeners so a visible cart tab reloads without a rebuild',
+      () {
+        var notifications = 0;
+        void listener() => notifications++;
 
-      CartRevision.notifier.addListener(listener);
-      addTearDown(() => CartRevision.notifier.removeListener(listener));
+        CartRevision.notifier.addListener(listener);
+        addTearDown(() => CartRevision.notifier.removeListener(listener));
 
-      CartRevision.bump();
-      CartRevision.bump();
+        CartRevision.bump();
+        CartRevision.bump();
 
-      expect(notifications, 2);
-    });
+        expect(notifications, 2);
+      },
+    );
   });
 
   group('isCartWriteRequest', () {
@@ -148,7 +151,10 @@ void main() {
     });
 
     test('handles a missing summary', () {
-      expect(cartSummarySignature(null), isNot(cartSummarySignature(summary())));
+      expect(
+        cartSummarySignature(null),
+        isNot(cartSummarySignature(summary())),
+      );
     });
   });
 

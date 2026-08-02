@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
@@ -39,6 +40,20 @@ class ApiService {
 
   static const Duration _defaultRequestTimeout = Duration(seconds: 45);
   static const Duration _sessionRequestTimeout = Duration(seconds: 90);
+
+  /// The client every request goes through.
+  ///
+  /// Exists so tests can answer requests without a network: the guarantees this
+  /// class carries — a cart write invalidating loaded carts, a 401 replaying
+  /// exactly once — are properties of [_request], and there is no way to assert
+  /// them against the top-level `http.get`/`http.post` functions.
+  static http.Client _client = http.Client();
+
+  @visibleForTesting
+  static set client(http.Client client) => _client = client;
+
+  @visibleForTesting
+  static void resetClient() => _client = http.Client();
 
   static Duration _timeoutFor(String method, String path) {
     if (method.toUpperCase() == 'POST' && path == '/api/customer/session') {
@@ -871,22 +886,22 @@ class ApiService {
     try {
       switch (method.toUpperCase()) {
         case 'GET':
-          response = await http
+          response = await _client
               .get(uri, headers: headers)
               .timeout(requestTimeout);
           break;
         case 'POST':
-          response = await http
+          response = await _client
               .post(uri, headers: headers, body: jsonEncode(body ?? const {}))
               .timeout(requestTimeout);
           break;
         case 'PATCH':
-          response = await http
+          response = await _client
               .patch(uri, headers: headers, body: jsonEncode(body ?? const {}))
               .timeout(requestTimeout);
           break;
         case 'DELETE':
-          response = await http
+          response = await _client
               .delete(uri, headers: headers)
               .timeout(requestTimeout);
           break;
