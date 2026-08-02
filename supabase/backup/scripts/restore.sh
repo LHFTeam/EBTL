@@ -33,15 +33,21 @@ for f in "$BACKUP_DIR"/schema/*.sql; do
     run "$f"
 done
 
+load() {
+    for f in "$1"/*.sql; do
+        run "$f"
+    done
+}
+
 case "$MODE" in
     schema)
         ;;
     reference)
-        run "$BACKUP_DIR/data/01_reference.sql"
+        load "$BACKUP_DIR/data/reference"
         ;;
     full)
-        run "$BACKUP_DIR/data/01_reference.sql"
-        run "$BACKUP_DIR/data/02_operational.sql"
+        load "$BACKUP_DIR/data/reference"
+        load "$BACKUP_DIR/data/operational"
         ;;
     *)
         echo "unknown mode: $MODE (expected schema, reference or full)" >&2
