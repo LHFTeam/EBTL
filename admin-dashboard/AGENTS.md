@@ -33,9 +33,13 @@ Everything is EGP, and the business time zone is `Africa/Cairo`
 - **Backend:** Express 4, `@supabase/supabase-js`, `zod` for input
   validation, `helmet` + `compression` + `morgan`. Payments use the native
   `fetch` + `crypto` (no SDK). No ORM — all DB access is the Supabase JS
-  client against an **externally-managed** Postgres schema (there are no
-  migrations or SQL files in this repo; do not assume you can change the
-  schema from here).
+  client against an **externally-managed** Postgres schema — it is owned by the
+  Supabase dashboard, and you should not assume you can change it from here.
+  The repo now carries a **read-only capture** of it in `db/schema/` (see the
+  README there) plus hand-written migrations in `db/migrations/`, so the shape
+  of the data model is reviewable in diffs. Neither is the source of truth, and
+  neither is applied automatically. `db/tools/dump_schema.sql` refreshes the
+  capture.
 - **Frontend:** React 19, Vite 6, `lucide-react` for icons. **No router
   library, no state-management library, no data-fetching library, no CSS
   framework, no TypeScript.** Routing is a hand-rolled tab switch, state is
