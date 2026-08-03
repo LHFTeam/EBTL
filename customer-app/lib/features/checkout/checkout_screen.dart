@@ -1,5 +1,8 @@
 import 'package:clarity_flutter/clarity_flutter.dart';
 import 'package:flutter/material.dart';
+// OverflowBoxFit is defined in the rendering layer and is not re-exported
+// through material.dart, so import just that symbol.
+import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:flutter_stripe/flutter_stripe.dart' as stripe;
 import 'package:google_fonts/google_fonts.dart';
 
@@ -1941,6 +1944,12 @@ class _OrderConfirmedScreenState extends State<OrderConfirmedScreen> {
                         SizedBox(height: compactHeight ? 18 : 34),
                         OverflowBox(
                           maxWidth: constraints.maxWidth,
+                          // The scroll view leaves height unbounded, so the
+                          // default OverflowBoxFit.max would try to size this
+                          // box to infinity and throw during layout. Defer to
+                          // the child so it takes the image's finite height
+                          // while still bleeding to full screen width.
+                          fit: OverflowBoxFit.deferToChild,
                           child: Image.asset(
                             OrderConfirmationAssets.headerGraphic,
                             width: constraints.maxWidth,
