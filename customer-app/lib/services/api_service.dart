@@ -278,7 +278,7 @@ class ApiService {
       body: {
         'cocktail_id': cocktailId,
         'variant_id': variantId,
-        'selected_quantity': selectedQuantity,
+        'selected_quantity': selectedQuantity.clamp(1, 99),
         'location_id': locationId,
         if (cleanSelectedLiquorTypeId != null &&
             cleanSelectedLiquorTypeId.isNotEmpty)

@@ -177,6 +177,37 @@ void main() {
     });
   });
 
+  group('cart quantity bounds', () {
+    test('cocktail additions clamp quantities to the supported range', () async {
+      final recorder = RecordingClient(
+        (_) => json({
+          'action': {'type': 'item_added'},
+          'cartSummary': _cartSummaryJson,
+        }),
+      );
+      ApiService.client = recorder.client;
+
+      await ApiService.addCocktailToCart(
+        cocktailId: 'cocktail-1',
+        variantId: 'variant-1',
+        selectedQuantity: 0,
+        locationId: 'location-1',
+      );
+      await ApiService.addCocktailToCart(
+        cocktailId: 'cocktail-1',
+        variantId: 'variant-1',
+        selectedQuantity: 120,
+        locationId: 'location-1',
+      );
+
+      final quantities = recorder.requests
+          .map((request) => jsonDecode(request.body) as Map<String, dynamic>)
+          .map((body) => body['selected_quantity'])
+          .toList();
+      expect(quantities, [1, 99]);
+    });
+  });
+
   group('a rejected token', () {
     test('is re-minted and the request replayed exactly once', () async {
       var cartAttempts = 0;
