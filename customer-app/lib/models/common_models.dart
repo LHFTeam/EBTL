@@ -165,6 +165,8 @@ class CartSummary {
     );
   }
 
+  String get subtotalLabel => formatMoney(subtotalIncVat, currency);
+
   /// A cart that was just emptied. Clearing the cart is the one cart write the
   /// backend answers without a summary — an empty cart has only one shape, so
   /// there is nothing to fetch back.

@@ -28,6 +28,33 @@ String locationSubtitle(
   return parts.isEmpty ? fallback : parts.join(' • ');
 }
 
+/// A coarse "how long ago" label for a past date — "today", "yesterday",
+/// "3 days ago", "last week", "3 weeks ago", "2 months ago". Returns null when
+/// the value is missing, unparseable or in the future.
+String? formatRelativeDay(String? isoValue) {
+  if (isoValue == null || isoValue.trim().isEmpty) return null;
+
+  final parsed = DateTime.tryParse(isoValue);
+  if (parsed == null) return null;
+
+  final local = parsed.toLocal();
+  final now = DateTime.now();
+  final days = DateTime(
+    now.year,
+    now.month,
+    now.day,
+  ).difference(DateTime(local.year, local.month, local.day)).inDays;
+
+  if (days < 0) return null;
+  if (days == 0) return 'today';
+  if (days == 1) return 'yesterday';
+  if (days < 7) return '$days days ago';
+  if (days < 14) return 'last week';
+  if (days < 30) return '${days ~/ 7} weeks ago';
+  if (days < 60) return 'last month';
+  return '${days ~/ 30} months ago';
+}
+
 String formatProfileDateTime(String? isoValue) {
   if (isoValue == null || isoValue.trim().isEmpty) return 'Time unavailable';
 

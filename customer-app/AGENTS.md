@@ -112,6 +112,16 @@ assets/                     # images, ingredient SVGs, banners, onboarding,
 test/                       # widget_test.dart (stale template — see above)
 ```
 
+The Home tab is the **context-first redesign** (`features/home/home_screen.dart`
+plus `features/home/widgets/`): a fixed header (beach-cart chip, notifications,
+search) over modules whose order is resolved from the customer's state —
+`HomeMode.liveOrder` (an order is being made) → `browsing` (cart open or orders
+behind them) → `firstRun`. The live order and past orders come from
+`RootShell.customerOrders`; everything else comes from the `AppData` payload.
+The previous hero-banner Home is kept, disconnected and unimported, in
+`features/home/legacy_home_screen.dart` (`LegacyHomeScreen`) — do not wire it
+back in without being asked.
+
 Customer notifications and push are now **implemented** (they were once staged
 in a since-removed `*.patch` file and have since been built directly into the
 tree):
