@@ -30,6 +30,36 @@ class HomeScreenVisuals {
   static const double featuredProductCardShortDescriptionFontSize = 8;
   static const double featuredProductCardShortDescriptionLineHeight = 1.1;
 
+  // Featured Kits Rail (Home v2)
+  //
+  // Featured cocktails moved from a 2-up grid to a horizontal rail; these are
+  // the rail card's dimensions.
+  static const double featuredRailCardWidth = 176;
+  static const double featuredRailCardImageHeight = 124;
+
+  /// Tall enough for the image well plus a two-line kit name, its ingredient
+  /// line and the price row — a horizontal rail has to be told its height.
+  static const double featuredRailCardHeight = 270;
+
+  // Order It Again Rail (Home v2, live order only)
+  //
+  // The card is wider than the design's 230pt: at 230 its text column is 94pt,
+  // which ellipsizes "Ordered 3 days ago" (115pt at the specified size). The
+  // rail is tall enough for the 56pt thumb, and for the kit name, the
+  // "ordered ..." line and the price stacked beside it.
+  static const double orderAgainCardWidth = 252;
+  static const double orderAgainRailHeight = 88;
+
+  // Hero Peek Carousel (Home v2, first run only)
+  //
+  // The slide width and gap are fixed; the page viewport fraction is derived
+  // from them at layout time so the neighbouring slides peek in equally on any
+  // phone width.
+  static const double heroSlideWidth = 290;
+  static const double heroSlideHeight = 148;
+  static const double heroSlideGap = 12;
+
   // Home Liquor Bottle Cards
   static const bool showHomeLiquorBottleCardName = false;
+  static const double homeLiquorBottleCardHeight = 130;
 }

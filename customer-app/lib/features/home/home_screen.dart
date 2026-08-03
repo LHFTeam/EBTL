@@ -1,404 +1,430 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
-import '../../core/theme/ebtl_colors.dart';
+import '../../core/network/api_exception.dart';
 import '../../core/theme/home_screen_visuals.dart';
 import '../../models/app_data.dart';
 import '../../models/cocktail_models.dart';
 import '../../models/common_models.dart';
+import '../../models/profile_models.dart';
+import '../../services/analytics_service.dart';
+import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import '../../shared/widgets/bottle_widgets.dart';
-import '../../shared/widgets/brand_widgets.dart';
 import '../../shared/widgets/cocktail_card_widgets.dart';
-import '../../shared/widgets/network_or_asset_image.dart';
-import '../../shared/widgets/section_block.dart';
-import 'widgets/how_it_works_block.dart';
+import 'widgets/beach_cart_picker_sheet.dart';
+import 'widgets/home_context_header.dart';
+import 'widgets/home_hero_carousel.dart';
+import 'widgets/home_modules.dart';
 
-class HomeScreen extends StatelessWidget {
+/// Which of the three Home layouts the customer gets. Resolved from their
+/// state on every build — never chosen by hand.
+enum HomeMode {
+  /// Nothing in flight and nothing behind them: lead with the education
+  /// carousel.
+  firstRun,
+
+  /// They have shopped before or have a cart open: lead with the cart.
+  browsing,
+
+  /// An order is being made right now: lead with the tracker.
+  liveOrder,
+}
+
+/// The Home tab.
+///
+/// A context-first stack: a fixed header carrying the beach-cart chip and
+/// search, then modules whose order changes with [HomeMode]. The previous
+/// hero-banner Home is kept, disconnected, in `legacy_home_screen.dart`.
+class HomeScreen extends StatefulWidget {
   final AppData data;
-  final VoidCallback onOpenFinder;
-  final ValueChanged<ServiceLocation> onLocationSelected;
-  final ValueChanged<Cocktail> onOpenCocktail;
-  final ValueChanged<LiquorType> onOpenFinderWithBottle;
+
+  /// The order currently being made, if any — drives the live-order module and
+  /// the [HomeMode.liveOrder] layout.
+  final ProfileOrder? liveOrder;
+
+  /// Finished orders, newest first, behind the "Order It Again" rail.
+  final List<ProfileOrder> pastOrders;
+
   final int unreadNotificationCount;
   final VoidCallback onOpenNotifications;
-  final int activeOrdersCount;
+  final VoidCallback onOpenSearch;
+  final VoidCallback onOpenCart;
+  final VoidCallback onOpenShop;
   final VoidCallback onOpenActiveOrders;
+  final VoidCallback onOpenOrderHistory;
+  final VoidCallback onOpenFinder;
+  final ValueChanged<LiquorType> onOpenFinderWithBottle;
+  final ValueChanged<Cocktail> onOpenCocktail;
+  final ValueChanged<Category> onOpenCategory;
+  final ValueChanged<ServiceLocation> onLocationSelected;
+  final CartChangedCallback onCartChanged;
 
   const HomeScreen({
     super.key,
     required this.data,
+    required this.liveOrder,
+    required this.pastOrders,
+    required this.unreadNotificationCount,
+    required this.onOpenNotifications,
+    required this.onOpenSearch,
+    required this.onOpenCart,
+    required this.onOpenShop,
+    required this.onOpenActiveOrders,
+    required this.onOpenOrderHistory,
     required this.onOpenFinder,
     required this.onOpenFinderWithBottle,
-    required this.onLocationSelected,
     required this.onOpenCocktail,
-    required this.unreadNotificationCount,
-    required this.onOpenNotifications,
-    required this.activeOrdersCount,
-    required this.onOpenActiveOrders,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final featured = data.featuredCocktails;
-
-    return SafeArea(
-      child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: HeroHomeHeader(
-              hero: data.hero,
-              onOpenFinder: onOpenFinder,
-              unreadNotificationCount: unreadNotificationCount,
-              onOpenNotifications: onOpenNotifications,
-              activeOrdersCount: activeOrdersCount,
-              onOpenActiveOrders: onOpenActiveOrders,
-            ),
-          ),
-          if (data.serviceAreas.isNotEmpty)
-            SliverToBoxAdapter(
-              child: ServiceAreaSection(
-                serviceAreas: data.serviceAreas,
-                selectedLocationId: data.selectedLocationId,
-                onLocationSelected: onLocationSelected,
-              ),
-            ),
-          SliverToBoxAdapter(
-            child: SectionBlock(
-              icon: Icons.local_bar_outlined,
-              title: 'Choose Your Bottle',
-              subtitle: 'Pick the liquor you already have.',
-              child: SizedBox(
-                height: 130,
-                child: ListView.separated(
-                  padding: const EdgeInsets.only(left: 22, right: 22),
-                  scrollDirection: Axis.horizontal,
-                  itemCount: data.liquorTypes.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 8),
-                  itemBuilder: (context, index) {
-                    final liquor = data.liquorTypes[index];
-
-                    return BottleCard(
-                      liquor: liquor,
-                      onTap: () => onOpenFinderWithBottle(liquor),
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: SectionBlock(
-              icon: Icons.local_bar_outlined,
-              title: 'Featured Cocktails',
-              actionText: 'View all',
-              onAction: onOpenFinder,
-              child: featured.isEmpty
-                  ? const EmptyStateCard(
-                      message: 'No featured cocktails are available right now.',
-                    )
-                  : SizedBox(
-                      height: HomeScreenVisuals.featuredProductCardHeight,
-                      child: ListView.separated(
-                        padding: const EdgeInsets.only(left: 22, right: 22),
-                        scrollDirection: Axis.horizontal,
-                        itemCount: featured.length,
-                        separatorBuilder: (_, _) => const SizedBox(width: 12),
-                        itemBuilder: (context, index) {
-                          return CocktailSmallCard(
-                            cocktail: featured[index],
-                            onTap: () => onOpenCocktail(featured[index]),
-                          );
-                        },
-                      ),
-                    ),
-            ),
-          ),
-          const SliverToBoxAdapter(child: HowItWorksBlock()),
-          const SliverToBoxAdapter(child: SizedBox(height: 24)),
-        ],
-      ),
-    );
-  }
-}
-
-class HeroHomeHeader extends StatelessWidget {
-  final HeroContent hero;
-  final VoidCallback onOpenFinder;
-  final int unreadNotificationCount;
-  final VoidCallback onOpenNotifications;
-  final int activeOrdersCount;
-  final VoidCallback onOpenActiveOrders;
-
-  const HeroHomeHeader({
-    super.key,
-    required this.hero,
-    required this.onOpenFinder,
-    required this.unreadNotificationCount,
-    required this.onOpenNotifications,
-    required this.activeOrdersCount,
-    required this.onOpenActiveOrders,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 470,
-      decoration: const BoxDecoration(color: EbtlColors.cream),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            top: 120,
-            child: Opacity(
-              opacity: 0.45,
-              child: hero.imageUrl != null
-                  ? NetworkOrAssetImage(
-                      imageUrl: hero.imageUrl,
-                      asset: 'assets/images/home_hero.jpg',
-                    )
-                  : const AssetOrGradientImage(
-                      asset: 'assets/images/home_hero.jpg',
-                      borderRadius: BorderRadius.zero,
-                      gradientStart: EbtlColors.blush,
-                      gradientEnd: EbtlColors.sand,
-                    ),
-            ),
-          ),
-          Positioned(
-            left: 22,
-            right: 22,
-            top: 14,
-            child: Row(
-              children: [
-                const EbtlLogo(),
-                const Spacer(),
-                if (activeOrdersCount > 0) ...[
-                  ActiveOrdersIconButton(
-                    count: activeOrdersCount,
-                    onTap: onOpenActiveOrders,
-                  ),
-                  const SizedBox(width: 10),
-                ],
-                NotificationsIconButton(
-                  unreadCount: unreadNotificationCount,
-                  onTap: onOpenNotifications,
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            left: 22,
-            right: 22,
-            top: 130,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Hey there, Cocktail Lover! 👋',
-                  style: GoogleFonts.manrope(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: EbtlColors.navy,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'You bring the bottle.',
-                  style: GoogleFonts.playfairDisplay(
-                    fontSize: 32,
-                    height: 1.25,
-                    fontWeight: FontWeight.w800,
-                    color: EbtlColors.navy,
-                  ),
-                ),
-                Text(
-                  'We bring the magic.',
-                  style: GoogleFonts.playfairDisplay(
-                    fontSize: 26,
-                    height: 1.1,
-                    fontWeight: FontWeight.w600,
-                    fontStyle: FontStyle.italic,
-                    color: EbtlColors.coral,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  hero.headline,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.manrope(
-                    fontSize: 17,
-                    height: 1.55,
-                    fontWeight: FontWeight.w500,
-                    color: EbtlColors.ink,
-                  ),
-                ),
-                const SizedBox(height: 28),
-                SizedBox(
-                  height: 64,
-                  child: ElevatedButton.icon(
-                    onPressed: onOpenFinder,
-                    icon: const Icon(
-                      Icons.liquor_outlined,
-                      color: Colors.white,
-                    ),
-                    label: Text(hero.primaryCtaLabel),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: EbtlColors.coral,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(22),
-                      ),
-                      textStyle: GoogleFonts.manrope(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class ServiceAreaSection extends StatelessWidget {
-  final List<ServiceLocation> serviceAreas;
-  final String? selectedLocationId;
-  final ValueChanged<ServiceLocation> onLocationSelected;
-
-  const ServiceAreaSection({
-    super.key,
-    required this.serviceAreas,
-    required this.selectedLocationId,
+    required this.onOpenCategory,
     required this.onLocationSelected,
+    required this.onCartChanged,
   });
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  /// How many past orders the "Order It Again" rail offers.
+  static const int _orderAgainLimit = 6;
+
+  String? selectedCategoryId;
+
+  /// Hearts react before the request lands; keyed by cocktail id.
+  final Map<String, bool> favoriteOverrides = <String, bool>{};
+  final Set<String> togglingFavoriteIds = <String>{};
+
+  /// The order whose "add again" request is in flight, if any.
+  String? reorderingOrderId;
+
+  HomeMode get mode {
+    if (widget.liveOrder != null) return HomeMode.liveOrder;
+
+    final cartQuantity = widget.data.cartSummary?.totalQuantity ?? 0;
+    if (cartQuantity > 0 || widget.pastOrders.isNotEmpty) {
+      return HomeMode.browsing;
+    }
+
+    return HomeMode.firstRun;
+  }
+
+  bool isFavorite(Cocktail cocktail) =>
+      favoriteOverrides[cocktail.id] ?? cocktail.isFavorite;
+
+  void showMessage(String message) => showAppSnackBar(context, message);
+
+  Future<void> openLocationPicker() async {
+    final location = await showBeachCartPickerSheet(
+      context: context,
+      serviceAreas: widget.data.serviceAreas,
+      selectedLocationId: widget.data.selectedLocationId,
+    );
+
+    if (location == null) return;
+    widget.onLocationSelected(location);
+  }
+
+  void selectCategory(Category category) {
+    setState(() => selectedCategoryId = category.id);
+    widget.onOpenCategory(category);
+  }
+
+  Future<void> toggleFavorite(Cocktail cocktail) async {
+    final productId = cocktail.id.trim();
+    if (productId.isEmpty || togglingFavoriteIds.contains(productId)) return;
+
+    final current = isFavorite(cocktail);
+    final next = !current;
+
+    setState(() {
+      togglingFavoriteIds.add(productId);
+      favoriteOverrides[productId] = next;
+    });
+
+    try {
+      if (next) {
+        await ApiService.addFavoriteCocktail(productId: productId);
+      } else {
+        await ApiService.removeFavoriteCocktail(productId: productId);
+      }
+
+      AnalyticsService.logFavoriteChanged(
+        item: AnalyticsItem(
+          id: cocktail.id,
+          name: cocktail.name,
+          category: cocktail.category?.name ?? 'cocktail',
+          price: cocktail.startingPriceIncVat ?? 0,
+          quantity: 1,
+          currency: cocktail.currency,
+        ),
+        isFavorite: next,
+      );
+
+      if (!mounted) return;
+      setState(() => togglingFavoriteIds.remove(productId));
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        togglingFavoriteIds.remove(productId);
+        favoriteOverrides[productId] = current;
+      });
+
+      showMessage(
+        apiErrorMessage(error, fallback: 'Could not update favorites.'),
+      );
+    }
+  }
+
+  /// Puts a previous order's kit back in the cart.
+  ///
+  /// The orders payload carries name snapshots rather than product and variant
+  /// ids, so the kit is looked up again by its slug and added at the price and
+  /// availability of today. Customizations from the original order (removed
+  /// ingredients, additions) are not recoverable from the payload and are not
+  /// carried over — a `/orders/:id/reorder` endpoint would fix both.
+  Future<void> orderAgain(ProfileOrder order) async {
+    if (reorderingOrderId != null) return;
+
+    final locationId = widget.data.selectedLocationId?.trim();
+    if (locationId == null || locationId.isEmpty) {
+      showMessage('Choose a beach cart before adding items.');
+      return;
+    }
+
+    final slug = order.primaryItem?.slug?.trim();
+    if (slug == null || slug.isEmpty) {
+      showMessage('Open this order to add it to your cart again.');
+      return;
+    }
+
+    setState(() => reorderingOrderId = order.id);
+
+    try {
+      final detail = await ApiService.fetchCocktailDetail(
+        slug: slug,
+        locationId: locationId,
+      );
+      final cocktail = detail.cocktail;
+      final variant = cocktail.variant;
+
+      if (variant == null || !cocktail.canAddToCart) {
+        if (!mounted) return;
+        setState(() => reorderingOrderId = null);
+        showMessage(cocktail.availabilityMessage);
+        return;
+      }
+
+      final quantity = order.primaryItem?.quantity ?? 1;
+
+      final result = await ApiService.addCocktailToCart(
+        cocktailId: cocktail.id,
+        variantId: variant.id,
+        selectedQuantity: quantity,
+        locationId: locationId,
+      );
+
+      AnalyticsService.logAddToCart(
+        AnalyticsItem(
+          id: cocktail.id,
+          name: cocktail.name,
+          category: cocktail.category?.name ?? 'cocktail',
+          variant: variant.name,
+          price: variant.priceIncVat,
+          quantity: quantity,
+          currency: variant.currency,
+        ),
+      );
+
+      if (!mounted) return;
+
+      setState(() => reorderingOrderId = null);
+      widget.onCartChanged(result.totals);
+      showMessage(result.successMessage);
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() => reorderingOrderId = null);
+      showMessage(
+        apiErrorMessage(
+          error,
+          fallback: 'Could not add this order to your cart.',
+        ),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return SectionBlock(
-      icon: Icons.beach_access_outlined,
-      title: selectedLocationId == null
-          ? 'Choose Your Beach Cart'
-          : 'Ordering From',
-      subtitle: selectedLocationId == null
-          ? 'Select your location for real-time availability.'
-          : 'Availability is checked against this beach cart.',
-      child: SizedBox(
-        height: 100,
+    return Column(
+      children: [
+        HomeContextHeader(
+          locationName: widget.data.selectedLocationName,
+          onOpenLocationPicker: openLocationPicker,
+          unreadNotificationCount: widget.unreadNotificationCount,
+          onOpenNotifications: widget.onOpenNotifications,
+          onOpenSearch: widget.onOpenSearch,
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.only(top: 18, bottom: 100),
+            children: buildModules(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The scrolling region, in the order this state calls for.
+  List<Widget> buildModules() {
+    final currentMode = mode;
+    final liveOrder = widget.liveOrder;
+
+    return [
+      if (liveOrder != null)
+        HomeLiveOrderCard(
+          order: liveOrder,
+          onTap: widget.onOpenActiveOrders,
+        ),
+      ...buildCartResumeBar(),
+      if (currentMode == HomeMode.firstRun) ...[
+        const HomeHeroCarousel(),
+        const SizedBox(height: 10),
+      ],
+      if (currentMode == HomeMode.liveOrder) ...buildOrderAgain(),
+      ...buildBottleRail(),
+      ...buildCategoryChips(),
+      ...buildFeaturedRail(),
+      if (currentMode == HomeMode.firstRun)
+        HomeNoBottlePanel(onTap: widget.onOpenShop),
+    ];
+  }
+
+  List<Widget> buildCartResumeBar() {
+    final cart = widget.data.cartSummary;
+    if (cart == null || cart.totalQuantity <= 0) return const [];
+
+    return [
+      HomeCartResumeBar(
+        itemCount: cart.totalQuantity,
+        totalLabel: cart.subtotalLabel,
+        onTap: widget.onOpenCart,
+      ),
+    ];
+  }
+
+  List<Widget> buildOrderAgain() {
+    final orders = widget.pastOrders.take(_orderAgainLimit).toList();
+    if (orders.isEmpty) return const [];
+
+    return [
+      HomeSectionHeader(
+        title: 'Order It Again',
+        actionLabel: 'View all',
+        onAction: widget.onOpenOrderHistory,
+      ),
+      SizedBox(
+        height: HomeScreenVisuals.orderAgainRailHeight,
         child: ListView.separated(
-          padding: const EdgeInsets.only(left: 22, right: 22),
           scrollDirection: Axis.horizontal,
-          itemCount: serviceAreas.length,
+          padding: const EdgeInsets.fromLTRB(22, 0, 22, 4),
+          itemCount: orders.length,
           separatorBuilder: (_, _) => const SizedBox(width: 12),
           itemBuilder: (context, index) {
-            final location = serviceAreas[index];
-            final selected = location.id == selectedLocationId;
-            return ServiceAreaCard(
-              location: location,
-              selected: selected,
-              onTap: () => onLocationSelected(location),
+            final order = orders[index];
+
+            return HomeOrderAgainCard(
+              order: order,
+              onTap: widget.onOpenOrderHistory,
+              onAddAgain: () => orderAgain(order),
+              isAdding: reorderingOrderId == order.id,
             );
           },
         ),
       ),
-    );
+      const SizedBox(height: 26),
+    ];
   }
-}
 
-class ServiceAreaCard extends StatelessWidget {
-  final ServiceLocation location;
-  final bool selected;
-  final VoidCallback onTap;
+  List<Widget> buildBottleRail() {
+    final liquorTypes = widget.data.liquorTypes;
+    // No bottles, no section — the header would promise a rail that isn't
+    // there.
+    if (liquorTypes.isEmpty) return const [];
 
-  const ServiceAreaCard({
-    super.key,
-    required this.location,
-    required this.selected,
-    required this.onTap,
-  });
+    return [
+      const HomeSectionHeader(
+        title: 'Choose Your Bottle',
+        subtitle: 'Pick the liquor you already have.',
+      ),
+      SizedBox(
+        height: HomeScreenVisuals.homeLiquorBottleCardHeight,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(22, 0, 22, 4),
+          itemCount: liquorTypes.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            final liquor = liquorTypes[index];
 
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          width: 235,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: EbtlColors.white.withValues(alpha: 0.9),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: selected ? EbtlColors.coral : EbtlColors.border,
-              width: selected ? 1.5 : 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.035),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: selected ? EbtlColors.blush : EbtlColors.seafoam,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  selected ? Icons.check : Icons.beach_access_outlined,
-                  color: EbtlColors.navy,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      location.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.manrope(
-                        color: EbtlColors.navy,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
-                        height: 1.15,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      location.subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.manrope(
-                        color: EbtlColors.muted,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        height: 1.2,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            return BottleCard(
+              liquor: liquor,
+              onTap: () => widget.onOpenFinderWithBottle(liquor),
+            );
+          },
         ),
       ),
-    );
+      const SizedBox(height: 26),
+    ];
+  }
+
+  List<Widget> buildCategoryChips() {
+    final categories = widget.data.categories;
+    if (categories.isEmpty) return const [];
+
+    return [
+      HomeCategoryChips(
+        categories: categories,
+        selectedCategoryId: selectedCategoryId ?? categories.first.id,
+        onSelect: selectCategory,
+      ),
+      const SizedBox(height: 26),
+    ];
+  }
+
+  List<Widget> buildFeaturedRail() {
+    final featured = widget.data.featuredCocktails;
+
+    return [
+      HomeSectionHeader(
+        title: 'Featured Kits',
+        actionLabel: 'View all',
+        onAction: widget.onOpenFinder,
+      ),
+      if (featured.isEmpty)
+        const EmptyStateCard(
+          message: 'No featured cocktails are available right now.',
+        )
+      else
+        SizedBox(
+          height: HomeScreenVisuals.featuredRailCardHeight,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(22, 0, 22, 4),
+            itemCount: featured.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 12),
+            itemBuilder: (context, index) {
+              final cocktail = featured[index];
+
+              return CocktailRailCard(
+                cocktail: cocktail,
+                tint: CocktailRailCard.tintForIndex(index),
+                isFavorite: isFavorite(cocktail),
+                onTap: () => widget.onOpenCocktail(cocktail),
+                onToggleFavorite: () => toggleFavorite(cocktail),
+              );
+            },
+          ),
+        ),
+    ];
   }
 }

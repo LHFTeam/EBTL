@@ -13,6 +13,8 @@ import 'models/common_models.dart';
 import 'models/cocktail_models.dart';
 import 'models/app_data.dart';
 import 'models/notification_models.dart';
+import 'models/profile_models.dart';
+import 'models/shop_models.dart';
 
 /* -------------------------------- SCREENS -------------------------------- */
 import 'features/home/home_screen.dart';
@@ -23,7 +25,9 @@ import 'features/cart/cart_screen.dart';
 import 'features/checkout/checkout_screen.dart';
 import 'features/profile/profile_screen.dart';
 import 'features/profile/active_orders_screen.dart';
+import 'features/profile/customer_orders_screen.dart';
 import 'features/profile/customer_notifications_screen.dart';
+import 'features/shop/shop_category_products_screen.dart';
 import 'features/onboarding/onboarding_screen.dart';
 
 /* -------------------------------- SHARED WIDGETS -------------------------------- */
@@ -165,6 +169,10 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   bool _notificationsBaselineSeeded = false;
   bool _isPollingNotifications = false;
 
+  /// The customer's orders, newest first, as last loaded. Home reads the
+  /// order still being made and the finished ones behind "Order It Again" from
+  /// here; the top-bar shortcut reads the active count.
+  List<ProfileOrder> customerOrders = const [];
   int activeOrdersCount = 0;
   bool _isRefreshingActiveOrders = false;
 
@@ -281,9 +289,11 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
       if (!mounted) return;
 
       final count = response.orders.where((order) => order.isActive).length;
-      if (count != activeOrdersCount) {
-        setState(() => activeOrdersCount = count);
-      }
+
+      setState(() {
+        customerOrders = response.orders;
+        activeOrdersCount = count;
+      });
     } catch (_) {
       // Never surface errors from this background refresh.
     } finally {
@@ -296,6 +306,41 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         .push(MaterialPageRoute(builder: (_) => const ActiveOrdersScreen()))
         // The set of active orders may have changed while the screen was open.
         .then((_) => _refreshActiveOrders());
+  }
+
+  void openOrderHistory() {
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const CustomerOrdersScreen()))
+        .then((_) => _refreshActiveOrders());
+  }
+
+  /// Opens a Home category chip in the Shop's category listing. The home
+  /// payload and the shop read the same `product_categories` rows, so the id
+  /// carried by the chip is enough to page the category.
+  void openShopCategory(AppData data, Category category) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ShopCategoryProductsScreen(
+          category: ShopCategory(
+            id: category.id,
+            name: category.name,
+            slug: null,
+            imageUrl: null,
+            sortOrder: category.sortOrder,
+            productCount: 0,
+          ),
+          locationId: data.selectedLocationId,
+          locationName: data.selectedLocationName,
+          onCartChanged: handleCartChanged,
+          onSwitchTab: (index) {
+            Navigator.of(context).popUntil((route) => route.isFirst);
+            handleBottomNavTap(index);
+          },
+          onOpenProduct: (product) =>
+              openCocktailDetail(data, Cocktail.fromShopProduct(product)),
+        ),
+      ),
+    );
   }
 
   /// Loads app data, keeping whatever is already on screen visible while the
@@ -469,17 +514,31 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         .toInt();
     visitedTabs.add(safeSelectedIndex);
 
+    // Home resolves its layout from what the customer has in flight: the order
+    // still being made, and the finished ones it can offer to repeat.
+    final liveOrder = customerOrders.where((order) => order.isActive).firstOrNull;
+    final pastOrders = customerOrders
+        .where((order) => !order.isActive)
+        .toList(growable: false);
+
     final pages = [
       HomeScreen(
         data: data,
-        onOpenFinder: () => openFinder(),
-        onOpenFinderWithBottle: (liquor) => openFinder(liquorTypeId: liquor.id),
-        onLocationSelected: selectLocation,
-        onOpenCocktail: (cocktail) => openCocktailDetail(data, cocktail),
+        liveOrder: liveOrder,
+        pastOrders: pastOrders,
         unreadNotificationCount: unreadNotificationCount,
         onOpenNotifications: openNotifications,
-        activeOrdersCount: activeOrdersCount,
+        onOpenSearch: () => handleBottomNavTap(EbtlBottomNav.exploreIndex),
+        onOpenCart: openCart,
+        onOpenShop: () => handleBottomNavTap(EbtlBottomNav.exploreIndex),
         onOpenActiveOrders: openActiveOrders,
+        onOpenOrderHistory: openOrderHistory,
+        onOpenFinder: () => openFinder(),
+        onOpenFinderWithBottle: (liquor) => openFinder(liquorTypeId: liquor.id),
+        onOpenCocktail: (cocktail) => openCocktailDetail(data, cocktail),
+        onOpenCategory: (category) => openShopCategory(data, category),
+        onLocationSelected: selectLocation,
+        onCartChanged: handleCartChanged,
       ),
       ExploreScreen(
         data: data,

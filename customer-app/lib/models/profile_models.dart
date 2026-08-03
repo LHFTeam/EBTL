@@ -321,6 +321,75 @@ class ProfileOrder {
       displayFulfillmentAt ?? requestedFulfillmentAt ?? createdAt,
     );
   }
+
+  /// The four stages the Home live-order tracker draws:
+  /// Paid → Mixing → Ready → Collected. Returns how many of them this order
+  /// has reached, 1–4.
+  int get liveProgressStep {
+    switch (status.trim().toLowerCase()) {
+      case 'preparing':
+        return 2;
+      case 'ready':
+      case 'out_for_delivery':
+        return 3;
+      case 'completed':
+        return 4;
+      default:
+        // Anything paid but not yet started reads as "Paid".
+        return 1;
+    }
+  }
+
+  /// The uppercase status accent on the live-order card.
+  String get liveStatusLabel {
+    switch (status.trim().toLowerCase()) {
+      case 'confirmed':
+        return 'ORDER CONFIRMED';
+      case 'preparing':
+        return 'BEING MIXED NOW';
+      case 'ready':
+        return 'READY FOR COLLECTION';
+      case 'out_for_delivery':
+        return 'ON ITS WAY';
+      default:
+        return statusLabel.toUpperCase();
+    }
+  }
+
+  /// "Ready ~8 min" when the order carries a fulfillment time still ahead of
+  /// us, falling back to the plain status label when it does not.
+  String get liveEtaLabel {
+    final parsed = DateTime.tryParse(
+      displayFulfillmentAt ?? requestedFulfillmentAt ?? '',
+    );
+
+    if (parsed != null) {
+      final minutes = parsed.toLocal().difference(DateTime.now()).inMinutes;
+
+      if (minutes > 0 && minutes < 60) return 'Ready ~$minutes min';
+      if (minutes >= 60 && minutes < 24 * 60) {
+        return 'Ready ~${(minutes / 60).round()} h';
+      }
+    }
+
+    return statusLabel;
+  }
+
+  /// The order as one line: its main item plus how many other items rode
+  /// along, e.g. "Piña Colada Kit + 2".
+  String get displayItemsSummary {
+    final name = primaryItem?.name?.trim();
+    final label = name == null || name.isEmpty ? 'Your order' : name;
+    final extras = totalQuantity - (primaryItem?.quantity ?? 0);
+
+    return extras > 0 ? '$label + $extras' : label;
+  }
+
+  /// "Ordered 3 days ago", or just "Previous order" when the date is missing.
+  String get orderedAgoLabel {
+    final relative = formatRelativeDay(createdAt);
+    return relative == null ? 'Previous order' : 'Ordered $relative';
+  }
 }
 
 class ProfileOrderPrimaryItem {
