@@ -109,22 +109,52 @@ safe in git and useful for standing up a working environment:
 | `22_prep_stations.sql` | 3 |
 | `30_settings.sql` | 2 (both singleton config tables) |
 
-`products`, `recipes`, `recipe_items` and `product_liquor_compatibility` are
-catalog tables too, but are large enough that they are produced by the
-generator rather than hand-committed. Run the generator and move those blocks
-into `data/reference/` if you want them committed.
+Also committed: `15_product_liquor_compatibility.sql` (72 rows) and
+`17_recipes.sql` (74 rows).
+
+Still to capture: `products`, `recipe_items`. Run the generator (below) and
+move those two blocks into `data/reference/`.
 
 ### Operational data
 
-Customers, carts, orders, payments, notifications, stock movements and
-inventory balances are **not committed**, on purpose:
+`data/operational/` holds a literal snapshot of the live transactional tables,
+committed deliberately. **It is sensitive:**
 
-- they change constantly, so a committed snapshot is stale the moment it lands;
-- `customers` holds names, phone numbers and email addresses;
-- `employee_credentials` holds password hashes and salts;
-- `payments` / `payment_events` hold raw provider payloads.
+- `42_customers.sql` — real customer names, phone numbers, email addresses
+- `40_employees.sql` — staff names and phone numbers
+- `41_employee_credentials.sql` — staff usernames, password hashes and salts
+- `51_orders.sql` — customer phone snapshots
 
-Generate them on demand instead:
+Committed so far: `employees`, `employee_credentials`, `customers`,
+`customer_favorite_products`, `carts`, `cart_items`,
+`cart_item_removed_ingredients`, `order_number_counters`, `orders`,
+`order_items`, `order_item_removed_ingredients`,
+`order_inventory_consumptions`, `customer_notifications`.
+
+Still to capture: `payments`, `payment_events`,
+`order_item_inventory_components`, `stock_movements`, `inventory_balances`.
+
+> **Before committing `payments` / `payment_event`s, read this.** Their
+> `raw_payload` columns embed Stripe `client_secret` and `ephemeral_key_secret`
+> values, including at least one `ek_live_…` key, plus full PaymentIntent
+> objects. Those particular secrets are spent — ephemeral keys expire after an
+> hour and a client secret only ever unlocks its own already-succeeded intent —
+> but they are still live-mode credentials in plain text. Consider stripping or
+> redacting `raw_payload` before committing those two tables.
+
+### Snapshot consistency
+
+Tables were captured one at a time against a live database, so the snapshot is
+**not a single point in time**. A row in one file may reference a row that did
+not yet exist when an earlier file was captured — for example `orders` includes
+an order whose customer was created after `customers` was captured. Loading
+still succeeds because foreign key checks are off, but the result can have
+dangling references. The generator below dumps every table in one session and
+does not have this problem.
+
+### Regenerating
+
+Generate the remaining tables — or refresh everything — with:
 
 ```bash
 psql "$DATABASE_URL" -qAt \
