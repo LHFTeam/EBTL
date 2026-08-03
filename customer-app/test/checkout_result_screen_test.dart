@@ -31,6 +31,29 @@ Widget _wrap(PaymentStatusResponse status) {
   );
 }
 
+Widget _wrapConfirmation({ScrollController? primaryScrollController}) {
+  return MaterialApp(
+    builder: (context, child) {
+      if (primaryScrollController == null) return child!;
+      return PrimaryScrollController(
+        controller: primaryScrollController,
+        child: child!,
+      );
+    },
+    home: OrderConfirmedScreen(
+      order: CheckoutOrder.fromJson({
+        'id': 'order-1',
+        'order_number': 'EBTL-1001',
+        'status': 'confirmed',
+        'payment_status': 'paid',
+        'fulfillment_type': 'pickup_at_cart',
+        'totals': {'total': 150, 'currency': 'EGP'},
+      }),
+      onDone: () {},
+    ),
+  );
+}
+
 void main() {
   setUpAll(() {
     // Avoid runtime font fetching over the network during tests.
@@ -75,5 +98,22 @@ void main() {
     expect(find.text('Payment Failed'), findsOneWidget);
     expect(find.text('Check Again'), findsNothing);
     expect(find.text('Done'), findsOneWidget);
+  });
+
+  testWidgets('order confirmation opens at the top instead of the done action', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final inheritedController = ScrollController(initialScrollOffset: 1000);
+    addTearDown(inheritedController.dispose);
+
+    await tester.pumpWidget(
+      _wrapConfirmation(primaryScrollController: inheritedController),
+    );
+    await tester.pump();
+
+    expect(find.text('Order Confirmed'), findsOneWidget);
+    expect(find.text('Ok').hitTestable(), findsNothing);
   });
 }
