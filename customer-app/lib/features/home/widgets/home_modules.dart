@@ -95,12 +95,8 @@ class HomeSectionHeader extends StatelessWidget {
 
 /// The navy tracker that opens Home while an order is still being made.
 class HomeLiveOrderCard extends StatelessWidget {
-  static const List<String> _stageLabels = [
-    'Paid',
-    'Mixing',
-    'Ready',
-    'Collected',
-  ];
+  /// Paid → mixing → ready → collected, drawn as unlabelled progress segments.
+  static const int _stageCount = 4;
 
   final ProfileOrder order;
   final VoidCallback onTap;
@@ -221,7 +217,7 @@ class HomeLiveOrderCard extends StatelessWidget {
                   const SizedBox(height: 14),
                   Row(
                     children: [
-                      for (var step = 0; step < _stageLabels.length; step++) ...[
+                      for (var step = 0; step < _stageCount; step++) ...[
                         if (step > 0) const SizedBox(width: 5),
                         Expanded(
                           child: Container(
@@ -239,37 +235,20 @@ class HomeLiveOrderCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      Expanded(
-                        child: Text(
-                          _stageLabels.join(' · '),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.manrope(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                            color: EbtlColors.white.withValues(alpha: 0.65),
-                          ),
+                      Text(
+                        'Track order',
+                        style: GoogleFonts.manrope(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w900,
+                          color: EbtlColors.coral,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Track order',
-                            style: GoogleFonts.manrope(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w900,
-                              color: EbtlColors.coral,
-                            ),
-                          ),
-                          const Icon(
-                            Icons.chevron_right_rounded,
-                            size: 17,
-                            color: EbtlColors.coral,
-                          ),
-                        ],
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        size: 17,
+                        color: EbtlColors.coral,
                       ),
                     ],
                   ),

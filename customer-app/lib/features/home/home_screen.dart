@@ -50,7 +50,9 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onOpenSearch;
   final VoidCallback onOpenCart;
   final VoidCallback onOpenShop;
-  final VoidCallback onOpenActiveOrders;
+  /// Opens the live order's own detail screen. The card tracks one order, so
+  /// it goes straight there rather than by way of the active-orders list.
+  final ValueChanged<ProfileOrder> onOpenLiveOrder;
   final VoidCallback onOpenOrderHistory;
   final VoidCallback onOpenFinder;
   final ValueChanged<LiquorType> onOpenFinderWithBottle;
@@ -69,7 +71,7 @@ class HomeScreen extends StatefulWidget {
     required this.onOpenSearch,
     required this.onOpenCart,
     required this.onOpenShop,
-    required this.onOpenActiveOrders,
+    required this.onOpenLiveOrder,
     required this.onOpenOrderHistory,
     required this.onOpenFinder,
     required this.onOpenFinderWithBottle,
@@ -283,7 +285,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (liveOrder != null)
         HomeLiveOrderCard(
           order: liveOrder,
-          onTap: widget.onOpenActiveOrders,
+          onTap: () => widget.onOpenLiveOrder(liveOrder),
         ),
       ...buildCartResumeBar(),
       if (currentMode == HomeMode.firstRun) ...[

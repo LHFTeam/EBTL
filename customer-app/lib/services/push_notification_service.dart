@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
@@ -19,6 +21,15 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 /// and the rest of the app is unaffected.
 class PushNotificationService {
   static bool _initialized = false;
+
+  static final StreamController<void> _messages =
+      StreamController<void>.broadcast();
+
+  /// Fires whenever a push reaches the app while it is open, or opens it from
+  /// the tray. Carries no payload — it is a "something changed server-side"
+  /// nudge for listeners to re-fetch. Stays silent (never errors) on builds
+  /// where Firebase is not configured.
+  static Stream<void> get onMessage => _messages.stream;
 
   static Future<void> initialize() async {
     if (_initialized) return;
@@ -42,6 +53,9 @@ class PushNotificationService {
         sound: true,
       );
 
+      FirebaseMessaging.onMessage.listen(_broadcast);
+      FirebaseMessaging.onMessageOpenedApp.listen(_broadcast);
+
       await _registerCurrentToken();
       messaging.onTokenRefresh.listen(_sendToken);
 
@@ -49,6 +63,10 @@ class PushNotificationService {
     } catch (_) {
       // Firebase not configured for this build/platform — leave push disabled.
     }
+  }
+
+  static void _broadcast(RemoteMessage message) {
+    if (!_messages.isClosed) _messages.add(null);
   }
 
   static Future<void> _registerCurrentToken() async {
