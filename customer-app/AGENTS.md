@@ -133,6 +133,17 @@ The previous hero-banner Home is kept, disconnected and unimported, in
 `features/home/legacy_home_screen.dart` (`LegacyHomeScreen`) — do not wire it
 back in without being asked.
 
+The hero carousel at the top of Home (`widgets/home_hero_carousel.dart`) is
+**CMS-driven**: its slides come from `heroBanners` on the `/home` payload
+(image, headline, body, deep link, order), edited in the admin dashboard's
+Marketing → Banners tab. Only the image and the order are required, so a slide
+may carry no copy and no link; a slide without a deep link is not tappable, and
+an empty list falls back to the three bundled slides in that file. Deep links
+are the tokens `finder | explore | cart | orders | cocktail/<slug> |
+category/<category id>`, parsed by `HeroBannerLink` and followed by
+`RootShell.openHeroBanner`. Adding a destination means changing both that
+parser and the validation in the backend's `bannerRoutes.js`.
+
 Customer notifications and push are now **implemented** (they were once staged
 in a since-removed `*.patch` file and have since been built directly into the
 tree):

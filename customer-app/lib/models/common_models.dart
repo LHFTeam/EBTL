@@ -53,6 +53,97 @@ class HeroContent {
   }
 }
 
+/// Where a hero banner tap goes. The backend validates the same set in
+/// `server/routes/bannerRoutes.js`; anything it does not recognise arrives here
+/// as [none] and leaves the slide non-tappable rather than dead-ending.
+enum HeroBannerLinkKind { none, finder, explore, cart, orders, cocktail, category }
+
+/// A parsed `deep_link`: its [kind] plus the id or slug that follows the slash,
+/// empty for the destinations that do not take one.
+class HeroBannerLink {
+  final HeroBannerLinkKind kind;
+  final String value;
+
+  const HeroBannerLink(this.kind, [this.value = '']);
+
+  static const HeroBannerLink none = HeroBannerLink(HeroBannerLinkKind.none);
+
+  bool get isTappable => kind != HeroBannerLinkKind.none;
+
+  factory HeroBannerLink.parse(String? deepLink) {
+    final text = deepLink?.trim() ?? '';
+    if (text.isEmpty) return none;
+
+    final separator = text.indexOf('/');
+    final head = separator == -1 ? text : text.substring(0, separator);
+    final value = separator == -1 ? '' : text.substring(separator + 1).trim();
+
+    switch (head) {
+      case 'finder':
+        return const HeroBannerLink(HeroBannerLinkKind.finder);
+      case 'explore':
+        return const HeroBannerLink(HeroBannerLinkKind.explore);
+      case 'cart':
+        return const HeroBannerLink(HeroBannerLinkKind.cart);
+      case 'orders':
+        return const HeroBannerLink(HeroBannerLinkKind.orders);
+      case 'cocktail':
+        if (value.isEmpty) return none;
+        return HeroBannerLink(HeroBannerLinkKind.cocktail, value);
+      case 'category':
+        if (value.isEmpty) return none;
+        return HeroBannerLink(HeroBannerLinkKind.category, value);
+      default:
+        return none;
+    }
+  }
+}
+
+/// One CMS-driven slide of the Home hero carousel, from the `heroBanners` list
+/// on the `/home` payload.
+///
+/// Only the image and the order are guaranteed: marketing may ship an image on
+/// its own, and the slide renders the headline/body only when they are there.
+/// An empty list means the carousel falls back to its bundled slides.
+class HomeHeroBanner {
+  final String id;
+  final String imageUrl;
+  final String? headline;
+  final String? body;
+  final String? deepLink;
+  final int displayOrder;
+
+  const HomeHeroBanner({
+    required this.id,
+    required this.imageUrl,
+    required this.headline,
+    required this.body,
+    required this.deepLink,
+    required this.displayOrder,
+  });
+
+  factory HomeHeroBanner.fromJson(Map<String, dynamic> json) {
+    return HomeHeroBanner(
+      id: readString(json['id']),
+      imageUrl: readString(json['image_url']),
+      headline: nullableString(json['headline']),
+      body: nullableString(json['body']),
+      deepLink: nullableString(json['deep_link']),
+      displayOrder: readInt(json['display_order']),
+    );
+  }
+
+  HeroBannerLink get link => HeroBannerLink.parse(deepLink);
+
+  bool get hasText =>
+      (headline?.trim().isNotEmpty ?? false) ||
+      (body?.trim().isNotEmpty ?? false);
+
+  /// A slide without an image has nothing to draw — the backend requires one,
+  /// but the payload is treated as untrusted like every other model here.
+  bool get isRenderable => imageUrl.trim().isNotEmpty;
+}
+
 class ServiceLocation {
   final String id;
   final String name;

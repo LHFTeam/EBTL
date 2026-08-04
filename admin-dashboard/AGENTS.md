@@ -128,6 +128,9 @@ admin-dashboard/
       locationRoutes.js employeeRoutes.js ingredientRoutes.js
       cocktailRoutes.js   # cocktails AND additional-products (shared handlers)
       liquorRoutes.js shopRoutes.js inventoryRoutes.js transferRoutes.js
+      bannerRoutes.js    # Marketing → Banners: home hero carousel CRUD +
+                         # WebP uploads, and the shop banner image
+
       orderRoutes.js      # admin/cart-operations order management
       customerRoutes.js   # ~5.6k lines: the ENTIRE /api/customer/* + payments API
   src/
@@ -295,10 +298,11 @@ Extend via its props before copy-pasting.
 
 ## Domain glossary
 
-- **Areas / tabs** — the RBAC + nav unit: `dashboard`, `orders`, `inventory`,
-  `transfers`, `ingredients`, `cocktails`, `additional-products`, `liquors`,
-  `shop`, `locations`, `employees`. Defined once in `roleAccess`
-  (`appConfig.js`) and mirrored in `navigation.jsx`.
+- **Areas / tabs** — the RBAC + nav unit: `dashboard`, `analytics`, `orders`,
+  `inventory`, `transfers`, `ingredients`, `cocktails`, `additional-products`,
+  `liquors`, `shop`, `promotions`, `referrals`, `banners`, `locations`,
+  `employees`. Defined once in `roleAccess` (`appConfig.js`) and mirrored in
+  `navigation.jsx`.
 - **Roles** — `prep` < `cart_operator` < `warehouse` < `supervisor` <
   `manager` < `admin` (see `employeeRoles`). `admin` sees everything.
 - **Cart operations** — the beach-cart order workflow; a cart operator works a

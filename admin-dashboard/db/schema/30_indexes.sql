@@ -35,6 +35,7 @@ CREATE INDEX idx_customers_gender ON public.customers USING btree (gender) WHERE
 CREATE INDEX idx_employee_credentials_username ON public.employee_credentials USING btree (username);
 CREATE INDEX idx_employees_auth_user_id ON public.employees USING btree (auth_user_id);
 CREATE INDEX idx_employees_location_role ON public.employees USING btree (default_location_id, role, is_active);
+CREATE INDEX idx_home_hero_banners_active_order ON public.home_hero_banners USING btree (is_active, display_order, created_at);
 CREATE INDEX idx_ingredients_active_category ON public.ingredients USING btree (is_active, category);
 CREATE INDEX idx_ingredients_icon_key ON public.ingredients USING btree (icon_key) WHERE (icon_key IS NOT NULL);
 CREATE INDEX idx_inventory_balances_location ON public.inventory_balances USING btree (location_id);

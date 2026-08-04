@@ -223,6 +223,19 @@ CREATE TABLE IF NOT EXISTS public.employees (
 );
 ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
 
+CREATE TABLE IF NOT EXISTS public.home_hero_banners (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    image_url text NOT NULL,
+    headline text,
+    body text,
+    deep_link text,
+    display_order integer NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.home_hero_banners ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS public.ingredients (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     name text NOT NULL,

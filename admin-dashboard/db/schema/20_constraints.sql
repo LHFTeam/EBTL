@@ -19,6 +19,7 @@ ALTER TABLE public.customer_push_tokens ADD CONSTRAINT customer_push_tokens_pkey
 ALTER TABLE public.customers ADD CONSTRAINT customers_pkey PRIMARY KEY (id);
 ALTER TABLE public.employee_credentials ADD CONSTRAINT employee_credentials_pkey PRIMARY KEY (id);
 ALTER TABLE public.employees ADD CONSTRAINT employees_pkey PRIMARY KEY (id);
+ALTER TABLE public.home_hero_banners ADD CONSTRAINT home_hero_banners_pkey PRIMARY KEY (id);
 ALTER TABLE public.ingredients ADD CONSTRAINT ingredients_pkey PRIMARY KEY (id);
 ALTER TABLE public.inventory_balances ADD CONSTRAINT inventory_balances_pkey PRIMARY KEY (ingredient_id, location_id);
 ALTER TABLE public.liquor_types ADD CONSTRAINT liquor_types_pkey PRIMARY KEY (id);
@@ -110,6 +111,11 @@ ALTER TABLE public.customer_payment_methods ADD CONSTRAINT customer_payment_meth
 ALTER TABLE public.customers ADD CONSTRAINT customers_gender_valid CHECK (((gender IS NULL) OR (gender = ANY (ARRAY['male'::text, 'female'::text]))));
 ALTER TABLE public.employee_credentials ADD CONSTRAINT employee_credentials_username_format CHECK ((username ~ '^[a-zA-Z0-9._-]{3,}$'::text));
 ALTER TABLE public.employees ADD CONSTRAINT employees_prep_location_required CHECK (((role <> 'prep'::employee_role) OR (default_location_id IS NOT NULL)));
+ALTER TABLE public.home_hero_banners ADD CONSTRAINT home_hero_banners_body_max_200 CHECK (((body IS NULL) OR (char_length(body) <= 200)));
+ALTER TABLE public.home_hero_banners ADD CONSTRAINT home_hero_banners_deep_link_not_blank CHECK (((deep_link IS NULL) OR (length(btrim(deep_link)) > 0)));
+ALTER TABLE public.home_hero_banners ADD CONSTRAINT home_hero_banners_display_order_non_negative CHECK ((display_order >= 0));
+ALTER TABLE public.home_hero_banners ADD CONSTRAINT home_hero_banners_headline_max_80 CHECK (((headline IS NULL) OR (char_length(headline) <= 80)));
+ALTER TABLE public.home_hero_banners ADD CONSTRAINT home_hero_banners_image_url_not_blank CHECK ((length(btrim(image_url)) > 0));
 ALTER TABLE public.ingredients ADD CONSTRAINT ingredients_icon_key_format CHECK (((icon_key IS NULL) OR (icon_key ~ '^[a-z0-9]+([_-][a-z0-9]+)*$'::text)));
 ALTER TABLE public.ingredients ADD CONSTRAINT non_negative_purchase_cost CHECK (((purchase_unit_cost IS NULL) OR (purchase_unit_cost >= (0)::numeric)));
 ALTER TABLE public.ingredients ADD CONSTRAINT non_negative_shelf_life CHECK (((shelf_life_days IS NULL) OR (shelf_life_days >= 0)));

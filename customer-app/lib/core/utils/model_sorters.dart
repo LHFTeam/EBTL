@@ -23,6 +23,12 @@ List<ProductTag> sortProductTags(List<ProductTag> productTags) {
   return sortByOrderThenName(productTags, (t) => t.displayOrder, (t) => t.name);
 }
 
+/// Hero banners sort on `display_order` alone — the tie-break is the id rather
+/// than a name, since a slide need not carry any text at all.
+List<HomeHeroBanner> sortHeroBanners(List<HomeHeroBanner> banners) {
+  return sortByOrderThenName(banners, (b) => b.displayOrder, (b) => b.id);
+}
+
 List<LiquorType> sortLiquorTypes(List<LiquorType> liquorTypes) {
   return sortByOrderThenName(liquorTypes, (t) => t.displayOrder, (t) => t.name);
 }

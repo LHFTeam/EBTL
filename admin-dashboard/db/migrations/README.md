@@ -10,7 +10,7 @@ be read alongside the changes that produced it.
 ## Ledger mapping
 
 Supabase records what it has applied in `supabase_migrations.schema_migrations`.
-All ten entries now have a file:
+All eleven entries now have a file:
 
 | Ledger version | Name | File |
 | --- | --- | --- |
@@ -24,6 +24,7 @@ All ten entries now have a file:
 | 20260726004844 | add_name_ar_for_kds_arabic_localization | `20260726004844_…sql` |
 | 20260726213254 | referral_program_engine | `20260726_referral_program_engine.sql` |
 | 20260731185443 | expired_order_status | `20260731_expired_order_status.sql` |
+| 20260804083025 | home_hero_banners | `20260804083025_…sql` |
 
 Six of these were applied with no file in the repo and were backfilled
 from the ledger's stored statements. They carry a header saying so. The four

@@ -16,14 +16,14 @@ Captured from project `pfcncajijvtvsdwgwbjl` ("EBTL 1", eu-west-1, Postgres 17).
 | --- | --- |
 | `00_extensions_and_types.sql` | 4 extensions, 11 enum types, 2 sequences |
 | `05_private_schema.sql` | the `private` schema and its one SECURITY DEFINER function |
-| `10_tables.sql` | 53 tables — columns, defaults, generated/identity columns, RLS enablement |
-| `20_constraints.sql` | 261 constraints — 53 PK, 30 unique, 87 check, 91 FK |
-| `30_indexes.sql` | 85 indexes (the 83 constraint-backed ones live in `20_`) |
+| `10_tables.sql` | 54 tables — columns, defaults, generated/identity columns, RLS enablement |
+| `20_constraints.sql` | 267 constraints — 54 PK, 30 unique, 92 check, 91 FK |
+| `30_indexes.sql` | 86 indexes (the 84 constraint-backed ones live in `20_`) |
 | `40_views.sql` | 8 views |
 | `50_functions.sql` | 13 functions in `public` |
-| `60_triggers.sql` | 34 triggers |
-| `70_rls_policies.sql` | 86 RLS policies |
-| `80_comments.sql` | 36 table and column comments |
+| `60_triggers.sql` | 35 triggers |
+| `70_rls_policies.sql` | 89 RLS policies |
+| `80_comments.sql` | 39 table and column comments |
 
 Every count matches the system catalogs. Filename order is apply order: types
 and sequences first, then the `private` function that `orders` triggers call,
@@ -53,7 +53,7 @@ rather than a tested bootstrap.
 
 ## RLS, and why it is not what protects the API
 
-Row-level security is enabled on all 53 tables, with 86 policies keyed off
+Row-level security is enabled on all 54 tables, with 89 policies keyed off
 `auth.uid()` and the `is_staff()` / `is_manager_or_admin()` helpers.
 
 The Express server connects with the **service-role key**
