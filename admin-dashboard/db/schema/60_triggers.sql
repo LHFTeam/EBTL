@@ -8,6 +8,8 @@ CREATE TRIGGER trg_customer_push_tokens_updated_at BEFORE UPDATE ON public.custo
 CREATE TRIGGER trg_customers_updated_at BEFORE UPDATE ON public.customers FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_employee_credentials_updated_at BEFORE UPDATE ON public.employee_credentials FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_employees_updated_at BEFORE UPDATE ON public.employees FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_home_hero_banners_updated_at BEFORE UPDATE ON public.home_hero_banners FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_home_hero_settings_updated_at BEFORE UPDATE ON public.home_hero_settings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_ingredients_updated_at BEFORE UPDATE ON public.ingredients FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_liquor_types_updated_at BEFORE UPDATE ON public.liquor_types FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_location_opening_hours_updated_at BEFORE UPDATE ON public.location_opening_hours FOR EACH ROW EXECUTE FUNCTION set_updated_at();

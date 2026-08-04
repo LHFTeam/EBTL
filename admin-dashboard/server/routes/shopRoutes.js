@@ -187,49 +187,8 @@ shopRouter.get('/shop', requireArea('shop'), async (_req, res) => {
   });
 });
 
-shopRouter.post('/shop/banner-image', requireArea('shop'), async (req, res) => {
-  const imageBuffer = parseWebpUpload(req, res, 'Shop banner image');
-  if (!imageBuffer) return;
-
-  const settings = await ensureShopSettings();
-  if (settings.error) return res.status(400).json({ error: settings.error.message });
-
-  const uploaded = await uploadWebpAsset({ folder: 'banners', ownerId: 'shop', buffer: imageBuffer });
-  if (uploaded.error) return res.status(400).json({ error: uploaded.error.message });
-
-  const updated = await supabase
-    .from('shop_settings')
-    .update({ banner_image_url: uploaded.publicUrl })
-    .eq('id', true)
-    .select('*')
-    .single();
-
-  if (updated.error) {
-    await supabase.storage.from(SHOP_ASSETS_BUCKET).remove([uploaded.storagePath]);
-    return res.status(400).json({ error: updated.error.message });
-  }
-
-  await removeStoredAsset(settings.data?.banner_image_url);
-
-  res.json({ settings: updated.data, image_url: uploaded.publicUrl, storage_path: uploaded.storagePath });
-});
-
-shopRouter.delete('/shop/banner-image', requireArea('shop'), async (_req, res) => {
-  const settings = await ensureShopSettings();
-  if (settings.error) return res.status(400).json({ error: settings.error.message });
-
-  await removeStoredAsset(settings.data?.banner_image_url);
-
-  const updated = await supabase
-    .from('shop_settings')
-    .update({ banner_image_url: null })
-    .eq('id', true)
-    .select('*')
-    .single();
-
-  if (updated.error) return res.status(400).json({ error: updated.error.message });
-  res.json({ settings: updated.data });
-});
+// The shop banner image is edited from Marketing → Banners alongside the home
+// hero carousel; its upload/remove endpoints live in bannerRoutes.js.
 
 shopRouter.post('/shop/categories', requireArea('shop'), async (req, res) => {
   const parsed = categoryPayloadSchema.safeParse(req.body);

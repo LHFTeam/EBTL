@@ -40,6 +40,11 @@ CREATE POLICY "Customers can update own customer record" ON public.customers AS 
 CREATE POLICY "Managers can read employee credentials metadata" ON public.employee_credentials AS PERMISSIVE FOR SELECT TO public USING (is_manager_or_admin());
 CREATE POLICY "Managers can manage employees" ON public.employees AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
 CREATE POLICY "Staff can read employee records" ON public.employees AS PERMISSIVE FOR SELECT TO authenticated USING (((auth_user_id = ( SELECT auth.uid() AS uid)) OR is_manager_or_admin()));
+CREATE POLICY "Managers can manage home hero banners" ON public.home_hero_banners AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Public can read active home hero banners" ON public.home_hero_banners AS PERMISSIVE FOR SELECT TO anon, authenticated USING ((is_active = true));
+CREATE POLICY "Staff can read home hero banners" ON public.home_hero_banners AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
+CREATE POLICY "Managers can manage home hero settings" ON public.home_hero_settings AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Public can read home hero settings" ON public.home_hero_settings AS PERMISSIVE FOR SELECT TO anon, authenticated USING (true);
 CREATE POLICY "Managers can manage ingredients" ON public.ingredients AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
 CREATE POLICY "Staff can read ingredients" ON public.ingredients AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
 CREATE POLICY "Staff can read inventory_balances" ON public.inventory_balances AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());

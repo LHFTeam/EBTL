@@ -2133,6 +2133,60 @@ async function loadShopSettings() {
   };
 }
 
+// The home hero carousel's CMS slides, edited in Marketing → Banners. An empty
+// list is a normal state: the app then renders its three bundled slides, so a
+// failure to read them must not fail the whole home payload.
+async function loadHomeHeroBanners() {
+  const banners = await supabase
+    .from('home_hero_banners')
+    .select('id,image_url,headline,body,deep_link,display_order')
+    .eq('is_active', true)
+    .order('display_order')
+    .order('created_at');
+
+  if (banners.error) return { data: [] };
+
+  return { data: banners.data || [] };
+}
+
+// How long each hero slide dwells before the carousel advances itself. The
+// column is constrained to 2..60; this is the last line of defence so a bad
+// value can never reach the app as a 0-second timer.
+const DEFAULT_HERO_ROTATION_SECONDS = 5;
+const MIN_HERO_ROTATION_SECONDS = 2;
+const MAX_HERO_ROTATION_SECONDS = 60;
+
+async function loadHomeHeroRotationSeconds() {
+  const settings = await supabase
+    .from('home_hero_settings')
+    .select('rotation_seconds')
+    .eq('id', true)
+    .maybeSingle();
+
+  if (settings.error) return { data: DEFAULT_HERO_ROTATION_SECONDS };
+
+  const seconds = Number(settings.data?.rotation_seconds);
+  if (!Number.isFinite(seconds)) return { data: DEFAULT_HERO_ROTATION_SECONDS };
+
+  return {
+    data: Math.min(
+      MAX_HERO_ROTATION_SECONDS,
+      Math.max(MIN_HERO_ROTATION_SECONDS, Math.round(seconds))
+    )
+  };
+}
+
+function publicHeroBanner(banner) {
+  return {
+    id: banner.id,
+    image_url: banner.image_url,
+    headline: banner.headline || null,
+    body: banner.body || null,
+    deep_link: banner.deep_link || null,
+    display_order: banner.display_order || 0
+  };
+}
+
 async function loadVisibleShopCategories() {
   const [categories, products] = await Promise.all([
     supabase
@@ -3441,7 +3495,7 @@ customerRouter.get('/customer/home', async (req, res) => {
     error: 'Invalid home request.'
   });
 
-  const [locations, categories, liquorTypes, catalog] = await Promise.all([
+  const [locations, categories, liquorTypes, catalog, heroBanners, heroRotationSeconds] = await Promise.all([
     loadServiceLocations(),
 
     supabase
@@ -3461,7 +3515,11 @@ customerRouter.get('/customer/home', async (req, res) => {
     loadCatalog({
       locationId: parsed.data.location_id || null,
       onlyFeatured: true
-    })
+    }),
+
+    loadHomeHeroBanners(),
+
+    loadHomeHeroRotationSeconds()
   ]);
 
   for (const result of [locations, categories, liquorTypes, catalog]) {
@@ -3503,6 +3561,10 @@ customerRouter.get('/customer/home', async (req, res) => {
       image_url: null,
       primary_cta_label: 'Find your cocktail',
       primary_cta_target: 'cocktail_finder'
+    },
+    heroBanners: (heroBanners.data || []).map(publicHeroBanner),
+    heroCarousel: {
+      rotation_seconds: heroRotationSeconds.data
     },
     featuredCocktails: catalog.data.cards.map((card) => addFavoriteFlagToCard(card, favoriteProductIds)),
     categories: (categories.data || []).map(publicCategory),

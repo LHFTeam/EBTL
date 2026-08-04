@@ -59,6 +59,8 @@ class HomeScreen extends StatefulWidget {
   final ValueChanged<LiquorType> onOpenFinderWithBottle;
   final ValueChanged<Cocktail> onOpenCocktail;
   final ValueChanged<Category> onOpenCategory;
+  /// Follows a hero banner's deep link. Only called for banners that carry one.
+  final ValueChanged<HomeHeroBanner> onOpenHeroBanner;
   final ValueChanged<ServiceLocation> onLocationSelected;
   final CartChangedCallback onCartChanged;
 
@@ -78,6 +80,7 @@ class HomeScreen extends StatefulWidget {
     required this.onOpenFinderWithBottle,
     required this.onOpenCocktail,
     required this.onOpenCategory,
+    required this.onOpenHeroBanner,
     required this.onLocationSelected,
     required this.onCartChanged,
   });
@@ -238,7 +241,11 @@ class _HomeScreenState extends State<HomeScreen> {
       // The carousel stays on Home in every state except a live order, where
       // the tracker is what the customer came back for.
       if (liveOrder == null) ...[
-        const HomeHeroCarousel(),
+        HomeHeroCarousel(
+          banners: widget.data.heroBanners,
+          rotationInterval: widget.data.heroRotation,
+          onOpenBanner: widget.onOpenHeroBanner,
+        ),
         const SizedBox(height: 10),
       ],
       if (currentMode == HomeMode.liveOrder) ...buildOrderAgain(),

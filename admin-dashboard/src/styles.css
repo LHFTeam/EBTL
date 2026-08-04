@@ -4434,3 +4434,50 @@ textarea {
     transition: none;
   }
 }
+
+/* Banners admin (Marketing → Banners) */
+.bannerAddForm {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.bannerFields {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.6fr) minmax(160px, 2fr) minmax(150px, 1fr) minmax(150px, 1fr) 90px auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.bannerFields input,
+.bannerFields select {
+  width: 100%;
+  border: 1px solid var(--brand-border, var(--line));
+  border-radius: 12px;
+  padding: 11px 12px;
+  background: white;
+  min-height: 44px;
+}
+
+@media (max-width: 1240px) {
+  .bannerFields {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .bannerFields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rotationInput {
+  width: 90px;
+  border: 1px solid var(--brand-border, var(--line));
+  border-radius: 12px;
+  padding: 11px 12px;
+  background: white;
+  min-height: 44px;
+}

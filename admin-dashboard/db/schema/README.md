@@ -16,21 +16,18 @@ Captured from project `pfcncajijvtvsdwgwbjl` ("EBTL 1", eu-west-1, Postgres 17).
 | --- | --- |
 | `00_extensions_and_types.sql` | 4 extensions, 11 enum types, 2 sequences |
 | `05_private_schema.sql` | the `private` schema and its one SECURITY DEFINER function |
-| `10_tables.sql` | 55 tables — columns, defaults, generated/identity columns, RLS enablement |
-| `20_constraints.sql` | 269 constraints — 55 PK, 30 unique, 89 check, 95 FK |
-| `30_indexes.sql` | 88 indexes (the constraint-backed ones live in `20_`) |
+| `10_tables.sql` | 57 tables — columns, defaults, generated/identity columns, RLS enablement |
+| `20_constraints.sql` | 278 constraints — 57 PK, 30 unique, 96 check, 95 FK |
+| `30_indexes.sql` | 89 indexes (the 87 constraint-backed ones live in `20_`) |
 | `40_views.sql` | 8 views |
 | `50_functions.sql` | 13 functions in `public` |
-| `60_triggers.sql` | 34 triggers |
-| `70_rls_policies.sql` | 86 RLS policies |
-| `80_comments.sql` | 40 table and column comments |
+| `60_triggers.sql` | 36 triggers |
+| `70_rls_policies.sql` | 91 RLS policies |
+| `80_comments.sql` | 45 table and column comments |
 
-These counts are what the files contain. They are **one migration behind the
-live database**: `20260804083025_home_hero_banners` was applied to the project
-without being written back to either `../migrations/` or here, so the live
-catalogs report 56 tables, 275 constraints, 89 non-constraint indexes and 89
-policies. Capturing that table is what closes the gap — everything else below
-was refreshed against the catalogs on 2026-08-04.
+These counts are what the files contain, and they match the live catalogs as of
+2026-08-04 — the spirit-profile and home-hero-banner work landed together and
+each brought its own tables into the capture.
 
 Filename order is apply order: types
 and sequences first, then the `private` function that `orders` triggers call,
@@ -60,7 +57,7 @@ rather than a tested bootstrap.
 
 ## RLS, and why it is not what protects the API
 
-Row-level security is enabled on all 55 captured tables, with 86 policies keyed off
+Row-level security is enabled on all 57 captured tables, with 91 policies keyed off
 `auth.uid()` and the `is_staff()` / `is_manager_or_admin()` helpers.
 
 The Express server connects with the **service-role key**

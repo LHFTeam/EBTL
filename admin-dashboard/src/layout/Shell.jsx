@@ -8,6 +8,7 @@ import Liquors from '../pages/Liquors.jsx';
 import Shop from '../pages/Shop.jsx';
 import Dashboard from '../pages/Dashboard.jsx';
 import Analytics from '../pages/Analytics.jsx';
+import Banners from '../pages/Banners.jsx';
 import Employees from '../pages/Employees.jsx';
 import Ingredients from '../pages/Ingredients.jsx';
 import Inventory from '../pages/Inventory.jsx';
@@ -183,6 +184,7 @@ export default function Shell({ user, access, onLogout }) {
       {active === 'shop' && <Shop />}
       {active === 'promotions' && <Promotions />}
       {active === 'referrals' && <Referrals />}
+      {active === 'banners' && <Banners />}
       {active === 'locations' && <Locations />}
       {active === 'employees' && <Employees />}
     </main>

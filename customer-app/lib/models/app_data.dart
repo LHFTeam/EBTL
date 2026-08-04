@@ -6,6 +6,14 @@ import 'finder_models.dart';
 
 class AppData {
   final HeroContent hero;
+
+  /// CMS-driven slides for the Home hero carousel, in display order. Empty
+  /// means marketing has none live and the carousel shows its bundled slides.
+  final List<HomeHeroBanner> heroBanners;
+
+  /// How long each hero slide dwells before the carousel advances itself, set
+  /// in the dashboard. Falls back to [HomeHeroBanner.defaultRotation].
+  final Duration heroRotation;
   final List<ServiceLocation> serviceAreas;
   final List<Cocktail> featuredCocktails;
   final List<Category> categories;
@@ -17,6 +25,8 @@ class AppData {
 
   const AppData({
     required this.hero,
+    required this.heroBanners,
+    required this.heroRotation,
     required this.serviceAreas,
     required this.featuredCocktails,
     required this.categories,
@@ -35,6 +45,8 @@ class AppData {
   AppData withCartSummary(CartSummary? summary) {
     return AppData(
       hero: hero,
+      heroBanners: heroBanners,
+      heroRotation: heroRotation,
       serviceAreas: serviceAreas,
       featuredCocktails: featuredCocktails,
       categories: categories,
@@ -77,6 +89,13 @@ class AppData {
 
     return AppData(
       hero: HeroContent.fromJson(asMap(homeJson['hero'])),
+      heroRotation: readHeroRotation(asMap(homeJson['heroCarousel'])),
+      heroBanners: sortHeroBanners(
+        readMapList(homeJson['heroBanners'])
+            .map(HomeHeroBanner.fromJson)
+            .where((banner) => banner.isRenderable)
+            .toList(),
+      ),
       serviceAreas: readMapList(
         homeJson['serviceAreas'],
       ).map(ServiceLocation.fromJson).toList(),

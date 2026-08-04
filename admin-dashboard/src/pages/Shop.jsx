@@ -66,14 +66,12 @@ export default function Shop() {
   const messageRef = useRef(null);
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState('ok');
-  const [bannerFile, setBannerFile] = useState(null);
   const [newCategory, setNewCategory] = useState(blankCategory);
   const [categoryEdits, setCategoryEdits] = useState({});
   const [categoryImageFiles, setCategoryImageFiles] = useState({});
   const [newTag, setNewTag] = useState(blankProductTag);
   const [tagEdits, setTagEdits] = useState({});
 
-  const settings = data?.settings || {};
   const categories = data?.categories || [];
   const productTags = data?.productTags || [];
 
@@ -134,32 +132,6 @@ export default function Shop() {
     } catch (err) {
       showMessage(err.message || 'Request failed', 'error');
     }
-  }
-
-  async function uploadBanner(e) {
-    e.preventDefault();
-
-    if (!bannerFile) {
-      showMessage('Choose a .webp banner image first.', 'error');
-      return;
-    }
-
-    await runAction(async () => {
-      await api('/api/shop/banner-image', {
-        method: 'POST',
-        body: JSON.stringify(await imageUploadPayload(bannerFile))
-      });
-      setBannerFile(null);
-    }, 'Shop banner image uploaded.');
-  }
-
-  async function clearBanner() {
-    if (!window.confirm('Remove the shop banner image?')) return;
-
-    await runAction(async () => {
-      await api('/api/shop/banner-image', { method: 'DELETE' });
-      setBannerFile(null);
-    }, 'Shop banner image removed.');
   }
 
   async function addCategory(e) {
@@ -317,33 +289,6 @@ export default function Shop() {
 
   return <div className="grid">
     <div ref={messageRef} className="messageAnchor"><Message text={msg} type={msgType} /></div>
-
-    <Section title="Shop Banner">
-      <div className="subPanel noTopMargin">
-        <div className="shopAssetRow">
-          <ShopImagePreview src={settings.banner_image_url} label="No banner" />
-          <div className="imageUploadControls">
-            <b>Global shop banner image</b>
-            <p className="muted smallText noPad">
-              Upload a wide WebP image. The mobile app owns the static copy: “Beach day essentials?”, “We’ve got you.”, and “Shop Essentials”.
-            </p>
-            <form className="miniForm inlineShopUpload" onSubmit={uploadBanner}>
-              <label className="fileButton">
-                <input
-                  type="file"
-                  accept="image/webp,.webp"
-                  onChange={(e) => chooseWebpImage(e.target.files?.[0], setBannerFile)}
-                />
-                <span>{bannerFile ? 'Change WebP banner' : 'Choose WebP banner'}</span>
-              </label>
-              <button className="primary" disabled={!bannerFile}>Upload banner</button>
-              {settings.banner_image_url && <button type="button" onClick={clearBanner}>Remove</button>}
-            </form>
-            {bannerFile && <div className="selectedFile">Selected: {bannerFile.name} · {fileSizeLabel(bannerFile.size)}</div>}
-          </div>
-        </div>
-      </div>
-    </Section>
 
     <Section title="Categories">
       <form className="miniForm formGrid" onSubmit={addCategory}>

@@ -426,6 +426,47 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     );
   }
 
+  /// Follows a home hero banner's deep link.
+  ///
+  /// The destinations are the ones the dashboard offers when a banner is
+  /// created (`server/routes/bannerRoutes.js` validates the same set), so an
+  /// unrecognised one only happens if a newer dashboard ships a destination
+  /// this app version does not know — [HeroBannerLink.parse] turns those into
+  /// [HeroBannerLinkKind.none] and the banner is never tappable in the first
+  /// place.
+  void openHeroBanner(AppData data, HomeHeroBanner banner) {
+    final link = banner.link;
+
+    switch (link.kind) {
+      case HeroBannerLinkKind.none:
+        return;
+      case HeroBannerLinkKind.finder:
+        openFinder();
+      case HeroBannerLinkKind.explore:
+        handleBottomNavTap(EbtlBottomNav.exploreIndex);
+      case HeroBannerLinkKind.cart:
+        openCart();
+      case HeroBannerLinkKind.orders:
+        openOrderHistory();
+      case HeroBannerLinkKind.cocktail:
+        openCocktailBySlug(data, link.value);
+      case HeroBannerLinkKind.category:
+        final category = data.categories
+            .where((candidate) => candidate.id == link.value)
+            .firstOrNull;
+
+        // The category was archived or hidden since the banner was written.
+        // Explore is where its products would have been browsed from, so the
+        // tap still lands somewhere sensible instead of doing nothing.
+        if (category == null) {
+          handleBottomNavTap(EbtlBottomNav.exploreIndex);
+          return;
+        }
+
+        openShopCategory(data, category);
+    }
+  }
+
   /// Loads app data, keeping whatever is already on screen visible while the
   /// request is in flight.
   ///
@@ -555,10 +596,20 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
       return Future.value();
     }
 
+    return openCocktailBySlug(data, cocktail.slug, liquorTypeId: liquorTypeId);
+  }
+
+  /// The detail screen loads from the slug alone, so anything that knows one —
+  /// a card, or a hero banner's `cocktail/<slug>` deep link — can open it.
+  Future<void> openCocktailBySlug(
+    AppData data,
+    String slug, {
+    String? liquorTypeId,
+  }) {
     return Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => CocktailDetailScreen(
-          slug: cocktail.slug,
+          slug: slug,
           locationId: data.selectedLocationId,
           locationName: data.selectedLocationName,
           liquorTypeId: liquorTypeId,
@@ -620,6 +671,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         onOpenFinderWithBottle: (liquor) => openFinder(liquorTypeId: liquor.id),
         onOpenCocktail: (cocktail) => openCocktailDetail(data, cocktail),
         onOpenCategory: (category) => openShopCategory(data, category),
+        onOpenHeroBanner: (banner) => openHeroBanner(data, banner),
         onLocationSelected: selectLocation,
         onCartChanged: handleCartChanged,
       ),
