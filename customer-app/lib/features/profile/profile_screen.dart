@@ -9,10 +9,12 @@ import '../../shared/widgets/app_state_widgets.dart';
 import 'customer_addresses_screen.dart';
 import 'customer_orders_screen.dart';
 import 'favorite_cocktails_screen.dart';
+import 'favorite_spirits_screen.dart';
 import 'order_detail_screen.dart';
 import 'profile_edit_sheet.dart';
 import 'referral_screen.dart';
 import 'widgets/profile_widgets.dart';
+import 'widgets/spirit_widgets.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? selectedLocationId;
@@ -71,8 +73,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  /// The spirits screen owns its own copy of the payload, so the profile only
+  /// reloads when it comes back saying something changed.
+  Future<void> openSpirits() async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const FavoriteSpiritsScreen()),
+    );
+
+    if (changed == true && mounted) {
+      reloadProfile();
+    }
+  }
+
   void openQuickLink(ProfileQuickLink link) {
     switch (link.key) {
+      case 'favorite_spirits':
+        openSpirits();
+        return;
       case 'favorite_cocktails':
         Navigator.of(context).push(
           MaterialPageRoute(
@@ -204,6 +221,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             }
                           : null,
                     ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: ProfileSpiritsSection(
+                    spirits: profile.spirits,
+                    onManage: openSpirits,
                   ),
                 ),
                 SliverToBoxAdapter(

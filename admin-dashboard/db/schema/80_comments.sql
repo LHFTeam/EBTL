@@ -1,6 +1,10 @@
 -- EBTL baseline schema — table and column comments.
 
 COMMENT ON TABLE public.customer_credit_ledger IS 'Append-only store-credit wallet. Positive delta = credit earned, negative = credit spent. Balance = sum(delta_amount) per customer.';
+COMMENT ON TABLE public.customer_favorite_liquor_types IS 'Spirits a customer marked as a favorite on their profile. Curated by hand — compare customer_top_liquor_types, which the backend computes.';
+COMMENT ON TABLE public.customer_top_liquor_types IS 'The spirits a customer orders most, recomputed in full on every order confirmation (server/lib/customerSpirits.js). Never written by hand.';
+COMMENT ON COLUMN public.customer_top_liquor_types.order_count IS 'How many of the customer''s placed orders contain at least one cocktail using this spirit. Counted once per order, not per cocktail.';
+COMMENT ON COLUMN public.customer_top_liquor_types.rank IS 'Which of the two kept places this spirit holds: 1 = most-ordered count, 2 = second-most. Ties share a rank, so a rank may hold several rows and the table may hold more than two per customer.';
 COMMENT ON COLUMN public.customers.referral_attributed_at IS 'When this customer was attributed to a referrer (first successful code apply).';
 COMMENT ON COLUMN public.customers.referral_code IS 'The customer''s own shareable referral code (e.g. EBTL-XXXXX). Lazily generated.';
 COMMENT ON COLUMN public.customers.referred_by_customer_id IS 'The customer who referred this customer, if they applied a referral code.';

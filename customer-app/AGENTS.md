@@ -18,7 +18,8 @@ The app is a thin client over the **customer API** of a separate backend
 - Base URL: `https://ebtl-admin-dashboard.onrender.com` (hardcoded in
   `lib/core/network/api_config.dart` — there is no env/flavor switching).
 - All endpoints live under `/api/customer/...` (session, home, cocktails,
-  cocktail-finder/options, shop, cart, checkout, orders, favorites, profile).
+  cocktail-finder/options, shop, cart, checkout, orders, favorites, spirits,
+  profile).
 - **There is no demo/offline fallback data.** Every screen loads from the
   backend; if it is unreachable the app shows `AppErrorScreen` with retry.
   Do not invent local mock data when fixing bugs — surface errors instead.
@@ -73,7 +74,8 @@ Notes:
   the app shell smoke test (`widget_test.dart`), JSON parsing
   (`notification_models_test.dart`), the checkout result states, the bottom
   nav's tab set and badge placement (`ebtl_bottom_nav_test.dart`), and the
-  Explore hero/badges (`explore_widgets_test.dart`). Screens that call
+  Explore hero/badges (`explore_widgets_test.dart`), and the spirit-profile
+  payloads (`spirit_models_test.dart`). Screens that call
   `ApiService` statics directly are not testable without a backend — test the
   widgets they compose instead, as those files do.
 - Some CI/agent environments do not have the Flutter SDK installed. If
@@ -116,7 +118,8 @@ lib/
   features/<feature>/       # One folder per screen/flow:
                             # home, explore, finder, shop, cocktail_detail,
                             # cart, checkout (includes OrderConfirmedScreen),
-                            # profile (orders, favorites, edit sheet), onboarding
+                            # profile (orders, favorites, spirits, edit sheet),
+                            # onboarding
     .../widgets/            # Feature-private widgets, when split out
   shared/widgets/           # Reusable UI: loading/error/empty states, cards,
                             # bottom nav, NetworkOrAssetImage, ingredient icons,
@@ -304,6 +307,14 @@ an endpoint, copy the existing shape:
   next attempt starts from a fresh key.
 - **Favorites** — per-anonymous-customer favorite cocktails
   (`/api/customer/favorites`), surfaced on profile and cocktail cards.
+- **Spirits** — the customer's bottles, as two lists on the profile
+  (`/api/customer/spirits`, `models/spirit_models.dart`,
+  `features/profile/favorite_spirits_screen.dart`). *My Spirits* is curated by
+  the customer (add/remove); *Most Ordered* is computed backend-side from their
+  order history on every order confirmation and is read-only here. Both come
+  down inside the profile payload too, so the profile screen renders them
+  without a second request. Mutations answer with the whole spirits payload —
+  render the response rather than patching local state.
 
 ## Working agreements for agents
 

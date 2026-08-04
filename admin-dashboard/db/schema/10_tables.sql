@@ -123,6 +123,13 @@ CREATE TABLE IF NOT EXISTS public.customer_credit_ledger (
 );
 ALTER TABLE public.customer_credit_ledger ENABLE ROW LEVEL SECURITY;
 
+CREATE TABLE IF NOT EXISTS public.customer_favorite_liquor_types (
+    customer_id uuid NOT NULL,
+    liquor_type_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.customer_favorite_liquor_types ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS public.customer_favorite_products (
     customer_id uuid NOT NULL,
     product_id uuid NOT NULL,
@@ -179,6 +186,15 @@ CREATE TABLE IF NOT EXISTS public.customer_push_tokens (
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 ALTER TABLE public.customer_push_tokens ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.customer_top_liquor_types (
+    customer_id uuid NOT NULL,
+    liquor_type_id uuid NOT NULL,
+    order_count integer DEFAULT 0 NOT NULL,
+    rank integer DEFAULT 1 NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.customer_top_liquor_types ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS public.customers (
     id uuid DEFAULT gen_random_uuid() NOT NULL,

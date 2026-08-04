@@ -10,7 +10,7 @@ be read alongside the changes that produced it.
 ## Ledger mapping
 
 Supabase records what it has applied in `supabase_migrations.schema_migrations`.
-These twelve entries have a file here:
+All thirteen entries have a file:
 
 | Ledger version | Name | File |
 | --- | --- | --- |
@@ -25,14 +25,12 @@ These twelve entries have a file here:
 | 20260726213254 | referral_program_engine | `20260726_referral_program_engine.sql` |
 | 20260731185443 | expired_order_status | `20260731_expired_order_status.sql` |
 | 20260804083025 | home_hero_banners | `20260804083025_…sql` |
+| 20260804191747 | customer_spirit_profile | `20260804191747_customer_spirit_profile.sql` |
 | 20260804195427 | home_hero_settings | `20260804195427_…sql` |
 
-One further entry — `20260804191747 customer_spirit_profile` — was applied to
-the live project by a workstream that is not on this branch, so it has no file
-here and its objects are **not** in the `db/schema/` capture. Whoever merges
-that work owns bringing both back into step.
+## Notes on the applied set
 
-Six of these were applied with no file in the repo and were backfilled
+Six of them were recorded with no file in the repo and were backfilled
 from the ledger's stored statements. They carry a header saying so. The four
 older files predate that and keep their original `YYYYMMDD_name` names; new
 files use the full ledger version, because three migrations share 2026-07-24 and

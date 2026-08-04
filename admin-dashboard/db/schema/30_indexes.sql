@@ -28,6 +28,9 @@ CREATE INDEX idx_customer_payment_methods_customer ON public.customer_payment_me
 CREATE INDEX idx_customer_payment_methods_default ON public.customer_payment_methods USING btree (customer_id, is_default) WHERE (is_default = true);
 CREATE INDEX idx_customer_push_tokens_customer_active ON public.customer_push_tokens USING btree (customer_id, is_active, last_registered_at DESC);
 CREATE INDEX idx_customer_push_tokens_token_hash ON public.customer_push_tokens USING btree (token_hash);
+CREATE INDEX customer_favorite_liquor_types_customer_created_at_idx ON public.customer_favorite_liquor_types USING btree (customer_id, created_at DESC);
+CREATE INDEX customer_favorite_liquor_types_liquor_type_idx ON public.customer_favorite_liquor_types USING btree (liquor_type_id);
+CREATE INDEX customer_top_liquor_types_liquor_type_idx ON public.customer_top_liquor_types USING btree (liquor_type_id);
 CREATE UNIQUE INDEX customers_referral_code_lower_uidx ON public.customers USING btree (lower(referral_code)) WHERE (referral_code IS NOT NULL);
 CREATE INDEX customers_referred_by_customer_idx ON public.customers USING btree (referred_by_customer_id) WHERE (referred_by_customer_id IS NOT NULL);
 CREATE INDEX idx_customers_auth_user_id ON public.customers USING btree (auth_user_id);

@@ -16,16 +16,20 @@ Captured from project `pfcncajijvtvsdwgwbjl` ("EBTL 1", eu-west-1, Postgres 17).
 | --- | --- |
 | `00_extensions_and_types.sql` | 4 extensions, 11 enum types, 2 sequences |
 | `05_private_schema.sql` | the `private` schema and its one SECURITY DEFINER function |
-| `10_tables.sql` | 55 tables — columns, defaults, generated/identity columns, RLS enablement |
-| `20_constraints.sql` | 270 constraints — 55 PK, 30 unique, 94 check, 91 FK |
-| `30_indexes.sql` | 86 indexes (the 85 constraint-backed ones live in `20_`) |
+| `10_tables.sql` | 57 tables — columns, defaults, generated/identity columns, RLS enablement |
+| `20_constraints.sql` | 278 constraints — 57 PK, 30 unique, 96 check, 95 FK |
+| `30_indexes.sql` | 89 indexes (the 87 constraint-backed ones live in `20_`) |
 | `40_views.sql` | 8 views |
 | `50_functions.sql` | 13 functions in `public` |
 | `60_triggers.sql` | 36 triggers |
 | `70_rls_policies.sql` | 91 RLS policies |
-| `80_comments.sql` | 41 table and column comments |
+| `80_comments.sql` | 45 table and column comments |
 
-Every count matches the system catalogs. Filename order is apply order: types
+These counts are what the files contain, and they match the live catalogs as of
+2026-08-04 — the spirit-profile and home-hero-banner work landed together and
+each brought its own tables into the capture.
+
+Filename order is apply order: types
 and sequences first, then the `private` function that `orders` triggers call,
 then tables, then the constraints referencing them (primary/unique before the
 foreign keys pointing at them), then indexes, then functions before the views
@@ -53,7 +57,7 @@ rather than a tested bootstrap.
 
 ## RLS, and why it is not what protects the API
 
-Row-level security is enabled on all 55 tables, with 91 policies keyed off
+Row-level security is enabled on all 57 captured tables, with 91 policies keyed off
 `auth.uid()` and the `is_staff()` / `is_manager_or_admin()` helpers.
 
 The Express server connects with the **service-role key**
@@ -62,8 +66,9 @@ govern direct PostgREST access only — every authorization decision the custome
 and admin APIs actually make is in application code. Do not read the policy list
 as a description of how the APIs are secured.
 
-Seven tables have RLS enabled and no policy at all, making them deny-all for
+Nine tables have RLS enabled and no policy at all, making them deny-all for
 `anon` and `authenticated` (reachable only via the service-role key):
-`customer_credit_ledger`, `order_inventory_consumptions`,
+`customer_credit_ledger`, `customer_favorite_liquor_types`,
+`customer_top_liquor_types`, `order_inventory_consumptions`,
 `order_number_counters`, `referral_settings`, `referrals`,
 `stock_transfer_movement_events`, and `app_events` for everything except INSERT.

@@ -121,6 +121,7 @@ admin-dashboard/
       passwords.js        # pbkdf2 hash/verify for employee_credentials
       geidea.js           # Geidea session create + callback signature verify
       notifications.js    # customer notifications + FCM/Expo push
+      customerSpirits.js  # customer favorite spirits + most-ordered spirits
       objectUtils.js      # clean() / normalizeEmptyStrings()
     routes/
       authRoutes.js       # /login /logout /me /me/password
@@ -207,9 +208,9 @@ Two subtle, deliberate behaviors — preserve them:
 
 This one file is the whole customer surface: session, home, shop, cocktails,
 cocktail-finder, cart, checkout (quote + place-order), orders, order
-status/payment-status polling, favorites, addresses, profile, notifications,
-push-token registration, and the Geidea payment callback. It is large by
-design — **follow the local structure**; don't refactor it wholesale.
+status/payment-status polling, favorites, spirits, addresses, profile,
+notifications, push-token registration, and the Geidea payment callback. It is
+large by design — **follow the local structure**; don't refactor it wholesale.
 
 - **Payments:** `PAYMENT_MODE=demo` confirms orders without a gateway;
   `live` uses Geidea. Session creation, amount formatting, and **callback
@@ -246,6 +247,17 @@ design — **follow the local structure**; don't refactor it wholesale.
   `lib/notifications.js` (`createCustomerNotification` → persist + push via FCM
   or Expo, gated by env). `notifyOrderReadyForPickup` dedupes on
   `order:<id>:ready_for_pickup`.
+- **Customer spirits:** `lib/customerSpirits.js` owns both spirit lists on the
+  profile. Favorites (`customer_favorite_liquor_types`) are curated by the
+  customer through `/api/customer/spirits/favorites`. The most-ordered list
+  (`customer_top_liquor_types`) is **rebuilt in full** by
+  `refreshTopSpiritsAfterOrderConfirmed`, called from each payment-success path
+  next to `settleReferralAndCreditForOrder` — so it lands only on a real
+  `confirmed` transition, and never throws into a payment webhook. Counting is
+  once per order per spirit (not per cocktail), a cocktail's spirits come from
+  `product_liquor_compatibility`, and `pickTopSpirits` keeps the top **two
+  counts** rather than two spirits, so ties keep every spirit that qualifies.
+  Recomputing rather than incrementing is what makes a replayed webhook safe.
 
 ## Frontend architecture
 
