@@ -30,17 +30,6 @@ class HomeScreenVisuals {
   static const double featuredProductCardShortDescriptionFontSize = 8;
   static const double featuredProductCardShortDescriptionLineHeight = 1.1;
 
-  // Featured Kits Rail (Home v2)
-  //
-  // Featured cocktails moved from a 2-up grid to a horizontal rail; these are
-  // the rail card's dimensions.
-  static const double featuredRailCardWidth = 176;
-  static const double featuredRailCardImageHeight = 124;
-
-  /// Tall enough for the image well plus a two-line kit name, its ingredient
-  /// line and the price row — a horizontal rail has to be told its height.
-  static const double featuredRailCardHeight = 270;
-
   // Order It Again Rail (Home v2, live order only)
   //
   // The card is wider than the design's 230pt: at 230 its text column is 94pt,
