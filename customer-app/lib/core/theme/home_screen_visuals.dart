@@ -36,10 +36,10 @@ class HomeScreenVisuals {
   // which ellipsizes "Ordered 3 days ago" (115pt at the specified size). The
   // rail is tall enough for the 56pt thumb, and for the kit name, the
   // "ordered ..." line and the price stacked beside it.
-  static const double orderAgainCardWidth = 252;
+  static const double orderAgainCardWidth = 260;
   static const double orderAgainRailHeight = 88;
 
-  // Hero Peek Carousel (Home v2, first run only)
+  // Hero Peek Carousel (Home v2, hidden only while an order is live)
   //
   // The slide width and gap are fixed; the page viewport fraction is derived
   // from them at layout time so the neighbouring slides peek in equally on any

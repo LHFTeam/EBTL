@@ -428,6 +428,9 @@ class HomeOrderAgainCard extends StatelessWidget {
                           style: GoogleFonts.manrope(
                             fontSize: 12.5,
                             height: 1.2,
+                            // Design tracks body copy at 0; the theme's own
+                            // spacing pushes this line past the card.
+                            letterSpacing: 0,
                             fontWeight: FontWeight.w700,
                             color: EbtlColors.muted,
                           ),

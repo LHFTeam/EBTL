@@ -21,7 +21,7 @@ import 'widgets/home_modules.dart';
 /// state on every build — never chosen by hand.
 enum HomeMode {
   /// Nothing in flight and nothing behind them: lead with the education
-  /// carousel.
+  /// carousel and close on the shop-only path.
   firstRun,
 
   /// They have shopped before or have a cart open: lead with the cart.
@@ -233,7 +233,9 @@ class _HomeScreenState extends State<HomeScreen> {
           onTap: widget.onOpenActiveOrders,
         ),
       ...buildCartResumeBar(),
-      if (currentMode == HomeMode.firstRun) ...[
+      // The carousel stays on Home in every state except a live order, where
+      // the tracker is what the customer came back for.
+      if (liveOrder == null) ...[
         const HomeHeroCarousel(),
         const SizedBox(height: 10),
       ],

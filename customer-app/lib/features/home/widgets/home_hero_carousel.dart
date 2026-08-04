@@ -4,8 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/ebtl_colors.dart';
 import '../../../core/theme/home_screen_visuals.dart';
 
-/// The first-run education carousel: three slides that peek in from both sides
-/// with the active one centered.
+/// The education carousel: three slides that peek in from both sides with the
+/// active one centered. Home shows it in every state except a live order.
 ///
 /// The slide copy is hardcoded, matching the design. It should become a
 /// merchandising slot on the home payload (image, headline, body, deep link,
