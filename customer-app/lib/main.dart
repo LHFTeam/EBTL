@@ -149,6 +149,11 @@ class RootShell extends StatefulWidget {
 class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   static const Duration _notificationsPollInterval = Duration(seconds: 30);
 
+  /// How often the orders behind Home's live-order card are re-fetched while
+  /// an order is still being made, so the card follows the kitchen without the
+  /// customer pulling to refresh.
+  static const Duration _liveOrderPollInterval = Duration(seconds: 20);
+
   int selectedIndex = EbtlBottomNav.homeIndex;
 
   /// The last successfully loaded payload. Kept across refreshes so a reload
@@ -168,6 +173,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   String? _latestUnreadNotificationId;
   bool _notificationsBaselineSeeded = false;
   bool _isPollingNotifications = false;
+  StreamSubscription<void>? _pushSubscription;
 
   /// The customer's orders, newest first, as last loaded. Home reads the
   /// order still being made and the finished ones behind "Order It Again" from
@@ -175,6 +181,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   List<ProfileOrder> customerOrders = const [];
   int activeOrdersCount = 0;
   bool _isRefreshingActiveOrders = false;
+  Timer? _liveOrderTimer;
+  String? _lastOrdersSignature;
 
   @override
   void initState() {
@@ -183,7 +191,11 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     loadAppData();
     WidgetsBinding.instance.addObserver(this);
     PushNotificationService.initialize();
+    _pushSubscription = PushNotificationService.onMessage.listen(
+      (_) => _handlePushMessage(),
+    );
     _startNotificationsPolling(notifyImmediately: false);
+    _startLiveOrderPolling();
     _refreshActiveOrders();
   }
 
@@ -191,6 +203,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _notificationsTimer?.cancel();
+    _liveOrderTimer?.cancel();
+    _pushSubscription?.cancel();
     super.dispose();
   }
 
@@ -200,10 +214,13 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     // the background and pick it back up (with an immediate check) on resume.
     if (state == AppLifecycleState.resumed) {
       _startNotificationsPolling(notifyImmediately: true);
+      _startLiveOrderPolling();
       _refreshActiveOrders();
     } else if (state == AppLifecycleState.paused) {
       _notificationsTimer?.cancel();
       _notificationsTimer = null;
+      _liveOrderTimer?.cancel();
+      _liveOrderTimer = null;
     }
   }
 
@@ -214,6 +231,26 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
       _notificationsPollInterval,
       (_) => _pollNotifications(canNotify: true),
     );
+  }
+
+  /// Keeps Home's live-order card in step with the order as staff move it
+  /// along. Only orders still in flight are worth re-fetching for — a new
+  /// order arrives through checkout or a push/notification, both of which
+  /// refresh on their own.
+  void _startLiveOrderPolling() {
+    _liveOrderTimer?.cancel();
+    _liveOrderTimer = Timer.periodic(_liveOrderPollInterval, (_) {
+      if (activeOrdersCount > 0) _refreshActiveOrders();
+    });
+  }
+
+  /// A push landing while the app is open means something moved server-side:
+  /// pull the orders (and the unread badge) straight away instead of waiting
+  /// for the next poll.
+  void _handlePushMessage() {
+    if (!mounted) return;
+    _refreshActiveOrders();
+    _pollNotifications(canNotify: true);
   }
 
   Future<void> _pollNotifications({required bool canNotify}) async {
@@ -240,6 +277,12 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
 
       if (response.unreadCount != unreadNotificationCount) {
         setState(() => unreadNotificationCount = response.unreadCount);
+      }
+
+      // A fresh notification is the signal that an order moved on: re-fetch so
+      // Home's live-order card follows it without waiting to be reopened.
+      if (isNew && latest.orderId != null) {
+        unawaited(_refreshActiveOrders());
       }
 
       if (isNew && canNotify) {
@@ -277,6 +320,21 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     );
   }
 
+  /// Everything the orders drive on screen — the live-order card, the
+  /// "Order It Again" rail, the active-orders shortcut — in one comparable
+  /// string, so a poll that changed nothing costs no rebuild.
+  static String _ordersSignature(List<ProfileOrder> orders) => orders
+      .map(
+        (order) => [
+          order.id,
+          order.status,
+          order.paymentStatus,
+          order.updatedAt ?? '',
+          order.displayFulfillmentAt ?? '',
+        ].join('|'),
+      )
+      .join(';');
+
   /// Best-effort refresh of the active-orders count that drives the top-bar
   /// shortcut. Active orders are paid but not yet completed; there is no
   /// dedicated endpoint, so we derive the count from the orders list.
@@ -289,6 +347,12 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
       if (!mounted) return;
 
       final count = response.orders.where((order) => order.isActive).length;
+
+      // Polled every few seconds while an order is live, so only rebuild when
+      // the orders actually moved.
+      final signature = _ordersSignature(response.orders);
+      if (signature == _lastOrdersSignature) return;
+      _lastOrdersSignature = signature;
 
       setState(() {
         customerOrders = response.orders;
