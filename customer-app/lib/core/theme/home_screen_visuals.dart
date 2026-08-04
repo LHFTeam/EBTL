@@ -45,8 +45,8 @@ class HomeScreenVisuals {
   // from them at layout time so the neighbouring slides peek in equally on any
   // phone width.
   static const double heroSlideWidth = 290;
-  static const double heroSlideHeight = 170.2;
-  static const double heroSlideGap = 4;
+  static const double heroSlideHeight = heroSlideWidth / 2;
+  static const double heroSlideGap = 2;
 
   // Home Liquor Bottle Cards
   static const bool showHomeLiquorBottleCardName = false;
