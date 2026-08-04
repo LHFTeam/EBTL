@@ -23,6 +23,7 @@ import '../models/order_detail_models.dart';
 import '../models/profile_models.dart';
 import '../models/referral_models.dart';
 import '../models/shop_models.dart';
+import '../models/spirit_models.dart';
 import 'cart_revision.dart';
 
 class ApiService {
@@ -706,6 +707,49 @@ class ApiService {
       path: '/api/customer/favorites/${Uri.encodeComponent(productId)}',
       attachToken: true,
     );
+  }
+
+  static Future<ProfileSpirits> fetchCustomerSpirits() async {
+    await ensureSession();
+
+    final json = await _request(
+      method: 'GET',
+      path: '/api/customer/spirits',
+      attachToken: true,
+    );
+
+    return ProfileSpirits.fromJson(json);
+  }
+
+  /// Adds a spirit to the customer's favorites. Like the remove below, the
+  /// backend answers with the whole spirits payload, so callers render the
+  /// result rather than patching local state.
+  static Future<ProfileSpirits> addFavoriteSpirit({
+    required String liquorTypeId,
+  }) async {
+    await ensureSession();
+
+    final json = await _request(
+      method: 'POST',
+      path: '/api/customer/spirits/favorites/${Uri.encodeComponent(liquorTypeId)}',
+      attachToken: true,
+    );
+
+    return ProfileSpirits.fromJson(json);
+  }
+
+  static Future<ProfileSpirits> removeFavoriteSpirit({
+    required String liquorTypeId,
+  }) async {
+    await ensureSession();
+
+    final json = await _request(
+      method: 'DELETE',
+      path: '/api/customer/spirits/favorites/${Uri.encodeComponent(liquorTypeId)}',
+      attachToken: true,
+    );
+
+    return ProfileSpirits.fromJson(json);
   }
 
   static Future<CustomerAddressesResponse> fetchCustomerAddresses() async {

@@ -1,16 +1,19 @@
 import '../core/constants/fulfillment_types.dart';
 import '../core/utils/formatters.dart';
 import '../core/utils/json_helpers.dart';
+import 'spirit_models.dart';
 
 class CustomerProfileResponse {
   final CustomerProfile customer;
   final ProfileRecentOrders recentOrders;
+  final ProfileSpirits spirits;
   final List<ProfileQuickLink> quickLinks;
   final ProfileBrandMessage brandMessage;
 
   const CustomerProfileResponse({
     required this.customer,
     required this.recentOrders,
+    required this.spirits,
     required this.quickLinks,
     required this.brandMessage,
   });
@@ -19,6 +22,7 @@ class CustomerProfileResponse {
     return CustomerProfileResponse(
       customer: CustomerProfile.fromJson(asMap(json['customer'])),
       recentOrders: ProfileRecentOrders.fromJson(asMap(json['recent_orders'])),
+      spirits: ProfileSpirits.fromJson(asMap(json['spirits'])),
       quickLinks: readMapList(
         json['quick_links'],
       ).map(ProfileQuickLink.fromJson).toList(),

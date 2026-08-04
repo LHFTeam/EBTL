@@ -1203,6 +1203,15 @@ final List<ProfileQuickLink> defaultProfileQuickLinks = const [
     count: null,
   ),
   ProfileQuickLink(
+    key: 'favorite_spirits',
+    title: 'My Spirits',
+    subtitle: 'The bottles you keep at hand',
+    endpoint: '/api/customer/spirits',
+    enabled: true,
+    placeholder: false,
+    count: null,
+  ),
+  ProfileQuickLink(
     key: 'promo_codes',
     title: 'Promo Codes',
     subtitle: 'View available offers',
@@ -1230,6 +1239,8 @@ IconData profileQuickLinkIcon(String key) {
       return Icons.credit_card_outlined;
     case 'favorite_cocktails':
       return Icons.favorite_border;
+    case 'favorite_spirits':
+      return Icons.liquor_outlined;
     case 'promo_codes':
       return Icons.local_offer_outlined;
     case 'notifications':
