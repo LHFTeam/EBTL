@@ -28,7 +28,8 @@ via `git log --follow`).
 The Flutter `customer-app` is a **thin client** over the customer API served by
 `admin-dashboard`'s Express backend. It calls `/api/customer/...` endpoints
 (session, home, cocktails, cocktail-finder, shop, cart, checkout, orders,
-favorites, profile, notifications) and holds no business logic or offline data.
+favorites, spirits, profile, notifications) and holds no business logic or
+offline data.
 
 ```
 ┌─────────────────┐        HTTPS /api/customer/...        ┌───────────────────────────┐

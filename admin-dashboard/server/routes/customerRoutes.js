@@ -36,6 +36,16 @@ import {
   redeemCreditForOrder,
   buildReferralHub
 } from '../lib/referrals.js';
+import {
+  TOP_SPIRIT_PLACES,
+  addCustomerFavoriteSpirit,
+  findActiveSpirit,
+  loadActiveSpirits,
+  loadCustomerFavoriteSpirits,
+  loadCustomerTopSpirits,
+  refreshTopSpiritsAfterOrderConfirmed,
+  removeCustomerFavoriteSpirit
+} from '../lib/customerSpirits.js';
 
 export const customerRouter = Router();
 
@@ -1680,7 +1690,87 @@ async function validateFavoriteProduct(productId) {
   return { data: product.data };
 }
 
-function profileQuickLinks({ addressCount = 0, favoriteCount = 0, unreadNotifications = 0 } = {}) {
+function publicFavoriteSpirit(row) {
+  return {
+    ...publicLiquorType(row.liquor_types),
+    is_favorite: true,
+    favorite_created_at: row.created_at
+  };
+}
+
+function publicTopSpirit(row, favoriteIds = new Set()) {
+  return {
+    ...publicLiquorType(row.liquor_types),
+    is_favorite: favoriteIds.has(row.liquor_type_id),
+    order_count: Number(row.order_count || 0),
+    rank: Number(row.rank || 1)
+  };
+}
+
+function emptySpiritsPayload() {
+  return {
+    favorite_spirits: {
+      title: 'My Spirits',
+      subtitle: 'The bottles you keep at hand',
+      count: 0,
+      items: []
+    },
+    top_spirits: {
+      title: 'Most Ordered',
+      subtitle: 'Order a few cocktails and we will work these out',
+      places: TOP_SPIRIT_PLACES,
+      computed_at: null,
+      items: []
+    },
+    available_spirits: []
+  };
+}
+
+// The one payload behind the profile's spirits section and the manage-spirits
+// screen: what the customer picked, what they actually order, and every spirit
+// they could add. `available_spirits` carries `is_favorite` so the picker can
+// render both states from a single list.
+async function buildCustomerSpiritsPayload(customerId) {
+  const [favorites, topSpirits, activeSpirits] = await Promise.all([
+    loadCustomerFavoriteSpirits(customerId),
+    loadCustomerTopSpirits(customerId),
+    loadActiveSpirits()
+  ]);
+
+  for (const result of [favorites, topSpirits, activeSpirits]) {
+    if (result.error) return { error: result.error };
+  }
+
+  const favoriteItems = favorites.data.map(publicFavoriteSpirit);
+  const favoriteIds = new Set(favoriteItems.map((spirit) => spirit.id));
+  const topItems = topSpirits.data.map((row) => publicTopSpirit(row, favoriteIds));
+
+  return {
+    data: {
+      favorite_spirits: {
+        title: 'My Spirits',
+        subtitle: 'The bottles you keep at hand',
+        count: favoriteItems.length,
+        items: favoriteItems
+      },
+      top_spirits: {
+        title: 'Most Ordered',
+        subtitle: topItems.length
+          ? 'Worked out from your order history'
+          : 'Order a few cocktails and we will work these out',
+        places: TOP_SPIRIT_PLACES,
+        computed_at: topSpirits.data[0]?.computed_at || null,
+        items: topItems
+      },
+      available_spirits: activeSpirits.data.map((liquorType) => ({
+        ...publicLiquorType(liquorType),
+        is_favorite: favoriteIds.has(liquorType.id)
+      }))
+    }
+  };
+}
+
+function profileQuickLinks({ addressCount = 0, favoriteCount = 0, favoriteSpiritCount = 0, unreadNotifications = 0 } = {}) {
   return [
     {
       key: 'addresses',
@@ -1705,6 +1795,14 @@ function profileQuickLinks({ addressCount = 0, favoriteCount = 0, unreadNotifica
       endpoint: '/api/customer/favorites',
       enabled: true,
       count: favoriteCount
+    },
+    {
+      key: 'favorite_spirits',
+      title: 'My Spirits',
+      subtitle: 'The bottles you keep at hand',
+      endpoint: '/api/customer/spirits',
+      enabled: true,
+      count: favoriteSpiritCount
     },
     {
       key: 'promo_codes',
@@ -3819,7 +3917,7 @@ customerRouter.get('/customer/profile', async (req, res) => {
   const ensured = await ensureCustomer(req, res);
   if (!ensured) return;
 
-  const [ordersPreview, addressesCount, favoritesCount, unreadNotificationsCount] = await Promise.all([
+  const [ordersPreview, addressesCount, favoritesCount, unreadNotificationsCount, spirits] = await Promise.all([
     loadCustomerOrdersPreview(ensured.customer.id, { limit: CUSTOMER_PROFILE_ORDER_LIMIT }),
     countRows('customer_addresses', ensured.customer.id),
     countRows('customer_favorite_products', ensured.customer.id),
@@ -3827,7 +3925,8 @@ customerRouter.get('/customer/profile', async (req, res) => {
       .from('customer_notifications')
       .select('id', { count: 'exact', head: true })
       .eq('customer_id', ensured.customer.id)
-      .is('read_at', null)
+      .is('read_at', null),
+    buildCustomerSpiritsPayload(ensured.customer.id)
   ]);
 
   for (const result of [ordersPreview, addressesCount, favoritesCount, unreadNotificationsCount]) {
@@ -3837,6 +3936,18 @@ customerRouter.get('/customer/profile', async (req, res) => {
   const addressCount = Number(addressesCount.count || 0);
   const favoriteCount = Number(favoritesCount.count || 0);
   const unreadNotifications = Number(unreadNotificationsCount.count || 0);
+
+  // Spirits are one section of the profile, not the profile itself, so a
+  // failure here degrades to an empty list rather than taking the whole screen
+  // down with it. `GET /api/customer/spirits` still reports the error.
+  if (spirits.error) {
+    console.error('Customer profile could not load spirits', {
+      customerId: ensured.customer.id,
+      error: spirits.error
+    });
+  }
+
+  const spiritsPayload = spirits.error ? emptySpiritsPayload() : spirits.data;
 
   const creditBalanceResult = await getCreditBalance(ensured.customer.id);
   const creditBalance = creditBalanceResult.error ? 0 : creditBalanceResult.data;
@@ -3851,7 +3962,12 @@ customerRouter.get('/customer/profile', async (req, res) => {
       view_all_endpoint: '/api/customer/orders',
       items: ordersPreview.data.items
     },
-    quick_links: profileQuickLinks({ addressCount, favoriteCount, unreadNotifications }),
+    quick_links: profileQuickLinks({
+      addressCount,
+      favoriteCount,
+      favoriteSpiritCount: spiritsPayload.favorite_spirits.count,
+      unreadNotifications
+    }),
     payment_methods: {
       enabled: false,
       placeholder: true,
@@ -3863,6 +3979,11 @@ customerRouter.get('/customer/profile', async (req, res) => {
       enabled: true,
       count: favoriteCount,
       endpoint: '/api/customer/favorites'
+    },
+    spirits: {
+      enabled: true,
+      endpoint: '/api/customer/spirits',
+      ...spiritsPayload
     },
     promo_codes: {
       enabled: true,
@@ -4143,6 +4264,95 @@ customerRouter.delete('/customer/favorites/:productId', async (req, res) => {
     product_id: parsed.data.productId,
     is_favorite: false
   });
+});
+
+// Spirits. The favorites half is customer-curated (add/remove below); the
+// most-ordered half is computed on every order confirmation and is read-only
+// here. Every one of these answers with the whole spirits payload so the app
+// re-renders the profile section from one response.
+async function respondWithCustomerSpirits(res, ensured) {
+  const spirits = await buildCustomerSpiritsPayload(ensured.customer.id);
+
+  if (spirits.error) return res.status(400).json({
+    error: spirits.error.message
+  });
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    ...spirits.data
+  });
+}
+
+async function handleAddCustomerFavoriteSpirit(req, res) {
+  const parsed = z.object({
+    liquor_type_id: uuid.optional(),
+    liquorTypeId: uuid.optional(),
+    spirit_id: uuid.optional()
+  }).transform((data) => ({
+    liquor_type_id: data.liquor_type_id || data.liquorTypeId || data.spirit_id
+  })).refine((data) => Boolean(data.liquor_type_id), {
+    message: 'liquor_type_id is required.'
+  }).safeParse(req.body);
+
+  if (!parsed.success) return res.status(400).json({
+    error: 'Invalid favorite spirit request.'
+  });
+
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const spirit = await findActiveSpirit(parsed.data.liquor_type_id);
+  if (spirit.error) return res.status(400).json({ error: spirit.error.message });
+  if (spirit.notFound) return res.status(404).json({ error: 'Spirit not found.' });
+
+  const added = await addCustomerFavoriteSpirit({
+    customerId: ensured.customer.id,
+    liquorTypeId: parsed.data.liquor_type_id
+  });
+
+  if (added.error) return res.status(400).json({ error: added.error.message });
+
+  return respondWithCustomerSpirits(res, ensured);
+}
+
+customerRouter.get('/customer/spirits', async (req, res) => {
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  return respondWithCustomerSpirits(res, ensured);
+});
+
+customerRouter.post('/customer/spirits/favorites', handleAddCustomerFavoriteSpirit);
+
+customerRouter.post('/customer/spirits/favorites/:liquorTypeId', async (req, res) => {
+  req.body = {
+    ...req.body,
+    liquor_type_id: req.params.liquorTypeId
+  };
+
+  return handleAddCustomerFavoriteSpirit(req, res);
+});
+
+customerRouter.delete('/customer/spirits/favorites/:liquorTypeId', async (req, res) => {
+  const parsed = z.object({ liquorTypeId: uuid }).safeParse(req.params);
+
+  if (!parsed.success) return res.status(400).json({
+    error: 'Invalid favorite spirit request.'
+  });
+
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const removed = await removeCustomerFavoriteSpirit({
+    customerId: ensured.customer.id,
+    liquorTypeId: parsed.data.liquorTypeId
+  });
+
+  if (removed.error) return res.status(400).json({
+    error: removed.error.message
+  });
+
+  return respondWithCustomerSpirits(res, ensured);
 });
 
 customerRouter.get('/customer/cart', async (req, res) => {
@@ -5336,6 +5546,10 @@ async function handleCustomerPlaceOrder(req, res) {
 
     await settleReferralAndCreditForOrder(confirmedOrder.data);
 
+    // The order just joined the customer's history, so their most-ordered
+    // spirits are stale. Recomputed here and from each webhook path below.
+    await refreshTopSpiritsAfterOrderConfirmed(confirmedOrder.data);
+
     // Demo orders are paid the moment they are placed, so the cart converts
     // here. Gateway orders convert from the payment-success webhook instead.
     await convertCartAfterPayment(payment.data);
@@ -5904,6 +6118,8 @@ customerRouter.post('/payments/geidea/callback', async (req, res) => {
 
       await settleReferralAndCreditForOrder(updatedOrder.data);
 
+      await refreshTopSpiritsAfterOrderConfirmed(updatedOrder.data);
+
       await convertCartAfterPayment(updatedPayment.data);
     } else if (UNREVIVABLE_ORDER_STATUSES.has(updatedOrder.data?.status)) {
       await flagPaidOrderForReview({
@@ -6053,6 +6269,8 @@ customerRouter.post('/payments/stripe/webhook', async (req, res) => {
       });
 
       await settleReferralAndCreditForOrder(updatedOrder.data);
+
+      await refreshTopSpiritsAfterOrderConfirmed(updatedOrder.data);
 
       await convertCartAfterPayment(updatedPayment.data);
     } else if (UNREVIVABLE_ORDER_STATUSES.has(updatedOrder.data?.status)) {

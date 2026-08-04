@@ -1,6 +1,7 @@
 # Migrations
 
-Every migration applied to the live project, and nothing that has not been.
+Every migration applied to the live project — plus, listed separately below,
+any that are written but **not yet applied**.
 
 The schema is owned by the Supabase dashboard, so this directory is a record
 rather than a pipeline: **none of these files should be re-run.** They are here
@@ -25,7 +26,22 @@ All ten entries now have a file:
 | 20260726213254 | referral_program_engine | `20260726_referral_program_engine.sql` |
 | 20260731185443 | expired_order_status | `20260731_expired_order_status.sql` |
 
-Six of these were applied with no file in the repo and were backfilled
+## Not yet applied
+
+| File | What it adds |
+| --- | --- |
+| `20260804_customer_spirit_profile.sql` | `customer_favorite_liquor_types` and `customer_top_liquor_types` — the two spirit lists on the customer profile (see `server/lib/customerSpirits.js`). |
+
+Until this is applied, `GET /api/customer/spirits` answers with the Postgres
+error, the profile's `spirits` block degrades to empty lists (the profile
+itself keeps loading), and every order confirmation logs a failed
+`recomputeCustomerTopSpirits` — deliberately non-fatal, so payments still
+settle. Apply it, then move its row into the ledger table above and refresh
+`../schema/`.
+
+## Notes on the applied set
+
+Six of them were recorded with no file in the repo and were backfilled
 from the ledger's stored statements. They carry a header saying so. The four
 older files predate that and keep their original `YYYYMMDD_name` names; new
 files use the full ledger version, because three migrations share 2026-07-24 and
