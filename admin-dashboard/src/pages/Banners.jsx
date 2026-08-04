@@ -9,6 +9,11 @@ const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 const HEADLINE_MAX = 80;
 const BODY_MAX = 200;
 
+// Matches the check constraint on home_hero_settings and the app's own clamp.
+const ROTATION_MIN_SECONDS = 2;
+const ROTATION_MAX_SECONDS = 60;
+const ROTATION_DEFAULT_SECONDS = 5;
+
 // The destinations the customer app can resolve a banner tap to. `needsValue`
 // destinations carry a second picker (which cocktail, which category); the
 // stored deep link is `<kind>/<value>`. Keep in step with the validation in
@@ -132,6 +137,7 @@ export default function Banners() {
   const [newBannerFile, setNewBannerFile] = useState(null);
   const [bannerEdits, setBannerEdits] = useState({});
   const [bannerImageFiles, setBannerImageFiles] = useState({});
+  const [rotationSeconds, setRotationSeconds] = useState(ROTATION_DEFAULT_SECONDS);
 
   const heroBanners = data?.heroBanners || [];
   const shopSettings = data?.shopSettings || {};
@@ -147,6 +153,10 @@ export default function Banners() {
       is_active: !!banner.is_active,
       ...splitDeepLink(banner.deep_link)
     }])));
+  }, [data]);
+
+  useEffect(() => {
+    setRotationSeconds(data?.heroSettings?.rotation_seconds ?? ROTATION_DEFAULT_SECONDS);
   }, [data]);
 
   function showMessage(text, type = 'ok') {
@@ -188,6 +198,17 @@ export default function Banners() {
     } catch (err) {
       showMessage(err.message || 'Request failed', 'error');
     }
+  }
+
+  async function saveRotation(e) {
+    e.preventDefault();
+
+    await runAction(async () => {
+      await api('/api/banners/hero-settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ rotation_seconds: rotationSeconds })
+      });
+    }, 'Rotation speed saved.');
   }
 
   async function addHeroBanner(e) {
@@ -317,6 +338,27 @@ export default function Banners() {
         order are required — a slide with no headline or body is just the image, and one with no link is not
         tappable. With no active slides the app falls back to its three built-in ones.
       </p>
+
+      <div className="subPanel noTopMargin">
+        <form className="miniForm inlineShopUpload" onSubmit={saveRotation}>
+          <b>Rotation speed</b>
+          <input
+            required
+            type="number"
+            step="1"
+            min={ROTATION_MIN_SECONDS}
+            max={ROTATION_MAX_SECONDS}
+            className="rotationInput"
+            value={rotationSeconds}
+            onChange={(e) => setRotationSeconds(e.target.value)}
+          />
+          <span className="muted smallText noPad">
+            seconds each slide is shown before the carousel moves on ({ROTATION_MIN_SECONDS}–{ROTATION_MAX_SECONDS}, default {ROTATION_DEFAULT_SECONDS}).
+            Swiping pauses it; it resumes a slide-length after the customer lets go.
+          </span>
+          <button className="primary">Save speed</button>
+        </form>
+      </div>
 
       <form className="miniForm bannerAddForm" onSubmit={addHeroBanner}>
         <label className="fileButton">

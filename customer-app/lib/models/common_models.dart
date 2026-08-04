@@ -142,6 +142,34 @@ class HomeHeroBanner {
   /// A slide without an image has nothing to draw — the backend requires one,
   /// but the payload is treated as untrusted like every other model here.
   bool get isRenderable => imageUrl.trim().isNotEmpty;
+
+  /// Used when the payload carries no rotation setting — an older backend, or
+  /// one that could not read it.
+  static const Duration defaultRotation = Duration(seconds: 5);
+
+  /// The carousel drives a repeating timer off this, so the floor matters: a
+  /// zero or negative value would spin. The ceiling only keeps a typo from
+  /// parking the carousel for an hour.
+  static const Duration minRotation = Duration(seconds: 2);
+  static const Duration maxRotation = Duration(seconds: 60);
+}
+
+/// Reads `heroCarousel.rotation_seconds` off the `/home` payload, clamped to
+/// the range the carousel can actually run at.
+Duration readHeroRotation(Map<String, dynamic> json) {
+  final seconds = readInt(
+    json['rotation_seconds'],
+    fallback: HomeHeroBanner.defaultRotation.inSeconds,
+  );
+
+  if (seconds < HomeHeroBanner.minRotation.inSeconds) {
+    return HomeHeroBanner.minRotation;
+  }
+  if (seconds > HomeHeroBanner.maxRotation.inSeconds) {
+    return HomeHeroBanner.maxRotation;
+  }
+
+  return Duration(seconds: seconds);
 }
 
 class ServiceLocation {

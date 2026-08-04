@@ -7,6 +7,8 @@ COMMENT ON COLUMN public.customers.referred_by_customer_id IS 'The customer who 
 COMMENT ON TABLE public.home_hero_banners IS 'CMS-driven slides for the customer app home hero carousel. Only image_url and display_order are required; the app falls back to its bundled slides when no active row exists.';
 COMMENT ON COLUMN public.home_hero_banners.deep_link IS 'Optional in-app destination for a tap: finder | explore | cart | orders | cocktail/<slug> | category/<category id>. Null makes the slide non-tappable.';
 COMMENT ON COLUMN public.home_hero_banners.display_order IS 'Ascending carousel position. Required — marketing always chooses where a slide sits.';
+COMMENT ON TABLE public.home_hero_settings IS 'Singleton config for the customer app home hero carousel.';
+COMMENT ON COLUMN public.home_hero_settings.rotation_seconds IS 'How long each slide dwells before the carousel advances itself. The app falls back to 5 when this cannot be read.';
 COMMENT ON COLUMN public.ingredients.icon_key IS 'Customer-app ingredient icon key. Flutter maps this key to a bundled local SVG/vector icon. Example: lime, grapefruit, syrup, salt, mint, mixer.';
 COMMENT ON COLUMN public.ingredients.name_ar IS 'Arabic display name (optional); falls back to name when null. Used by the KDS.';
 COMMENT ON TABLE public.location_opening_hours IS 'Weekly opening hours for beach carts. day_of_week follows JavaScript getDay(): 0=Sunday, 1=Monday, ... 6=Saturday.';

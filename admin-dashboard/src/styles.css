@@ -4472,3 +4472,12 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+.rotationInput {
+  width: 90px;
+  border: 1px solid var(--brand-border, var(--line));
+  border-radius: 12px;
+  padding: 11px 12px;
+  background: white;
+  min-height: 44px;
+}

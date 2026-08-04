@@ -68,6 +68,13 @@ const heroBannerCreateSchema = heroBannerFieldsSchema.extend({
 
 const heroBannerPatchSchema = heroBannerFieldsSchema.partial();
 
+// Bounds match the check constraint on home_hero_settings: two seconds is the
+// fastest a slide can be read, a minute the slowest that still reads as a
+// carousel rather than a static image.
+const heroSettingsPatchSchema = z.object({
+  rotation_seconds: z.coerce.number().int().min(2).max(60)
+});
+
 function zodErrorMessage(error, fallback) {
   const first = error?.issues?.[0];
   if (!first) return fallback;
@@ -181,28 +188,68 @@ async function ensureShopSettings() {
     .single();
 }
 
-// Everything the Banners tab needs in one call: the hero carousel rows, the
-// shop banner image, and the catalog rows behind the deep-link pickers.
+// The migration seeds the singleton row, so this only has to stand one back up
+// if it is ever deleted.
+async function ensureHeroSettings() {
+  const current = await supabase
+    .from('home_hero_settings')
+    .select('*')
+    .eq('id', true)
+    .maybeSingle();
+
+  if (current.error) return current;
+  if (current.data) return current;
+
+  return supabase
+    .from('home_hero_settings')
+    .insert({ id: true })
+    .select('*')
+    .single();
+}
+
+// Everything the Banners tab needs in one call: the hero carousel rows and its
+// rotation setting, the shop banner image, and the catalog rows behind the
+// deep-link pickers.
 bannerRouter.get('/banners', requireArea('banners'), async (_req, res) => {
-  const [heroBanners, shopSettings, categories, cocktails] = await Promise.all([
+  const [heroBanners, heroSettings, shopSettings, categories, cocktails] = await Promise.all([
     supabase.from('home_hero_banners').select('*').order('display_order').order('created_at'),
+    ensureHeroSettings(),
     ensureShopSettings(),
     supabase.from('product_categories').select('id,name').eq('is_active', true).order('sort_order').order('name'),
     supabase.from('products').select('slug,name').eq('status', 'active').eq('product_type', 'cocktail').order('name')
   ]);
 
-  for (const result of [heroBanners, shopSettings, categories, cocktails]) {
+  for (const result of [heroBanners, heroSettings, shopSettings, categories, cocktails]) {
     if (result.error) return res.status(400).json({ error: result.error.message });
   }
 
   res.json({
     heroBanners: heroBanners.data || [],
+    heroSettings: heroSettings.data,
     shopSettings: shopSettings.data,
     deepLinkOptions: {
       categories: categories.data || [],
       cocktails: (cocktails.data || []).filter((cocktail) => cocktail.slug)
     }
   });
+});
+
+bannerRouter.patch('/banners/hero-settings', requireArea('banners'), async (req, res) => {
+  const parsed = heroSettingsPatchSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid hero carousel settings') });
+
+  const settings = await ensureHeroSettings();
+  if (settings.error) return res.status(400).json({ error: settings.error.message });
+
+  const updated = await supabase
+    .from('home_hero_settings')
+    .update({ rotation_seconds: parsed.data.rotation_seconds })
+    .eq('id', true)
+    .select('*')
+    .single();
+
+  if (updated.error) return res.status(400).json({ error: updated.error.message });
+  res.json({ settings: updated.data });
 });
 
 bannerRouter.post('/banners/hero', requireArea('banners'), async (req, res) => {

@@ -133,8 +133,15 @@ The previous hero-banner Home is kept, disconnected and unimported, in
 `features/home/legacy_home_screen.dart` (`LegacyHomeScreen`) — do not wire it
 back in without being asked.
 
-The hero carousel at the top of Home (`widgets/home_hero_carousel.dart`) is
-**CMS-driven**: its slides come from `heroBanners` on the `/home` payload
+The hero carousel at the top of Home (`widgets/home_hero_carousel.dart`) draws
+the centered slide full size with its neighbours at `1/1.3`, so a slide grows as
+it arrives and shrinks as it leaves; with more than one slide it pages endlessly
+in both directions and advances itself every `AppData.heroRotation` (the
+dashboard's rotation setting, default 5 s, clamped to 2–60). A drag cancels the
+timer and settling restarts it, so a customer who takes over gets a full
+interval on whatever they land on; `MediaQuery.disableAnimations` stops
+auto-rotation entirely. It is **CMS-driven**: its slides come from `heroBanners`
+on the `/home` payload
 (image, headline, body, deep link, order), edited in the admin dashboard's
 Marketing → Banners tab. Only the image and the order are required, so a slide
 may carry no copy and no link; a slide without a deep link is not tappable, and

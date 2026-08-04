@@ -243,6 +243,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (liveOrder == null) ...[
         HomeHeroCarousel(
           banners: widget.data.heroBanners,
+          rotationInterval: widget.data.heroRotation,
           onOpenBanner: widget.onOpenHeroBanner,
         ),
         const SizedBox(height: 10),

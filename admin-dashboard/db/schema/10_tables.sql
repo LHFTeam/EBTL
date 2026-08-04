@@ -236,6 +236,14 @@ CREATE TABLE IF NOT EXISTS public.home_hero_banners (
 );
 ALTER TABLE public.home_hero_banners ENABLE ROW LEVEL SECURITY;
 
+CREATE TABLE IF NOT EXISTS public.home_hero_settings (
+    id boolean DEFAULT true NOT NULL,
+    rotation_seconds integer DEFAULT 5 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.home_hero_settings ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS public.ingredients (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     name text NOT NULL,

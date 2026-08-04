@@ -2051,6 +2051,33 @@ async function loadHomeHeroBanners() {
   return { data: banners.data || [] };
 }
 
+// How long each hero slide dwells before the carousel advances itself. The
+// column is constrained to 2..60; this is the last line of defence so a bad
+// value can never reach the app as a 0-second timer.
+const DEFAULT_HERO_ROTATION_SECONDS = 5;
+const MIN_HERO_ROTATION_SECONDS = 2;
+const MAX_HERO_ROTATION_SECONDS = 60;
+
+async function loadHomeHeroRotationSeconds() {
+  const settings = await supabase
+    .from('home_hero_settings')
+    .select('rotation_seconds')
+    .eq('id', true)
+    .maybeSingle();
+
+  if (settings.error) return { data: DEFAULT_HERO_ROTATION_SECONDS };
+
+  const seconds = Number(settings.data?.rotation_seconds);
+  if (!Number.isFinite(seconds)) return { data: DEFAULT_HERO_ROTATION_SECONDS };
+
+  return {
+    data: Math.min(
+      MAX_HERO_ROTATION_SECONDS,
+      Math.max(MIN_HERO_ROTATION_SECONDS, Math.round(seconds))
+    )
+  };
+}
+
 function publicHeroBanner(banner) {
   return {
     id: banner.id,
@@ -3370,7 +3397,7 @@ customerRouter.get('/customer/home', async (req, res) => {
     error: 'Invalid home request.'
   });
 
-  const [locations, categories, liquorTypes, catalog, heroBanners] = await Promise.all([
+  const [locations, categories, liquorTypes, catalog, heroBanners, heroRotationSeconds] = await Promise.all([
     loadServiceLocations(),
 
     supabase
@@ -3392,7 +3419,9 @@ customerRouter.get('/customer/home', async (req, res) => {
       onlyFeatured: true
     }),
 
-    loadHomeHeroBanners()
+    loadHomeHeroBanners(),
+
+    loadHomeHeroRotationSeconds()
   ]);
 
   for (const result of [locations, categories, liquorTypes, catalog]) {
@@ -3436,6 +3465,9 @@ customerRouter.get('/customer/home', async (req, res) => {
       primary_cta_target: 'cocktail_finder'
     },
     heroBanners: (heroBanners.data || []).map(publicHeroBanner),
+    heroCarousel: {
+      rotation_seconds: heroRotationSeconds.data
+    },
     featuredCocktails: catalog.data.cards.map((card) => addFavoriteFlagToCard(card, favoriteProductIds)),
     categories: (categories.data || []).map(publicCategory),
     liquorTypes: (liquorTypes.data || []).map(publicLiquorType),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -6,8 +8,10 @@ import '../../../core/theme/home_screen_visuals.dart';
 import '../../../models/common_models.dart';
 import '../../../shared/widgets/network_or_asset_image.dart';
 
-/// The hero carousel: slides that peek in from both sides with the active one
-/// centered. Home shows it in every state except a live order.
+/// The hero carousel: slides that peek in from both sides, with the centered
+/// one drawn full size and its neighbours scaled down, so a slide grows as it
+/// arrives and shrinks as it leaves. Home shows it in every state except a live
+/// order.
 ///
 /// The slides are a merchandising slot on the home payload — image, headline,
 /// body, deep link and order, edited in the dashboard's Marketing → Banners tab
@@ -16,10 +20,20 @@ import '../../../shared/widgets/network_or_asset_image.dart';
 ///
 /// With no banners on the payload the carousel falls back to the three bundled
 /// slides below, which is also what ships before marketing has created any.
+///
+/// It advances itself every [rotationInterval] and, with more than one slide,
+/// pages endlessly in both directions so neither end is a dead stop. A swipe
+/// takes over: the timer is dropped the moment a drag starts and only restarts
+/// once the carousel settles again, giving the customer a full interval on
+/// whatever they landed on.
 class HomeHeroCarousel extends StatefulWidget {
   /// CMS slides in display order. Already filtered to renderable ones by
   /// [AppData]; empty selects the bundled fallback.
   final List<HomeHeroBanner> banners;
+
+  /// How long a slide dwells before the carousel advances itself, from the
+  /// dashboard's rotation setting.
+  final Duration rotationInterval;
 
   /// Follows a slide's deep link. Never called for a slide without one.
   final ValueChanged<HomeHeroBanner> onOpenBanner;
@@ -28,6 +42,7 @@ class HomeHeroCarousel extends StatefulWidget {
     super.key,
     required this.banners,
     required this.onOpenBanner,
+    this.rotationInterval = HomeHeroBanner.defaultRotation,
   });
 
   @override
@@ -42,32 +57,53 @@ class _HomeHeroCarouselState extends State<HomeHeroCarousel> {
     _StepsSlide(),
   ];
 
+  /// How much smaller the off-center slides are drawn, so the centered one
+  /// reads ~30% bigger than its neighbours. Scaling the sides down rather than
+  /// the center up keeps the module's height and the centered slide's size
+  /// exactly as designed.
+  static const double _sideScale = 1 / 1.3;
+
+  /// Long enough to read as a slide rather than a cut, short enough that the
+  /// dwell time the dashboard sets is what the customer actually perceives.
+  static const Duration _autoAdvanceDuration = Duration(milliseconds: 520);
+
   static const Duration _slideDuration = Duration(milliseconds: 280);
   static const Duration _dotDuration = Duration(milliseconds: 180);
 
+  /// Where an endlessly-paging carousel starts. Far enough from zero that a
+  /// customer swiping backwards will never reach the start of the list.
+  static const int _loopOrigin = 10000;
+
   PageController? controller;
   double? controllerViewportFraction;
-  int index = 0;
+  int? controllerSlideCount;
+  Timer? rotationTimer;
+
+  /// The page the controller is parked on. With looping this counts past
+  /// [slideCount] and is taken modulo it to pick a slide.
+  int page = 0;
+
+  /// Auto-advancing content is exactly what "reduce motion" asks us to stop, so
+  /// the carousel holds still and waits to be swiped instead.
+  bool motionIsReduced = false;
 
   bool get usesFallback => widget.banners.isEmpty;
 
   int get slideCount =>
       usesFallback ? _fallbackSlides.length : widget.banners.length;
 
-  /// The fallback set opens on its middle slide so both neighbours are visible
-  /// on load. CMS slides open on the first one — marketing ordered them, and
-  /// the first is the one they expect to be seen.
-  int get initialIndex => usesFallback ? 1 : 0;
+  /// One slide is not a carousel: nothing to page to, nothing to rotate.
+  bool get loops => slideCount > 1;
 
-  @override
-  void initState() {
-    super.initState();
-    index = initialIndex;
-  }
+  int get initialPage => loops ? (_loopOrigin ~/ slideCount) * slideCount : 0;
+
+  int get activeSlide => slideCount == 0 ? 0 : page % slideCount;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+
+    motionIsReduced = MediaQuery.disableAnimationsOf(context);
 
     // The peek is a fixed slide width centered in whatever viewport the phone
     // gives us, so the fraction is derived from the screen rather than pinned.
@@ -78,36 +114,87 @@ class _HomeHeroCarouselState extends State<HomeHeroCarousel> {
         ? 1.0
         : (pitch / viewportWidth).clamp(0.1, 1.0);
 
-    if (controllerViewportFraction == fraction) return;
-
-    controller?.dispose();
-    controllerViewportFraction = fraction;
-    controller = PageController(
-      initialPage: index,
-      viewportFraction: fraction,
-    );
+    rebuildController(fraction);
+    scheduleRotation();
   }
 
   @override
   void didUpdateWidget(HomeHeroCarousel oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // A refresh can shorten the carousel — or swap the CMS slides in over the
-    // fallback — under a page the controller is already parked on.
-    if (index < slideCount) return;
+    // A refresh can swap the CMS slides in over the fallback, or change how
+    // many there are — which moves where the loop has to start.
+    if (controllerSlideCount != slideCount) {
+      rebuildController(controllerViewportFraction);
+    }
 
-    final target = slideCount - 1;
-    setState(() => index = target);
-    controller?.jumpToPage(target);
+    if (widget.rotationInterval != oldWidget.rotationInterval ||
+        controllerSlideCount != slideCount) {
+      scheduleRotation();
+    }
   }
 
   @override
   void dispose() {
+    rotationTimer?.cancel();
     controller?.dispose();
     super.dispose();
   }
 
-  void goToSlide(int target) {
+  void rebuildController(double? fraction) {
+    if (fraction == null) return;
+    if (controllerViewportFraction == fraction &&
+        controllerSlideCount == slideCount) {
+      return;
+    }
+
+    controller?.dispose();
+    controllerViewportFraction = fraction;
+    controllerSlideCount = slideCount;
+    page = initialPage;
+    controller = PageController(
+      initialPage: initialPage,
+      viewportFraction: fraction,
+    );
+  }
+
+  /// Restarts the dwell timer from zero. Called on load, after the carousel
+  /// settles from an auto-advance, and after the customer lets go of a swipe —
+  /// so however they got here, they get a full interval to look at it.
+  void scheduleRotation() {
+    rotationTimer?.cancel();
+    if (!loops || motionIsReduced) return;
+
+    rotationTimer = Timer(widget.rotationInterval, advance);
+  }
+
+  void stopRotation() {
+    rotationTimer?.cancel();
+    rotationTimer = null;
+  }
+
+  void advance() {
+    final pageController = controller;
+    if (pageController == null || !pageController.hasClients) return;
+
+    pageController
+        .animateToPage(
+          page + 1,
+          duration: _autoAdvanceDuration,
+          curve: Curves.easeInOut,
+        )
+        // The scroll notification below normally covers this; scheduling here
+        // too means a settle that arrives without one cannot stall rotation.
+        .then((_) {
+          if (mounted) scheduleRotation();
+        });
+  }
+
+  void goToSlide(int dotIndex) {
+    // Page to the nearest copy of that slide rather than back to its first
+    // one, so tapping a dot moves at most one step in either direction.
+    final target = page - activeSlide + dotIndex;
+
     controller?.animateToPage(
       target,
       duration: _slideDuration,
@@ -115,10 +202,23 @@ class _HomeHeroCarouselState extends State<HomeHeroCarousel> {
     );
   }
 
-  Widget buildSlide(int slideIndex) {
-    if (usesFallback) return _fallbackSlides[slideIndex];
+  bool onScrollNotification(ScrollNotification notification) {
+    // `dragDetails` is what separates a finger on the glass from the carousel
+    // animating itself — only the former should take rotation over.
+    if (notification is ScrollStartNotification &&
+        notification.dragDetails != null) {
+      stopRotation();
+    } else if (notification is ScrollEndNotification) {
+      scheduleRotation();
+    }
 
-    final banner = widget.banners[slideIndex];
+    return false;
+  }
+
+  Widget buildSlide(int slideIndex) {
+    if (usesFallback) return _fallbackSlides[slideIndex % slideCount];
+
+    final banner = widget.banners[slideIndex % slideCount];
 
     return _BannerSlide(
       banner: banner,
@@ -126,6 +226,19 @@ class _HomeHeroCarouselState extends State<HomeHeroCarousel> {
           ? () => widget.onOpenBanner(banner)
           : null,
     );
+  }
+
+  /// Full size at the center, [_sideScale] a page away, and continuously
+  /// between the two — so the growing and shrinking tracks the finger rather
+  /// than snapping when the page changes.
+  double scaleFor(int slideIndex, PageController pageController) {
+    final currentPage =
+        pageController.hasClients && pageController.position.haveDimensions
+        ? (pageController.page ?? page.toDouble())
+        : page.toDouble();
+
+    final distance = (currentPage - slideIndex).abs().clamp(0.0, 1.0);
+    return _sideScale + (1.0 - _sideScale) * (1.0 - distance);
   }
 
   @override
@@ -137,32 +250,46 @@ class _HomeHeroCarouselState extends State<HomeHeroCarousel> {
       children: [
         SizedBox(
           height: HomeScreenVisuals.heroSlideHeight,
-          child: PageView.builder(
-            controller: pageController,
-            padEnds: true,
-            itemCount: slideCount,
-            onPageChanged: (value) => setState(() => index = value),
-            itemBuilder: (context, slideIndex) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: HomeScreenVisuals.heroSlideGap / 2,
-                ),
-                child: buildSlide(slideIndex),
-              );
-            },
+          child: NotificationListener<ScrollNotification>(
+            onNotification: onScrollNotification,
+            child: PageView.builder(
+              controller: pageController,
+              padEnds: true,
+              // Null itemCount pages forever; the builder takes the index
+              // modulo the slide count, so the carousel has no ends to hit.
+              itemCount: loops ? null : 1,
+              onPageChanged: (value) => setState(() => page = value),
+              itemBuilder: (context, slideIndex) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: HomeScreenVisuals.heroSlideGap / 2,
+                  ),
+                  child: AnimatedBuilder(
+                    animation: pageController,
+                    builder: (context, child) {
+                      return Transform.scale(
+                        scale: scaleFor(slideIndex, pageController),
+                        child: child,
+                      );
+                    },
+                    child: buildSlide(slideIndex),
+                  ),
+                );
+              },
+            ),
           ),
         ),
         // 34pt tall so the 6pt dots sit exactly 14 below the track and 20
         // above the next module, while each dot still gets a touch target
         // wider and taller than the pip it draws. A single slide gets no dots
         // — there is nowhere to page to.
-        if (slideCount > 1)
+        if (loops)
           SizedBox(
             height: 34,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(slideCount, (dotIndex) {
-                final active = dotIndex == index;
+                final active = dotIndex == activeSlide;
 
                 return GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -192,8 +319,6 @@ class _HomeHeroCarouselState extends State<HomeHeroCarousel> {
   }
 }
 
-/// A CMS slide: the image, with the headline and body over a scrim when there
-/// is any copy to show.
 class _BannerSlide extends StatelessWidget {
   final HomeHeroBanner banner;
   final VoidCallback? onTap;
