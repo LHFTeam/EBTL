@@ -76,6 +76,17 @@ Notes:
 - Some CI/agent environments do not have the Flutter SDK installed. If
   `flutter` is unavailable, say so explicitly in your report instead of
   claiming analysis/tests passed.
+- **Never put `GoogleFonts.manropeTextTheme()` in a test's `MaterialApp`.**
+  Building the whole text theme kicks off a font load per style during paint,
+  and under `flutter test` that deadlocks — the test hangs until the harness
+  kills it with `Bad state: Cannot close sink while adding stream`, which
+  reads like a tooling failure rather than the test's own scaffold. Give test
+  harnesses a plain `ThemeData`; the letter spacing that affects layout comes
+  from the default `Typography` either way. Individual `GoogleFonts.manrope(...)`
+  calls inside widgets are fine. To render with the real fonts (golden tests),
+  preload only the weights in play via `GoogleFonts.pendingFonts([...])` inside
+  `tester.runAsync` before the first `pumpWidget`, serving the files through
+  `GoogleFonts.config.httpClient`.
 
 ## Repository layout
 

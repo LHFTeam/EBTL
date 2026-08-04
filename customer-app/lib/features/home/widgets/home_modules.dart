@@ -180,7 +180,7 @@ class HomeLiveOrderCard extends StatelessWidget {
                         radius: 16,
                         background: EbtlColors.cream,
                         imageUrl: order.orderImageUrl,
-                        name: order.primaryItem?.name ?? order.displayLocation,
+                        cover: true,
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -381,7 +381,6 @@ class HomeOrderAgainCard extends StatelessWidget {
                     radius: 14,
                     background: EbtlColors.sand,
                     imageUrl: order.orderImageUrl,
-                    name: order.primaryItem?.name ?? order.displayLocation,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -408,6 +407,9 @@ class HomeOrderAgainCard extends StatelessWidget {
                           style: GoogleFonts.manrope(
                             fontSize: 12.5,
                             height: 1.2,
+                            // Design tracks body copy at 0; the theme's own
+                            // spacing pushes this line past the card.
+                            letterSpacing: 0,
                             fontWeight: FontWeight.w700,
                             color: EbtlColors.muted,
                           ),
@@ -583,25 +585,43 @@ class HomeNoBottlePanel extends StatelessWidget {
   }
 }
 
-/// A product thumbnail on a tinted well: contained artwork, multiplied so
-/// photography shot on white does not draw a box over the tint.
+/// A product thumbnail on a tinted well.
+///
+/// [cover] fills the well with the artwork, cropping the sides and keeping it
+/// centred. Otherwise the artwork is contained on the tint and multiplied into
+/// it, so photography shot on white does not draw a box over the tint.
 class _Thumb extends StatelessWidget {
   final double size;
   final double radius;
   final Color background;
   final String? imageUrl;
-  final String name;
+  final bool cover;
 
   const _Thumb({
     required this.size,
     required this.radius,
     required this.background,
     required this.imageUrl,
-    required this.name,
+    this.cover = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final fallback = Center(
+      child: Icon(
+        Icons.local_bar_outlined,
+        size: size * 0.42,
+        color: EbtlColors.navy,
+      ),
+    );
+
+    final image = NetworkOrAssetImage(
+      imageUrl: imageUrl,
+      asset: 'assets/images/cocktail_placeholder.jpg',
+      fit: cover ? BoxFit.cover : BoxFit.contain,
+      fallback: fallback,
+    );
+
     return Container(
       width: size,
       height: size,
@@ -611,23 +631,14 @@ class _Thumb extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(radius),
-        child: MultiplyBlend(
-          child: Padding(
-            padding: EdgeInsets.all(size * 0.06),
-            child: NetworkOrAssetImage(
-              imageUrl: imageUrl,
-              asset: 'assets/images/cocktail_placeholder.jpg',
-              fit: BoxFit.contain,
-              fallback: Center(
-                child: Icon(
-                  Icons.local_bar_outlined,
-                  size: size * 0.42,
-                  color: EbtlColors.navy,
+        child: cover
+            ? SizedBox.expand(child: image)
+            : MultiplyBlend(
+                child: Padding(
+                  padding: EdgeInsets.all(size * 0.06),
+                  child: image,
                 ),
               ),
-            ),
-          ),
-        ),
       ),
     );
   }

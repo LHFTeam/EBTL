@@ -11,6 +11,7 @@ import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import '../../shared/widgets/bottle_widgets.dart';
 import '../../shared/widgets/cocktail_card_widgets.dart';
+import '../../shared/widgets/section_block.dart';
 import 'widgets/beach_cart_picker_sheet.dart';
 import 'widgets/home_context_header.dart';
 import 'widgets/home_hero_carousel.dart';
@@ -20,7 +21,7 @@ import 'widgets/home_modules.dart';
 /// state on every build — never chosen by hand.
 enum HomeMode {
   /// Nothing in flight and nothing behind them: lead with the education
-  /// carousel.
+  /// carousel and close on the shop-only path.
   firstRun,
 
   /// They have shopped before or have a cart open: lead with the cart.
@@ -91,10 +92,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String? selectedCategoryId;
 
-  /// Hearts react before the request lands; keyed by cocktail id.
-  final Map<String, bool> favoriteOverrides = <String, bool>{};
-  final Set<String> togglingFavoriteIds = <String>{};
-
   /// The order whose "add again" request is in flight, if any.
   String? reorderingOrderId;
 
@@ -108,9 +105,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return HomeMode.firstRun;
   }
-
-  bool isFavorite(Cocktail cocktail) =>
-      favoriteOverrides[cocktail.id] ?? cocktail.isFavorite;
 
   void showMessage(String message) => showAppSnackBar(context, message);
 
@@ -128,53 +122,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void selectCategory(Category category) {
     setState(() => selectedCategoryId = category.id);
     widget.onOpenCategory(category);
-  }
-
-  Future<void> toggleFavorite(Cocktail cocktail) async {
-    final productId = cocktail.id.trim();
-    if (productId.isEmpty || togglingFavoriteIds.contains(productId)) return;
-
-    final current = isFavorite(cocktail);
-    final next = !current;
-
-    setState(() {
-      togglingFavoriteIds.add(productId);
-      favoriteOverrides[productId] = next;
-    });
-
-    try {
-      if (next) {
-        await ApiService.addFavoriteCocktail(productId: productId);
-      } else {
-        await ApiService.removeFavoriteCocktail(productId: productId);
-      }
-
-      AnalyticsService.logFavoriteChanged(
-        item: AnalyticsItem(
-          id: cocktail.id,
-          name: cocktail.name,
-          category: cocktail.category?.name ?? 'cocktail',
-          price: cocktail.startingPriceIncVat ?? 0,
-          quantity: 1,
-          currency: cocktail.currency,
-        ),
-        isFavorite: next,
-      );
-
-      if (!mounted) return;
-      setState(() => togglingFavoriteIds.remove(productId));
-    } catch (error) {
-      if (!mounted) return;
-
-      setState(() {
-        togglingFavoriteIds.remove(productId);
-        favoriteOverrides[productId] = current;
-      });
-
-      showMessage(
-        apiErrorMessage(error, fallback: 'Could not update favorites.'),
-      );
-    }
   }
 
   /// Puts a previous order's kit back in the cart.
@@ -288,7 +235,9 @@ class _HomeScreenState extends State<HomeScreen> {
           onTap: () => widget.onOpenLiveOrder(liveOrder),
         ),
       ...buildCartResumeBar(),
-      if (currentMode == HomeMode.firstRun) ...[
+      // The carousel stays on Home in every state except a live order, where
+      // the tracker is what the customer came back for.
+      if (liveOrder == null) ...[
         const HomeHeroCarousel(),
         const SizedBox(height: 10),
       ],
@@ -389,44 +338,43 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedCategoryId: selectedCategoryId ?? categories.first.id,
         onSelect: selectCategory,
       ),
-      const SizedBox(height: 26),
+      // The featured section below carries 22 of the 26pt module gutter in
+      // SectionBlock's own top padding.
+      const SizedBox(height: 4),
     ];
   }
 
+  /// The featured rail, carried over unchanged from the previous Home: the
+  /// shared [SectionBlock] header over a rail of [CocktailSmallCard]s.
   List<Widget> buildFeaturedRail() {
     final featured = widget.data.featuredCocktails;
 
     return [
-      HomeSectionHeader(
-        title: 'Featured Kits',
-        actionLabel: 'View all',
+      SectionBlock(
+        icon: Icons.local_bar_outlined,
+        title: 'Featured Cocktails',
+        actionText: 'View all',
         onAction: widget.onOpenFinder,
+        child: featured.isEmpty
+            ? const EmptyStateCard(
+                message: 'No featured cocktails are available right now.',
+              )
+            : SizedBox(
+                height: HomeScreenVisuals.featuredProductCardHeight,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.only(left: 22, right: 22),
+                  itemCount: featured.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 12),
+                  itemBuilder: (context, index) {
+                    return CocktailSmallCard(
+                      cocktail: featured[index],
+                      onTap: () => widget.onOpenCocktail(featured[index]),
+                    );
+                  },
+                ),
+              ),
       ),
-      if (featured.isEmpty)
-        const EmptyStateCard(
-          message: 'No featured cocktails are available right now.',
-        )
-      else
-        SizedBox(
-          height: HomeScreenVisuals.featuredRailCardHeight,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(22, 0, 22, 4),
-            itemCount: featured.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 12),
-            itemBuilder: (context, index) {
-              final cocktail = featured[index];
-
-              return CocktailRailCard(
-                cocktail: cocktail,
-                tint: CocktailRailCard.tintForIndex(index),
-                isFavorite: isFavorite(cocktail),
-                onTap: () => widget.onOpenCocktail(cocktail),
-                onToggleFavorite: () => toggleFavorite(cocktail),
-              );
-            },
-          ),
-        ),
     ];
   }
 }
