@@ -26,6 +26,7 @@ import 'features/checkout/checkout_screen.dart';
 import 'features/profile/profile_screen.dart';
 import 'features/profile/active_orders_screen.dart';
 import 'features/profile/customer_orders_screen.dart';
+import 'features/profile/order_detail_screen.dart';
 import 'features/profile/customer_notifications_screen.dart';
 import 'features/shop/shop_category_products_screen.dart';
 import 'features/onboarding/onboarding_screen.dart';
@@ -378,6 +379,24 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         .then((_) => _refreshActiveOrders());
   }
 
+  /// Opens one order's detail screen from the tab it was tapped in. Home's
+  /// live-order card comes through here, so "Track order" lands on the order
+  /// itself and backing out of it returns to Home — not to a list the
+  /// customer never asked for.
+  void openOrderDetail(ProfileOrder order) {
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => OrderDetailScreen(
+              orderId: order.id,
+              orderNumber: order.orderNumber,
+            ),
+          ),
+        )
+        // The order may have moved on (or finished) while it was open.
+        .then((_) => _refreshActiveOrders());
+  }
+
   /// Opens a Home category chip in the Shop's category listing. The home
   /// payload and the shop read the same `product_categories` rows, so the id
   /// carried by the chip is enough to page the category.
@@ -595,7 +614,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         onOpenSearch: () => handleBottomNavTap(EbtlBottomNav.exploreIndex),
         onOpenCart: openCart,
         onOpenShop: () => handleBottomNavTap(EbtlBottomNav.exploreIndex),
-        onOpenActiveOrders: openActiveOrders,
+        onOpenLiveOrder: openOrderDetail,
         onOpenOrderHistory: openOrderHistory,
         onOpenFinder: () => openFinder(),
         onOpenFinderWithBottle: (liquor) => openFinder(liquorTypeId: liquor.id),

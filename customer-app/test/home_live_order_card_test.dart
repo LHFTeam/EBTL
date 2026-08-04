@@ -44,6 +44,22 @@ void main() {
     expect(find.text('Track order'), findsOneWidget);
   });
 
+  testWidgets('tapping anywhere on the card tracks the order', (tester) async {
+    var taps = 0;
+    await tester.pumpWidget(
+      wrap(
+        HomeLiveOrderCard(
+          order: orderWithStatus('preparing'),
+          onTap: () => taps++,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Track order'));
+    await tester.tap(find.text('Piña Colada Kit'));
+    expect(taps, 2);
+  });
+
   testWidgets('the card follows the order it is given', (tester) async {
     await tester.pumpWidget(
       wrap(HomeLiveOrderCard(order: orderWithStatus('confirmed'), onTap: () {})),
