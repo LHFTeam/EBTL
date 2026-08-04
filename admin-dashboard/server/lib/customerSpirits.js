@@ -15,7 +15,7 @@
 // spirit counts for each of them — that table is the only record of what a
 // cocktail is based on, since neither cart items nor order items pin a bottle.
 //
-// The schema lives in db/migrations/20260804_customer_spirit_profile.sql.
+// The schema lives in db/migrations/20260804191747_customer_spirit_profile.sql.
 
 import { supabase } from './supabase.js';
 
@@ -198,25 +198,41 @@ export async function recomputeCustomerTopSpirits(customerId) {
   const topSpirits = pickTopSpirits(counts.data);
   const computedAt = new Date().toISOString();
 
-  const cleared = await supabase
+  // Write the new rows first, then prune what is no longer in the list.
+  // Deleting first would leave the customer with no spirits at all for the
+  // width of the insert — and if two confirmations for the same customer
+  // interleave (two webhooks, an order confirmed while another settles), a
+  // delete landing between the other's delete and insert would strand them
+  // empty. Upsert-then-prune is never destructive in the middle.
+  if (topSpirits.length) {
+    const upserted = await supabase
+      .from('customer_top_liquor_types')
+      .upsert(topSpirits.map((spirit) => ({
+        customer_id: customerId,
+        liquor_type_id: spirit.liquor_type_id,
+        order_count: spirit.order_count,
+        rank: spirit.rank,
+        computed_at: computedAt
+      })), { onConflict: 'customer_id,liquor_type_id' });
+
+    if (upserted.error) return { error: upserted.error };
+  }
+
+  let prune = supabase
     .from('customer_top_liquor_types')
     .delete()
     .eq('customer_id', customerId);
 
-  if (cleared.error) return { error: cleared.error };
-  if (!topSpirits.length) return { data: [] };
+  if (topSpirits.length) {
+    prune = prune.not(
+      'liquor_type_id',
+      'in',
+      `(${topSpirits.map((spirit) => spirit.liquor_type_id).join(',')})`
+    );
+  }
 
-  const inserted = await supabase
-    .from('customer_top_liquor_types')
-    .insert(topSpirits.map((spirit) => ({
-      customer_id: customerId,
-      liquor_type_id: spirit.liquor_type_id,
-      order_count: spirit.order_count,
-      rank: spirit.rank,
-      computed_at: computedAt
-    })));
-
-  if (inserted.error) return { error: inserted.error };
+  const pruned = await prune;
+  if (pruned.error) return { error: pruned.error };
 
   return { data: topSpirits };
 }

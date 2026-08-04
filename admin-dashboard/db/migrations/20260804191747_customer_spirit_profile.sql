@@ -29,9 +29,14 @@
 --   3. Enables RLS and limits both tables to the service-role backend.
 --   4. Adds supporting indexes.
 --
--- NOT verified against the live schema — it was written without database
--- access. After applying, refresh the `db/schema/` capture with
--- `db/tools/dump_schema.sql` so the checked-in schema reflects these tables.
+-- Applied to project pfcncajijvtvsdwgwbjl ("EBTL 1") as ledger version
+-- 20260804191747. The `begin`/`commit` below are for a manual re-run; the
+-- applied copy omitted them because `apply_migration` runs its own transaction.
+--
+-- The backfill that seeded `customer_top_liquor_types` from existing order
+-- history is deliberately NOT part of this file — it is a one-off data fix,
+-- not schema, and the backend recomputes those rows from scratch on every
+-- order confirmation anyway.
 
 begin;
 

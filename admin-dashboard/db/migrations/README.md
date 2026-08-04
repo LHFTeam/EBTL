@@ -1,7 +1,6 @@
 # Migrations
 
-Every migration applied to the live project — plus, listed separately below,
-any that are written but **not yet applied**.
+Every migration applied to the live project, and nothing that has not been.
 
 The schema is owned by the Supabase dashboard, so this directory is a record
 rather than a pipeline: **none of these files should be re-run.** They are here
@@ -11,7 +10,7 @@ be read alongside the changes that produced it.
 ## Ledger mapping
 
 Supabase records what it has applied in `supabase_migrations.schema_migrations`.
-All ten entries now have a file:
+Every entry but one has a file:
 
 | Ledger version | Name | File |
 | --- | --- | --- |
@@ -25,19 +24,12 @@ All ten entries now have a file:
 | 20260726004844 | add_name_ar_for_kds_arabic_localization | `20260726004844_…sql` |
 | 20260726213254 | referral_program_engine | `20260726_referral_program_engine.sql` |
 | 20260731185443 | expired_order_status | `20260731_expired_order_status.sql` |
+| 20260804083025 | home_hero_banners | **missing** — applied with no file in the repo |
+| 20260804191747 | customer_spirit_profile | `20260804191747_customer_spirit_profile.sql` |
 
-## Not yet applied
-
-| File | What it adds |
-| --- | --- |
-| `20260804_customer_spirit_profile.sql` | `customer_favorite_liquor_types` and `customer_top_liquor_types` — the two spirit lists on the customer profile (see `server/lib/customerSpirits.js`). |
-
-Until this is applied, `GET /api/customer/spirits` answers with the Postgres
-error, the profile's `spirits` block degrades to empty lists (the profile
-itself keeps loading), and every order confirmation logs a failed
-`recomputeCustomerTopSpirits` — deliberately non-fatal, so payments still
-settle. Apply it, then move its row into the ledger table above and refresh
-`../schema/`.
+`20260804083025_home_hero_banners` is the one gap: it was applied straight
+through the dashboard or `apply_migration` and never written back here. Recover
+it from the ledger's stored statements the way the six below were.
 
 ## Notes on the applied set
 
