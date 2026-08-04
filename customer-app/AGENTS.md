@@ -35,7 +35,10 @@ The app is a thin client over the **customer API** of a separate backend
   that is independent of the store bundle ID and is not renamed.
 - Dependencies are deliberately lean. Core UI/networking: `http`,
   `google_fonts`, `flutter_secure_storage`, `flutter_markdown`, `flutter_svg`,
-  `cupertino_icons`. Payments: `flutter_stripe` (native Payment Sheet).
+  `cupertino_icons`, `visibility_detector` (tells the Home hero carousel when
+  it is off screen so it stops auto-rotating — see the note in
+  `home_hero_carousel.dart` about why its callback must not be a tear-off).
+  Payments: `flutter_stripe` (native Payment Sheet).
   Analytics/telemetry: `clarity_flutter` (session replay), `firebase_core` +
   `firebase_messaging` (push), `firebase_crashlytics` (crash/error reporting).
   The Firebase and Clarity integrations are **inert unless configured at build
@@ -140,7 +143,9 @@ in both directions and advances itself every `AppData.heroRotation` (the
 dashboard's rotation setting, default 5 s, clamped to 2–60). A drag cancels the
 timer and settling restarts it, so a customer who takes over gets a full
 interval on whatever they land on; `MediaQuery.disableAnimations` stops
-auto-rotation entirely. It is **CMS-driven**: its slides come from `heroBanners`
+auto-rotation entirely. It also stops whenever it is off screen — behind a
+pushed route or another tab, since `RootShell`'s `IndexedStack` keeps Home
+mounted — via `VisibilityDetector`, and starts a fresh interval on return. It is **CMS-driven**: its slides come from `heroBanners`
 on the `/home` payload
 (image, headline, body, deep link, order), edited in the admin dashboard's
 Marketing → Banners tab. Only the image and the order are required, so a slide

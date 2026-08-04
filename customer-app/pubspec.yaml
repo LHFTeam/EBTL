@@ -100,6 +100,11 @@ dependencies:
   # Crash + uncaught-error reporting. Inert unless Firebase config is present at
   # build time (see lib/services/crash_reporting_service.dart).
   firebase_crashlytics: ^5.0.4
+  # Tells the Home hero carousel when it is off-screen so it stops
+  # auto-rotating. Flutter's own TickerMode covers a covered route but not a
+  # tab left mounted in RootShell's IndexedStack, and it does not gate the
+  # plain Timer the carousel runs on either.
+  visibility_detector: ^0.4.0+2
 
 dev_dependencies:
   flutter_test:

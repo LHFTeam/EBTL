@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:visibility_detector/visibility_detector.dart';
+
 import 'package:ebtl_customer_app/features/home/widgets/home_hero_carousel.dart';
 import 'package:ebtl_customer_app/models/app_data.dart';
 import 'package:ebtl_customer_app/models/common_models.dart';
@@ -83,7 +85,12 @@ String centeredHeadline(WidgetTester tester) {
 }
 
 void main() {
-  setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  setUpAll(() {
+    GoogleFonts.config.allowRuntimeFetching = false;
+    // Without this the detector batches its callbacks on a 500ms wall clock,
+    // which a widget test's pump schedule never lines up with.
+    VisibilityDetectorController.instance.updateInterval = Duration.zero;
+  });
 
   group('HeroBannerLink.parse', () {
     test('reads the destinations that take no value', () {
@@ -351,6 +358,57 @@ void main() {
 
       await tester.pump(const Duration(seconds: 10));
       expect(centeredHeadline(tester), 'Slide A');
+    });
+
+    testWidgets('stops rotating while it is off screen, and resumes after', (
+      tester,
+    ) async {
+      Widget shellWithTab(int selectedIndex) {
+        return MaterialApp(
+          home: Scaffold(
+            // How RootShell hosts the tabs: Home stays mounted and laid out
+            // behind whichever tab is showing.
+            body: IndexedStack(
+              index: selectedIndex,
+              children: [
+                HomeHeroCarousel(
+                  banners: [
+                    banner(id: 'a', headline: 'Slide A'),
+                    banner(id: 'b', headline: 'Slide B'),
+                  ],
+                  rotationInterval: const Duration(seconds: 3),
+                  onOpenBanner: (_) {},
+                ),
+                const Center(child: Text('Another tab')),
+              ],
+            ),
+          ),
+        );
+      }
+
+      await tester.pumpWidget(shellWithTab(0));
+      await tester.pumpAndSettle();
+      expect(centeredHeadline(tester), 'Slide A');
+
+      // Switch away. The carousel is still mounted, but nothing paints it.
+      await tester.pumpWidget(shellWithTab(1));
+      await tester.pumpAndSettle();
+
+      await tester.pump(const Duration(seconds: 30));
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(shellWithTab(0));
+      await tester.pumpAndSettle();
+      expect(
+        centeredHeadline(tester),
+        'Slide A',
+        reason: 'ten intervals passed off screen without advancing a slide',
+      );
+
+      // Back on screen it picks up again, from a fresh interval.
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+      expect(centeredHeadline(tester), 'Slide B');
     });
   });
 }

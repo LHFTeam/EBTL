@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import '../../../core/theme/ebtl_colors.dart';
 import '../../../core/theme/home_screen_visuals.dart';
@@ -26,6 +27,11 @@ import '../../../shared/widgets/network_or_asset_image.dart';
 /// takes over: the timer is dropped the moment a drag starts and only restarts
 /// once the carousel settles again, giving the customer a full interval on
 /// whatever they landed on.
+///
+/// It only rotates while it is actually on screen. Home stays mounted behind a
+/// pushed screen and behind the other tabs (RootShell's IndexedStack), so
+/// without this the carousel would advance where nobody can see it and the
+/// customer would come back to a slide they never watched arrive.
 class HomeHeroCarousel extends StatefulWidget {
   /// CMS slides in display order. Already filtered to renderable ones by
   /// [AppData]; empty selects the bundled fallback.
@@ -78,6 +84,16 @@ class _HomeHeroCarouselState extends State<HomeHeroCarousel> {
   double? controllerViewportFraction;
   int? controllerSlideCount;
   Timer? rotationTimer;
+
+  /// Identifies this carousel to [VisibilityDetector]. Unique per State so two
+  /// carousels could never report against the same key, and stable across
+  /// rebuilds so the detector keeps tracking the same widget.
+  final Key visibilityKey = UniqueKey();
+
+  /// Whether any part of the carousel is on screen. Starts true so the first
+  /// interval is already running by the time the detector's first callback
+  /// confirms it.
+  bool isVisible = true;
 
   /// The page the controller is parked on. With looping this counts past
   /// [slideCount] and is taken modulo it to pick a slide.
@@ -163,9 +179,31 @@ class _HomeHeroCarouselState extends State<HomeHeroCarousel> {
   /// so however they got here, they get a full interval to look at it.
   void scheduleRotation() {
     rotationTimer?.cancel();
-    if (!loops || motionIsReduced) return;
+    if (!loops || motionIsReduced || !isVisible) return;
 
     rotationTimer = Timer(widget.rotationInterval, advance);
+  }
+
+  /// Any sliver of the carousel on screen counts as visible: the threshold is
+  /// there to stop rotation when Home is behind something, not to stop it
+  /// while the customer is scrolling past.
+  void onVisibilityChanged(VisibilityInfo info) {
+    // The detector's callbacks are asynchronous and can land after the widget
+    // is gone — the package documents this.
+    if (!mounted) return;
+
+    final visible = info.visibleFraction > 0;
+    if (visible == isVisible) return;
+
+    isVisible = visible;
+
+    // Coming back starts a fresh interval rather than resuming a stale one, so
+    // a returning customer gets a full slide to look at.
+    if (visible) {
+      scheduleRotation();
+    } else {
+      stopRotation();
+    }
   }
 
   void stopRotation() {
@@ -246,75 +284,88 @@ class _HomeHeroCarouselState extends State<HomeHeroCarousel> {
     final pageController = controller;
     if (pageController == null) return const SizedBox.shrink();
 
-    return Column(
-      children: [
-        SizedBox(
-          height: HomeScreenVisuals.heroSlideHeight,
-          child: NotificationListener<ScrollNotification>(
-            onNotification: onScrollNotification,
-            child: PageView.builder(
-              controller: pageController,
-              padEnds: true,
-              // Null itemCount pages forever; the builder takes the index
-              // modulo the slide count, so the carousel has no ends to hit.
-              itemCount: loops ? null : 1,
-              onPageChanged: (value) => setState(() => page = value),
-              itemBuilder: (context, slideIndex) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: HomeScreenVisuals.heroSlideGap / 2,
-                  ),
-                  child: AnimatedBuilder(
-                    animation: pageController,
-                    builder: (context, child) {
-                      return Transform.scale(
-                        scale: scaleFor(slideIndex, pageController),
-                        child: child,
-                      );
-                    },
-                    child: buildSlide(slideIndex),
-                  ),
-                );
-              },
+    return VisibilityDetector(
+      key: visibilityKey,
+      // Deliberately a fresh closure per build rather than a tear-off of
+      // `onVisibilityChanged`. VisibilityDetector spots "an ancestor stopped
+      // painting me" from its setter noticing a *different* callback; Dart
+      // compares instance-method tear-offs from the same object as equal, so a
+      // tear-off makes the setter early-return and the hide event never
+      // arrives. Verified: with a tear-off the carousel keeps rotating behind
+      // another tab. Do not "simplify" this back.
+      onVisibilityChanged: (info) => onVisibilityChanged(info),
+      child: Column(
+        children: [
+          SizedBox(
+            height: HomeScreenVisuals.heroSlideHeight,
+            child: NotificationListener<ScrollNotification>(
+              onNotification: onScrollNotification,
+              child: PageView.builder(
+                controller: pageController,
+                padEnds: true,
+                // Null itemCount pages forever; the builder takes the index
+                // modulo the slide count, so the carousel has no ends to hit.
+                itemCount: loops ? null : 1,
+                onPageChanged: (value) => setState(() => page = value),
+                itemBuilder: (context, slideIndex) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: HomeScreenVisuals.heroSlideGap / 2,
+                    ),
+                    child: AnimatedBuilder(
+                      animation: pageController,
+                      builder: (context, child) {
+                        return Transform.scale(
+                          scale: scaleFor(slideIndex, pageController),
+                          child: child,
+                        );
+                      },
+                      child: buildSlide(slideIndex),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
-        ),
-        // 34pt tall so the 6pt dots sit exactly 14 below the track and 20
-        // above the next module, while each dot still gets a touch target
-        // wider and taller than the pip it draws. A single slide gets no dots
-        // — there is nowhere to page to.
-        if (loops)
-          SizedBox(
-            height: 34,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(slideCount, (dotIndex) {
-                final active = dotIndex == activeSlide;
+          // 34pt tall so the 6pt dots sit exactly 14 below the track and 20
+          // above the next module, while each dot still gets a touch target
+          // wider and taller than the pip it draws. A single slide gets no dots
+          // — there is nowhere to page to.
+          if (loops)
+            SizedBox(
+              height: 34,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(slideCount, (dotIndex) {
+                  final active = dotIndex == activeSlide;
 
-                return GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => goToSlide(dotIndex),
-                  child: SizedBox(
-                    width: 44,
-                    height: 34,
-                    child: Center(
-                      child: AnimatedContainer(
-                        duration: _dotDuration,
-                        curve: Curves.ease,
-                        width: active ? 22 : 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: active ? EbtlColors.coral : EbtlColors.border,
-                          borderRadius: BorderRadius.circular(999),
+                  return GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => goToSlide(dotIndex),
+                    child: SizedBox(
+                      width: 44,
+                      height: 34,
+                      child: Center(
+                        child: AnimatedContainer(
+                          duration: _dotDuration,
+                          curve: Curves.ease,
+                          width: active ? 22 : 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: active
+                                ? EbtlColors.coral
+                                : EbtlColors.border,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              }),
+                  );
+                }),
+              ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
