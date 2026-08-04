@@ -296,7 +296,17 @@ class ProfileOrder {
     if (normalizedPayment != 'paid') return false;
 
     final normalizedStatus = status.trim().toLowerCase();
-    const finishedStatuses = {'completed', 'cancelled', 'canceled', 'refunded'};
+    // `expired` is terminal too. It normally carries an unpaid payment status
+    // and is filtered out above, but an expired order that received a late
+    // payment is marked paid while staying expired — it is flagged for a human,
+    // not being prepared, so it must never show as an order to track.
+    const finishedStatuses = {
+      'completed',
+      'cancelled',
+      'canceled',
+      'refunded',
+      'expired',
+    };
     return !finishedStatuses.contains(normalizedStatus);
   }
 
