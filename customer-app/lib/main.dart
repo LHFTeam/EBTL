@@ -18,6 +18,7 @@ import 'models/shop_models.dart';
 
 /* -------------------------------- SCREENS -------------------------------- */
 import 'features/home/home_screen.dart';
+import 'features/home/widgets/golden_hour_modal.dart';
 import 'features/finder/finder_screen.dart';
 import 'features/explore/explore_screen.dart';
 import 'features/cocktail_detail/cocktail_detail_screen.dart';
@@ -467,6 +468,45 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     }
   }
 
+  /// Whether the Golden Hour card has had its one chance this launch.
+  ///
+  /// Set the first time [loadAppData] returns, whether or not a card was
+  /// actually shown. "On launch" is exactly that: a customer who dismisses it,
+  /// or who had no cart chosen when the app opened, is not asked again until
+  /// they next open the app. Every later load — a cart change, a location
+  /// switch, a pull to refresh — goes through the same code path, and without
+  /// this flag each of them would reopen the card.
+  bool _goldenHourHandled = false;
+
+  /// Opens the Golden Hour card on the first load of a launch, if there is one
+  /// to open and the customer already has a beach cart chosen.
+  ///
+  /// The beach cart is the condition the whole feature hangs on: the card's one
+  /// action is Add to Cart, and the cart needs a location. Someone who has not
+  /// chosen one yet is better served by Home's own picker.
+  void _maybeShowGoldenHour(AppData data) {
+    if (_goldenHourHandled) return;
+    _goldenHourHandled = true;
+
+    final modal = data.goldenHour;
+    final locationId = data.selectedLocationId?.trim();
+    if (modal == null || locationId == null || locationId.isEmpty) return;
+
+    // The card is opened from a post-frame callback so it goes up over a Home
+    // that has already painted, rather than on top of the loading scaffold.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      showGoldenHourModal(
+        context: context,
+        modal: modal,
+        locationId: locationId,
+        onCartChanged: handleCartChanged,
+        onOpenCocktail: () => openCocktailBySlug(data, modal.cocktail.slug),
+      );
+    });
+  }
+
   /// Loads app data, keeping whatever is already on screen visible while the
   /// request is in flight.
   ///
@@ -487,6 +527,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         appData = data;
         appDataError = null;
       });
+
+      _maybeShowGoldenHour(data);
     } catch (error) {
       if (!mounted) return;
 

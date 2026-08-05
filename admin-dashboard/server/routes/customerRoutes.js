@@ -26,6 +26,7 @@ import {
   stripeMinorUnits
 } from '../lib/stripe.js';
 import { supabase } from '../lib/supabase.js';
+import { loadActiveGoldenHourModal } from '../lib/goldenHour.js';
 import { publicNotification, registerCustomerPushToken } from '../lib/notifications.js';
 import {
   ensureReferralCode,
@@ -3495,7 +3496,7 @@ customerRouter.get('/customer/home', async (req, res) => {
     error: 'Invalid home request.'
   });
 
-  const [locations, categories, liquorTypes, catalog, heroBanners, heroRotationSeconds] = await Promise.all([
+  const [locations, categories, liquorTypes, catalog, heroBanners, heroRotationSeconds, goldenHour] = await Promise.all([
     loadServiceLocations(),
 
     supabase
@@ -3519,7 +3520,12 @@ customerRouter.get('/customer/home', async (req, res) => {
 
     loadHomeHeroBanners(),
 
-    loadHomeHeroRotationSeconds()
+    loadHomeHeroRotationSeconds(),
+
+    // Never in the error check below: the launch modal is a greeting, and a
+    // missing table or an archived cocktail resolves to null rather than
+    // costing the customer a home screen.
+    loadActiveGoldenHourModal()
   ]);
 
   for (const result of [locations, categories, liquorTypes, catalog]) {
@@ -3566,6 +3572,9 @@ customerRouter.get('/customer/home', async (req, res) => {
     heroCarousel: {
       rotation_seconds: heroRotationSeconds.data
     },
+    // The launch modal for the hour it is now in Cairo, or null when no mode is
+    // live. The app only opens it when a beach cart is already chosen.
+    goldenHour,
     featuredCocktails: catalog.data.cards.map((card) => addFavoriteFlagToCard(card, favoriteProductIds)),
     categories: (categories.data || []).map(publicCategory),
     liquorTypes: (liquorTypes.data || []).map(publicLiquorType),

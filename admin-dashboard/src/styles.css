@@ -4481,3 +4481,110 @@ textarea {
   background: white;
   min-height: 44px;
 }
+
+/* Marketing → Golden Hour. The four launch-modal modes, one Section each:
+   fields on the left, the image beside them, pills underneath. */
+.goldenHourGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 18px;
+  align-items: start;
+}
+
+.goldenHourFields {
+  display: grid;
+  gap: 14px;
+}
+
+.goldenHourFields label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.goldenHourFields input,
+.goldenHourFields select,
+.goldenHourFields textarea {
+  width: 100%;
+  border: 1px solid var(--brand-border, var(--line));
+  border-radius: 12px;
+  padding: 11px 12px;
+  background: white;
+  min-height: 44px;
+  font: inherit;
+  font-weight: 400;
+}
+
+.goldenHourFields textarea {
+  resize: vertical;
+}
+
+.goldenHourWindow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.goldenHourWindow input {
+  max-width: 150px;
+}
+
+.goldenHourImage {
+  display: grid;
+  gap: 10px;
+  justify-items: stretch;
+}
+
+.goldenHourImageActions {
+  display: flex;
+  gap: 8px;
+}
+
+.goldenHourImageActions button {
+  flex: 1;
+}
+
+/* The pill row as the app draws it, so a colour choice is previewed rather
+   than only named. */
+.goldenHourPillRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.goldenHourPill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.goldenHourPillEditor {
+  display: grid;
+  gap: 4px;
+}
+
+.goldenHourPillLine {
+  grid-template-columns: minmax(0, 2fr) minmax(140px, 1fr) auto;
+}
+
+.goldenHourActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+@media (max-width: 900px) {
+  .goldenHourGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .goldenHourPillLine {
+    grid-template-columns: 1fr;
+  }
+}

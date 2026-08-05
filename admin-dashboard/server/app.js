@@ -23,6 +23,7 @@ import { customerRouter } from './routes/customerRoutes.js';
 import { liquorRouter } from './routes/liquorRoutes.js';
 import { shopRouter } from './routes/shopRoutes.js';
 import { bannerRouter } from './routes/bannerRoutes.js';
+import { goldenHourRouter } from './routes/goldenHourRoutes.js';
 import { promotionRouter } from './routes/promotionRoutes.js';
 import { referralRouter } from './routes/referralRoutes.js';
 
@@ -101,6 +102,7 @@ export function createApp() {
   app.use('/api', liquorRouter);
   app.use('/api', shopRouter);
   app.use('/api', bannerRouter);
+  app.use('/api', goldenHourRouter);
   app.use('/api', promotionRouter);
   app.use('/api', referralRouter);
   app.use('/api', customerRouter);

@@ -9,6 +9,7 @@ import {
   MapPin,
   Martini,
   ShoppingBag,
+  Sunrise,
   Ticket,
   Truck,
   Users,
@@ -59,7 +60,8 @@ export const navigationSections = [
     tabs: [
       { key: 'promotions', label: 'Promo Codes', icon: Ticket },
       { key: 'referrals', label: 'Referrals', icon: Gift },
-      { key: 'banners', label: 'Banners', icon: Images }
+      { key: 'banners', label: 'Banners', icon: Images },
+      { key: 'golden-hour', label: 'Golden Hour', icon: Sunrise }
     ]
   },
   {
