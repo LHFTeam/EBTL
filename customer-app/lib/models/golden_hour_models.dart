@@ -44,7 +44,7 @@ class GoldenHourModal {
   static GoldenHourModal? fromJson(Map<String, dynamic> json) {
     if (json.isEmpty) return null;
 
-    final title = readString(json['title']).trim();
+    final title = readString(json['title']).trim().replaceAll('/', '\n');
     final cocktail = GoldenHourCocktail.fromJson(asMap(json['cocktail']));
 
     // A card with no words, or one whose button could not add anything, is not

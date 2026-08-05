@@ -44,7 +44,7 @@ class HomeScreenVisuals {
   // The slide width and gap are fixed; the page viewport fraction is derived
   // from them at layout time so the neighbouring slides peek in equally on any
   // phone width.
-  static const double heroSlideWidth = 290;
+  static const double heroSlideWidth = 362.5;
   static const double heroSlideHeight = heroSlideWidth / 2;
   static const double heroSlideGap = 2;
 
