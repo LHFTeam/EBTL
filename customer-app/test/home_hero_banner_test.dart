@@ -231,7 +231,7 @@ void main() {
       expect(opened, ['linked']);
     });
 
-    testWidgets('draws the centered slide about 30% bigger than its neighbours', (
+    testWidgets('draws the centered slide about 12% bigger than its neighbours', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(390, 844);
@@ -259,7 +259,7 @@ void main() {
       expect(
         slidePaintedWidth(tester, 'Slide A') /
             slidePaintedWidth(tester, 'Slide B'),
-        closeTo(1.3, 0.01),
+        closeTo(1.12, 0.01),
       );
     });
 
