@@ -9,6 +9,7 @@ import Shop from '../pages/Shop.jsx';
 import Dashboard from '../pages/Dashboard.jsx';
 import Analytics from '../pages/Analytics.jsx';
 import Banners from '../pages/Banners.jsx';
+import GoldenHour from '../pages/GoldenHour.jsx';
 import Employees from '../pages/Employees.jsx';
 import Ingredients from '../pages/Ingredients.jsx';
 import Inventory from '../pages/Inventory.jsx';
@@ -185,6 +186,7 @@ export default function Shell({ user, access, onLogout }) {
       {active === 'promotions' && <Promotions />}
       {active === 'referrals' && <Referrals />}
       {active === 'banners' && <Banners />}
+      {active === 'golden-hour' && <GoldenHour />}
       {active === 'locations' && <Locations />}
       {active === 'employees' && <Employees />}
     </main>

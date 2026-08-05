@@ -122,6 +122,9 @@ admin-dashboard/
       geidea.js           # Geidea session create + callback signature verify
       notifications.js    # customer notifications + FCM/Expo push
       customerSpirits.js  # customer favorite spirits + most-ordered spirits
+      goldenHour.js       # the launch modal's four modes: vocabulary, pill
+                          # palette, Cairo time-window matching, resolver
+      webpUploads.js      # shared WebP upload/validation into `shop-assets`
       objectUtils.js      # clean() / normalizeEmptyStrings()
     routes/
       authRoutes.js       # /login /logout /me /me/password
@@ -131,6 +134,8 @@ admin-dashboard/
       liquorRoutes.js shopRoutes.js inventoryRoutes.js transferRoutes.js
       bannerRoutes.js    # Marketing → Banners: home hero carousel CRUD +
                          # WebP uploads, and the shop banner image
+      goldenHourRoutes.js # Marketing → Golden Hour: the four launch-modal
+                          # modes (edit only — never created or deleted)
 
       orderRoutes.js      # admin/cart-operations order management
       customerRoutes.js   # ~5.6k lines: the ENTIRE /api/customer/* + payments API
@@ -258,6 +263,33 @@ large by design — **follow the local structure**; don't refactor it wholesale.
   `product_liquor_compatibility`, and `pickTopSpirits` keeps the top **two
   counts** rather than two spirits, so ties keep every spirit that qualifies.
   Recomputing rather than incrementing is what makes a replayed webhook safe.
+- **Golden Hour:** the card the customer app opens with when a beach cart is
+  already chosen. `lib/goldenHour.js` owns the whole domain — the four fixed
+  modes (`morning`, `afternoon`, `sunset`, `evening`), the eight pill colour
+  schemes, Cairo time-window matching, and `loadActiveGoldenHourModal`, which
+  `/api/customer/home` calls to resolve **at most one** mode into the
+  `goldenHour` key. Three things are worth knowing before touching it:
+  - **The modes are a closed vocabulary**, shared with the dashboard tab and
+    the app. `goldenHourRoutes.js` offers edit only — no create, no delete —
+    and the rows are seeded by the migration. A fifth mode would reach the app
+    as something it cannot draw.
+  - **Windows may wrap midnight** (`start_time > end_time`, e.g. evening's
+    19:00–02:00). Start is inclusive, end exclusive. `isWithinWindow` is the
+    only place that logic lives; `windowCoverage` reports gaps and overlaps to
+    the tab as warnings rather than the API refusing the save.
+  - **Every failure resolves to `null`**, never a throw: a missing table, an
+    archived cocktail, a mode switched on and then emptied. The modal is a
+    greeting, and it must cost a customer a card at worst, never a home screen.
+    That is also why `loadActiveGoldenHourModal` is outside the error check in
+    the `/customer/home` `Promise.all`.
+
+  The leading pill's text is **derived, not stored**: "Your &lt;liquor type&gt;",
+  from the chosen cocktail's `product_liquor_compatibility` rows. That table has
+  no timestamp of its own, so "the first liquor type" means first in catalogue
+  order (`liquor_types.display_order`, then name). Only the pill's colour is
+  configured. Pill colours themselves live in **the app**
+  (`GoldenHourPillScheme.palette`) and travel as scheme keys — adding a scheme
+  is a backend *and* app change, deliberately.
 
 ## Frontend architecture
 
@@ -312,8 +344,8 @@ Extend via its props before copy-pasting.
 
 - **Areas / tabs** — the RBAC + nav unit: `dashboard`, `analytics`, `orders`,
   `inventory`, `transfers`, `ingredients`, `cocktails`, `additional-products`,
-  `liquors`, `shop`, `promotions`, `referrals`, `banners`, `locations`,
-  `employees`. Defined once in `roleAccess` (`appConfig.js`) and mirrored in
+  `liquors`, `shop`, `promotions`, `referrals`, `banners`, `golden-hour`,
+  `locations`, `employees`. Defined once in `roleAccess` (`appConfig.js`) and mirrored in
   `navigation.jsx`.
 - **Roles** — `prep` < `cart_operator` < `warehouse` < `supervisor` <
   `manager` < `admin` (see `employeeRoles`). `admin` sees everything.

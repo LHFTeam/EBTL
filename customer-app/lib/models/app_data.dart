@@ -3,6 +3,7 @@ import '../core/utils/model_sorters.dart';
 import 'cocktail_models.dart';
 import 'common_models.dart';
 import 'finder_models.dart';
+import 'golden_hour_models.dart';
 
 class AppData {
   final HeroContent hero;
@@ -14,6 +15,11 @@ class AppData {
   /// How long each hero slide dwells before the carousel advances itself, set
   /// in the dashboard. Falls back to [HomeHeroBanner.defaultRotation].
   final Duration heroRotation;
+  /// The launch modal for the hour it is now in Cairo, resolved by the
+  /// backend. Null when no mode is live, or when the customer has no beach cart
+  /// chosen yet — [RootShell] only opens it in that second case.
+  final GoldenHourModal? goldenHour;
+
   final List<ServiceLocation> serviceAreas;
   final List<Cocktail> featuredCocktails;
   final List<Category> categories;
@@ -27,6 +33,7 @@ class AppData {
     required this.hero,
     required this.heroBanners,
     required this.heroRotation,
+    required this.goldenHour,
     required this.serviceAreas,
     required this.featuredCocktails,
     required this.categories,
@@ -47,6 +54,7 @@ class AppData {
       hero: hero,
       heroBanners: heroBanners,
       heroRotation: heroRotation,
+      goldenHour: goldenHour,
       serviceAreas: serviceAreas,
       featuredCocktails: featuredCocktails,
       categories: categories,
@@ -90,6 +98,7 @@ class AppData {
     return AppData(
       hero: HeroContent.fromJson(asMap(homeJson['hero'])),
       heroRotation: readHeroRotation(asMap(homeJson['heroCarousel'])),
+      goldenHour: GoldenHourModal.fromJson(asMap(homeJson['goldenHour'])),
       heroBanners: sortHeroBanners(
         readMapList(homeJson['heroBanners'])
             .map(HomeHeroBanner.fromJson)

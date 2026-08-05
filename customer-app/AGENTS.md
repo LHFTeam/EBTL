@@ -74,8 +74,9 @@ Notes:
   the app shell smoke test (`widget_test.dart`), JSON parsing
   (`notification_models_test.dart`), the checkout result states, the bottom
   nav's tab set and badge placement (`ebtl_bottom_nav_test.dart`), and the
-  Explore hero/badges (`explore_widgets_test.dart`), and the spirit-profile
-  payloads (`spirit_models_test.dart`). Screens that call
+  Explore hero/badges (`explore_widgets_test.dart`), the spirit-profile
+  payloads (`spirit_models_test.dart`), and the Golden Hour launch modal's
+  parsing and pill row (`golden_hour_test.dart`). Screens that call
   `ApiService` statics directly are not testable without a backend — test the
   widgets they compose instead, as those files do.
 - Some CI/agent environments do not have the Flutter SDK installed. If
@@ -158,6 +159,38 @@ are the tokens `finder | explore | cart | orders | cocktail/<slug> |
 category/<category id>`, parsed by `HeroBannerLink` and followed by
 `RootShell.openHeroBanner`. Adding a destination means changing both that
 parser and the validation in the backend's `bannerRoutes.js`.
+
+### The Golden Hour launch modal
+
+`features/home/widgets/golden_hour_modal.dart` is the card the app opens with
+when the customer **already has a beach cart chosen** — that condition is the
+whole point, since the card's one action is Add to Cart and the cart needs a
+location. `RootShell._maybeShowGoldenHour` opens it from a post-frame callback
+after the first `loadAppData` of a launch, so it lands over a painted Home
+rather than the loading scaffold.
+
+Three things about it are easy to get wrong:
+
+- **It is once per launch, not once per load.** `_goldenHourHandled` is set on
+  the first load whether or not a card was shown. Every later load — a cart
+  change, a location switch, a pull to refresh — runs the same code path, and
+  without the flag each would reopen the card.
+- **The app does not decide which mode shows.** The backend resolves the four
+  time-of-day modes against **Cairo** local time and hands over at most one,
+  already picked, on `AppData.goldenHour`. Never re-derive that from the device
+  clock, which may be set anywhere in the world.
+- **Add to Cart loads the cocktail first.** The card carries a slug, not a
+  variant, so it fetches the detail and then adds — the same route Home's
+  "Order It Again" takes — which is what makes it add at today's price and
+  availability for this beach cart.
+
+Pill colours live in the app (`GoldenHourPillScheme.palette` in
+`models/golden_hour_models.dart`) and the payload carries only scheme keys, so
+a key this version does not know falls back to `sand` at paint time rather than
+dropping the pill. Adding a scheme means changing both the palette here and
+`GOLDEN_HOUR_PILL_SCHEMES` in the backend's `lib/goldenHour.js`. Everything
+else on the card — copy, image, cocktail, the pills after the first — is edited
+in the dashboard's Marketing → Golden Hour tab.
 
 Customer notifications and push are now **implemented** (they were once staged
 in a since-removed `*.patch` file and have since been built directly into the
