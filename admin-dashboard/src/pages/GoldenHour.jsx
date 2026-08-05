@@ -347,6 +347,9 @@ export default function GoldenHour() {
                 placeholder="Golden hour is calling"
                 onChange={(e) => patchDraft(mode.mode, { title: e.target.value })}
               />
+              <span className="muted smallText noPad">
+                Use / to split the app title onto two lines, for example: Fire&apos;s lit./One more round.
+              </span>
             </label>
 
             <label>
