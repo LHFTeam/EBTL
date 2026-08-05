@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../core/navigation/slide_up_route.dart';
 import '../../core/theme/ebtl_colors.dart';
 import '../../models/favorite_models.dart';
 import '../../services/api_service.dart';
@@ -81,8 +82,8 @@ class _FavoriteCocktailsScreenState extends State<FavoriteCocktailsScreen> {
     if (cocktail.slug.trim().isEmpty) return;
 
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CocktailDetailScreen(
+      slideUpModalRoute(
+        CocktailDetailScreen(
           slug: cocktail.slug,
           locationId: widget.locationId,
           locationName: null,

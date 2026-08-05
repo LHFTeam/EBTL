@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'shared/widgets/app_state_widgets.dart';
 
+import 'core/navigation/slide_up_route.dart';
 import 'core/network/api_exception.dart';
 import 'core/theme/ebtl_colors.dart';
 
@@ -649,8 +650,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     String? liquorTypeId,
   }) {
     return Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CocktailDetailScreen(
+      slideUpModalRoute(
+        CocktailDetailScreen(
           slug: slug,
           locationId: data.selectedLocationId,
           locationName: data.selectedLocationName,
