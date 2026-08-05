@@ -63,11 +63,26 @@ class _HomeHeroCarouselState extends State<HomeHeroCarousel> {
     _StepsSlide(),
   ];
 
-  /// How much smaller the off-center slides are drawn, so the centered one
-  /// reads ~30% bigger than its neighbours. Scaling the sides down rather than
-  /// the center up keeps the module's height and the centered slide's size
-  /// exactly as designed.
-  static const double _sideScale = 1 / 1.3;
+  /// The previous side scale made the centered slide read ~30% bigger than its
+  /// neighbours. Because the neighbours shrink around their own centers, that
+  /// also added about 33.5pt of visual whitespace on top of [heroSlideGap].
+  static const double _originalSideScale = 1 / 1.3;
+
+  /// Halve the visible edge-to-edge gap between the centered slide and its
+  /// neighbours while keeping the configured layout gap and center size intact.
+  ///
+  /// visible gap = heroSlideGap + heroSlideWidth * (1 - sideScale) / 2
+  static const double _targetVisibleGapScale = 0.5;
+  static const double _originalVisibleGap =
+      HomeScreenVisuals.heroSlideGap +
+      HomeScreenVisuals.heroSlideWidth * (1 - _originalSideScale) / 2;
+  static const double _targetVisibleGap =
+      _originalVisibleGap * _targetVisibleGapScale;
+  static const double _sideScale =
+      1 -
+      ((_targetVisibleGap - HomeScreenVisuals.heroSlideGap) *
+          2 /
+          HomeScreenVisuals.heroSlideWidth);
 
   /// Long enough to read as a slide rather than a cut, short enough that the
   /// dwell time the dashboard sets is what the customer actually perceives.
