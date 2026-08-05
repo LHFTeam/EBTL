@@ -187,9 +187,12 @@ class _GoldenHourDialogState extends State<_GoldenHourDialog> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(20),
                     child: AspectRatio(
-                      aspectRatio: 4 / 3,
+                      aspectRatio: 1,
                       child: NetworkOrAssetImage(
                         imageUrl: modal.imageUrl,
+                        // Uploaded Golden Hour images are square cocktail art;
+                        // contain them so the launch modal shows the full image.
+                        fit: BoxFit.contain,
                         // The bundled cocktail art is keyed by name, so a card
                         // whose image fails to load still shows its drink.
                         asset: CocktailAssets.forName(modal.cocktail.name),
