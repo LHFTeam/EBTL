@@ -63,21 +63,23 @@ class _HomeHeroCarouselState extends State<HomeHeroCarousel> {
     _StepsSlide(),
   ];
 
-  /// The previous side scale made the centered slide read ~30% bigger than its
-  /// neighbours. Because the neighbours shrink around their own centers, that
-  /// also added about 33.5pt of visual whitespace on top of [heroSlideGap].
+  /// The baseline slide geometry before the center banner was enlarged. The
+  /// center banner is now 25% wider/taller, but the visual edge-to-edge gap
+  /// between it and its neighbours intentionally stays at the previous value,
+  /// so the extra width is absorbed by hiding more of the side banners.
+  static const double _previousHeroSlideWidth = 290;
   static const double _originalSideScale = 1 / 1.3;
 
-  /// Halve the visible edge-to-edge gap between the centered slide and its
-  /// neighbours while keeping the configured layout gap and center size intact.
-  ///
-  /// visible gap = heroSlideGap + heroSlideWidth * (1 - sideScale) / 2
+  /// The gap customers saw before this size increase. At the baseline, the
+  /// side slides were scaled around their own centers, creating extra visual
+  /// whitespace beyond [HomeScreenVisuals.heroSlideGap]; this preserves that
+  /// tuned visible gap against the larger centered slide.
   static const double _targetVisibleGapScale = 0.5;
-  static const double _originalVisibleGap =
+  static const double _previousVisibleGap =
       HomeScreenVisuals.heroSlideGap +
-      HomeScreenVisuals.heroSlideWidth * (1 - _originalSideScale) / 2;
+      _previousHeroSlideWidth * (1 - _originalSideScale) / 2;
   static const double _targetVisibleGap =
-      _originalVisibleGap * _targetVisibleGapScale;
+      _previousVisibleGap * _targetVisibleGapScale;
   static const double _sideScale =
       1 -
       ((_targetVisibleGap - HomeScreenVisuals.heroSlideGap) *
@@ -86,9 +88,11 @@ class _HomeHeroCarouselState extends State<HomeHeroCarousel> {
 
   /// Long enough to read as a slide rather than a cut, short enough that the
   /// dwell time the dashboard sets is what the customer actually perceives.
-  static const Duration _autoAdvanceDuration = Duration(milliseconds: 520);
+  /// 452ms is the previous 520ms transition made 15% faster.
+  static const Duration _autoAdvanceDuration = Duration(milliseconds: 452);
 
-  static const Duration _slideDuration = Duration(milliseconds: 280);
+  /// 243ms is the previous 280ms customer-initiated transition made 15% faster.
+  static const Duration _slideDuration = Duration(milliseconds: 243);
   static const Duration _dotDuration = Duration(milliseconds: 180);
 
   /// Where an endlessly-paging carousel starts. Far enough from zero that a
@@ -141,9 +145,8 @@ class _HomeHeroCarouselState extends State<HomeHeroCarousel> {
     final viewportWidth = MediaQuery.sizeOf(context).width;
     final pitch =
         HomeScreenVisuals.heroSlideWidth + HomeScreenVisuals.heroSlideGap;
-    final fraction = viewportWidth <= 0
-        ? 1.0
-        : (pitch / viewportWidth).clamp(0.1, 1.0);
+    final rawFraction = viewportWidth <= 0 ? 1.0 : pitch / viewportWidth;
+    final fraction = rawFraction < 0.1 ? 0.1 : rawFraction;
 
     rebuildController(fraction);
     scheduleRotation();
