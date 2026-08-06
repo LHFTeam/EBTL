@@ -332,6 +332,30 @@ class ShopProductCardTile extends StatelessWidget {
     this.subtitleMaxLines,
   });
 
+  static const double _compactImageHeight = 84;
+  static const double _imageHeight = 112;
+  static const double _compactTextPaddingY = 8;
+  static const double _textPaddingY = 10;
+  static const double _borderWidth = 1;
+
+  /// The height this tile lays out to.
+  ///
+  /// Both its artwork and its text block are fixed boxes, so a rail or grid
+  /// that gives it less than this overflows rather than compressing the card.
+  /// Fixed-extent call sites must size themselves from this instead of from a
+  /// hand-tuned constant that silently drifts when the card changes.
+  static double heightFor({required bool compact, int? subtitleMaxLines}) {
+    return (compact ? _compactImageHeight : _imageHeight) +
+        2 * (compact ? _compactTextPaddingY : _textPaddingY) +
+        2 * _borderWidth +
+        _textAreaHeight(compact, subtitleMaxLines);
+  }
+
+  static double _textAreaHeight(bool compact, int? subtitleMaxLines) {
+    if (compact) return 94;
+    return (subtitleMaxLines ?? 3) > 2 ? 118 : 96;
+  }
+
   @override
   Widget build(BuildContext context) {
     final firstTag = product.tagDetails.isEmpty
@@ -347,11 +371,7 @@ class ShopProductCardTile extends StatelessWidget {
         : product.subtitle;
     final effectiveSubtitleMaxLines = subtitleMaxLines ?? (compact ? 2 : 3);
 
-    final textAreaHeight = compact
-        ? 94.0
-        : effectiveSubtitleMaxLines > 2
-        ? 118.0
-        : 96.0;
+    final textAreaHeight = _textAreaHeight(compact, subtitleMaxLines);
 
     return SizedBox(
       width: width,
@@ -364,7 +384,10 @@ class ShopProductCardTile extends StatelessWidget {
             decoration: BoxDecoration(
               color: EbtlColors.white.withValues(alpha: 0.94),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: EbtlColors.border),
+              border: Border.all(
+                color: EbtlColors.border,
+                width: _borderWidth,
+              ),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.035),
@@ -379,7 +402,7 @@ class ShopProductCardTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(
-                    height: compact ? 84 : 112,
+                    height: compact ? _compactImageHeight : _imageHeight,
                     width: double.infinity,
                     child: Stack(
                       children: [
@@ -402,9 +425,9 @@ class ShopProductCardTile extends StatelessWidget {
                   Padding(
                     padding: EdgeInsets.fromLTRB(
                       compact ? 9 : 12,
-                      compact ? 8 : 10,
+                      compact ? _compactTextPaddingY : _textPaddingY,
                       compact ? 9 : 10,
-                      compact ? 8 : 10,
+                      compact ? _compactTextPaddingY : _textPaddingY,
                     ),
                     child: SizedBox(
                       height: textAreaHeight,

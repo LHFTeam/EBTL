@@ -128,9 +128,11 @@ class _ShopSearchScreenState extends State<ShopSearchScreen> {
                           : null,
                     );
                   }, childCount: productMatches.length),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
-                    mainAxisExtent: 236,
+                    mainAxisExtent: ShopProductCardTile.heightFor(
+                      compact: false,
+                    ),
                     mainAxisSpacing: 14,
                     crossAxisSpacing: 14,
                   ),
