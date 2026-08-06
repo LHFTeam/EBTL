@@ -231,9 +231,8 @@ void main() {
       expect(opened, ['linked']);
     });
 
-    testWidgets('draws the centered slide about 12% bigger than its neighbours', (
-      tester,
-    ) async {
+    testWidgets('holds the tuned gap between the centered slide and its '
+        'neighbours', (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -257,9 +256,24 @@ void main() {
       expect(slideLayoutWidth(tester, 'Slide A'),
           slideLayoutWidth(tester, 'Slide B'));
       expect(
-        slidePaintedWidth(tester, 'Slide A') /
-            slidePaintedWidth(tester, 'Slide B'),
-        closeTo(1.12, 0.01),
+        slidePaintedWidth(tester, 'Slide A'),
+        greaterThan(slidePaintedWidth(tester, 'Slide B')),
+      );
+
+      // The gap is the tuned quantity, not the scale ratio. The carousel works
+      // backwards from the slide width to decide how far to shrink the side
+      // slides, precisely so this stays put when the slides are resized — so
+      // the gap is what a regression would show up in.
+      //
+      // This used to assert the ratio (1.12), which is downstream of the width
+      // and therefore not stable: widening the slide from 290 to 362.5 moved it
+      // to 1.10 and left the assertion behind, while the gap correctly did not
+      // budge. Pinned here in painted pixels, which run ~1.9pt wider than
+      // _targetVisibleGap because the inter-slide padding sits outside the
+      // scale transform.
+      expect(
+        visibleGapBetween(tester, 'Slide A', 'Slide B'),
+        closeTo(19.64, 0.05),
       );
     });
 
@@ -427,4 +441,11 @@ double slideLayoutWidth(WidgetTester tester, String headline) {
 /// The slide's width as it lands on the screen, scaling included.
 double slidePaintedWidth(WidgetTester tester, String headline) {
   return tester.getRect(slideBody(headline)).width;
+}
+
+/// The gap a customer actually sees between two adjacent slides, measured
+/// edge to edge after the side slide has been scaled down.
+double visibleGapBetween(WidgetTester tester, String left, String right) {
+  return tester.getRect(slideBody(right)).left -
+      tester.getRect(slideBody(left)).right;
 }
