@@ -1,14 +1,15 @@
 -- EBTL: The Spotlight — merchandising banners that open a curated product grid
 --
--- NOT YET APPLIED. Like 20260805000000_golden_hour_modes.sql, this file is a
--- migration waiting to be run rather than a record of one already applied — the
--- session that wrote it had no Supabase credentials. Apply it through the
--- dashboard (or `apply_migration`), then rename it to the ledger version it is
--- recorded under and refresh ../schema/ with ../tools/dump_schema.sql. Until
--- then the feature is inert rather than broken: `loadSpotlightBanners()` in
--- server/routes/customerRoutes.js answers with `[]` on any read error, the app
--- renders no Spotlight rail, and the Marketing → Banners tab shows its section
--- empty. It is idempotent and safe to re-run.
+-- The Postgres schema is managed in Supabase and is NOT otherwise tracked in
+-- this repo (see AGENTS.md). This file is the record of a migration already
+-- applied to the live project (`apply_migration`, ledger version
+-- 20260806211254). It is idempotent and safe to re-run.
+--
+-- Both read paths stay defensive anyway: `loadSpotlightBanners()` in
+-- server/routes/customerRoutes.js and its namesake in
+-- server/routes/bannerRoutes.js answer with `[]` on a read error rather than
+-- failing the home payload or the Banners tab. An empty table is a valid,
+-- shipping state — the app simply renders no Spotlight section.
 --
 -- Why: the home hero carousel (home_hero_banners, 20260804083025) can only take
 -- a customer to a destination the *app* already has — a tab, a cocktail, a
