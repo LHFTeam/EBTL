@@ -848,25 +848,29 @@ class CartItemCard extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(7),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: SizedBox(
-                width: thumbnailSize,
-                height: thumbnailSize,
-                child: NetworkOrAssetImage(
-                  imageUrl: item.product.imageUrl,
-                  asset: item.product.imageAsset,
-                  fit: BoxFit.cover,
+        // A line with a short description, a customization summary and an
+        // unavailable reason needs more than the thumbnail's height. Sizing the
+        // row to its tallest child lets the text column grow instead of
+        // overflowing, while still keeping the price flush with the bottom of
+        // the artwork on the ordinary one- or two-line card.
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: SizedBox(
+                  width: thumbnailSize,
+                  height: thumbnailSize,
+                  child: NetworkOrAssetImage(
+                    imageUrl: item.product.imageUrl,
+                    asset: item.product.imageAsset,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 11),
-            Expanded(
-              child: SizedBox(
-                height: thumbnailSize,
+              const SizedBox(width: 11),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -998,8 +1002,8 @@ class CartItemCard extends StatelessWidget {
                   ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

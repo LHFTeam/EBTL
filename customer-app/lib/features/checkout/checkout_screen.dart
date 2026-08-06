@@ -1707,27 +1707,49 @@ class CheckoutSummaryLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The label carries a backend string — "Discount (<promo code>)" — so it
+    // has to be able to give way to the amount rather than push it off the
+    // card. `spaceBetween` keeps the amount flush right now that the label
+    // shrink-wraps instead of being spaced out by a `Spacer`.
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: GoogleFonts.manrope(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: EbtlColors.ink,
+        Flexible(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.manrope(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: EbtlColors.ink,
+                  ),
+                ),
+              ),
+              if (showInfo) ...[
+                const SizedBox(width: 6),
+                const Icon(
+                  Icons.info_outline,
+                  size: 15,
+                  color: EbtlColors.muted,
+                ),
+              ],
+            ],
           ),
         ),
-        if (showInfo) ...[
-          const SizedBox(width: 6),
-          const Icon(Icons.info_outline, size: 15, color: EbtlColors.muted),
-        ],
-        const Spacer(),
-        Text(
-          value,
-          style: GoogleFonts.manrope(
-            fontSize: 14,
-            fontWeight: FontWeight.w900,
-            color: valueColor ?? EbtlColors.navy,
+        Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: Text(
+            value,
+            style: GoogleFonts.manrope(
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+              color: valueColor ?? EbtlColors.navy,
+            ),
           ),
         ),
       ],

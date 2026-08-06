@@ -372,7 +372,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
               icon: Icons.history,
               title: 'Recently viewed',
               child: SizedBox(
-                height: 200,
+                height: ShopProductCardTile.heightFor(
+                  compact: false,
+                  subtitleMaxLines: 2,
+                ),
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 22),

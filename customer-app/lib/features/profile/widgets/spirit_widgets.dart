@@ -48,34 +48,39 @@ class SpiritPill extends StatelessWidget {
             size: 30,
           ),
           const SizedBox(width: 9),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                spirit.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.manrope(
-                  fontSize: 13,
-                  height: 1.15,
-                  fontWeight: FontWeight.w900,
-                  color: EbtlColors.navy,
-                ),
-              ),
-              if ((trailingLabel ?? '').isNotEmpty)
+          // Bottle names come from the backend and run long ("Johnnie Walker
+          // Blue Label Ghost and Rare"). Without this the pill keeps growing
+          // past the row it wraps in and the ellipsis never engages.
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 Text(
-                  trailingLabel!,
+                  spirit.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.manrope(
-                    fontSize: 10,
-                    height: 1.2,
-                    fontWeight: FontWeight.w700,
-                    color: EbtlColors.muted,
+                    fontSize: 13,
+                    height: 1.15,
+                    fontWeight: FontWeight.w900,
+                    color: EbtlColors.navy,
                   ),
                 ),
-            ],
+                if ((trailingLabel ?? '').isNotEmpty)
+                  Text(
+                    trailingLabel!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.manrope(
+                      fontSize: 10,
+                      height: 1.2,
+                      fontWeight: FontWeight.w700,
+                      color: EbtlColors.muted,
+                    ),
+                  ),
+              ],
+            ),
           ),
           if (actionIcon != null) ...[
             const SizedBox(width: 8),
