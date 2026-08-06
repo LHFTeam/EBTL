@@ -82,6 +82,9 @@ CREATE INDEX promotions_code_lower_idx ON public.promotions USING btree (lower(c
 CREATE INDEX idx_purchase_orders_location_status ON public.purchase_orders USING btree (location_id, status, created_at DESC);
 CREATE INDEX idx_recipe_items_recipe ON public.recipe_items USING btree (recipe_id);
 CREATE INDEX idx_recipes_product_status ON public.recipes USING btree (product_id, status);
+CREATE INDEX idx_spotlight_banner_categories_category ON public.spotlight_banner_categories USING btree (category_id);
+CREATE INDEX idx_spotlight_banner_products_product ON public.spotlight_banner_products USING btree (product_id);
+CREATE INDEX idx_spotlight_banners_active_order ON public.spotlight_banners USING btree (is_active, display_order, created_at);
 CREATE INDEX referrals_created_at_idx ON public.referrals USING btree (created_at DESC);
 CREATE INDEX referrals_qualifying_order_idx ON public.referrals USING btree (qualifying_order_id) WHERE (qualifying_order_id IS NOT NULL);
 CREATE INDEX referrals_referrer_idx ON public.referrals USING btree (referrer_customer_id);

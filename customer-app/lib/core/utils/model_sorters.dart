@@ -1,4 +1,5 @@
 import '../../models/common_models.dart';
+import '../../models/spotlight_models.dart';
 
 /// Returns a copy of [items] sorted by [order] ascending, then by [name]
 /// case-insensitively. Shared by the app's display-order sorters.
@@ -27,6 +28,10 @@ List<ProductTag> sortProductTags(List<ProductTag> productTags) {
 /// than a name, since a slide need not carry any text at all.
 List<HomeHeroBanner> sortHeroBanners(List<HomeHeroBanner> banners) {
   return sortByOrderThenName(banners, (b) => b.displayOrder, (b) => b.id);
+}
+
+List<SpotlightBanner> sortSpotlightBanners(List<SpotlightBanner> banners) {
+  return sortByOrderThenName(banners, (b) => b.displayOrder, (b) => b.title);
 }
 
 List<LiquorType> sortLiquorTypes(List<LiquorType> liquorTypes) {

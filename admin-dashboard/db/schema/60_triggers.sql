@@ -8,6 +8,7 @@ CREATE TRIGGER trg_customer_push_tokens_updated_at BEFORE UPDATE ON public.custo
 CREATE TRIGGER trg_customers_updated_at BEFORE UPDATE ON public.customers FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_employee_credentials_updated_at BEFORE UPDATE ON public.employee_credentials FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_employees_updated_at BEFORE UPDATE ON public.employees FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_golden_hour_modes_updated_at BEFORE UPDATE ON public.golden_hour_modes FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_home_hero_banners_updated_at BEFORE UPDATE ON public.home_hero_banners FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_home_hero_settings_updated_at BEFORE UPDATE ON public.home_hero_settings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_ingredients_updated_at BEFORE UPDATE ON public.ingredients FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -32,6 +33,7 @@ CREATE TRIGGER trg_purchase_orders_updated_at BEFORE UPDATE ON public.purchase_o
 CREATE TRIGGER trg_validate_recipe_item_unit BEFORE INSERT OR UPDATE ON public.recipe_items FOR EACH ROW EXECUTE FUNCTION validate_recipe_item_unit();
 CREATE TRIGGER trg_recipes_updated_at BEFORE UPDATE ON public.recipes FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_shop_settings_updated_at BEFORE UPDATE ON public.shop_settings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_spotlight_banners_updated_at BEFORE UPDATE ON public.spotlight_banners FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_apply_stock_movement AFTER INSERT ON public.stock_movements FOR EACH ROW EXECUTE FUNCTION apply_stock_movement_to_balance();
 CREATE TRIGGER trg_generate_transfer_number BEFORE INSERT ON public.stock_transfers FOR EACH ROW EXECUTE FUNCTION generate_transfer_number();
 CREATE TRIGGER trg_post_stock_transfer_movements AFTER UPDATE OF status ON public.stock_transfers FOR EACH ROW EXECUTE FUNCTION post_stock_transfer_movements();

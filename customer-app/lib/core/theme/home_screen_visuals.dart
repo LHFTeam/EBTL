@@ -48,6 +48,19 @@ class HomeScreenVisuals {
   static const double heroSlideHeight = heroSlideWidth / 2;
   static const double heroSlideGap = 2;
 
+  // The Spotlight Rail (Home v2)
+  //
+  // Banner artwork is authored at 2.5:1 — the height follows from the width so
+  // the card is exactly the shape of the image and nothing is cropped. The rail
+  // shows two cards with the third peeking in, which is what sets the width: a
+  // 393pt phone less the 22pt gutters fits one card, its gap, and a slice of the
+  // next.
+  static const double spotlightBannerAspectRatio = 2.5;
+  static const double spotlightBannerWidth = 252;
+  static const double spotlightBannerHeight =
+      spotlightBannerWidth / spotlightBannerAspectRatio;
+  static const double spotlightBannerGap = 14;
+
   // Home Liquor Bottle Cards
   //
   // Laid out as a fixed 3-column grid on Home. The aspect ratio is width /

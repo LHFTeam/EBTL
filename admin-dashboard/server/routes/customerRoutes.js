@@ -2150,6 +2150,64 @@ async function loadHomeHeroBanners() {
   return { data: banners.data || [] };
 }
 
+// The Spotlight rail's banners, edited in Marketing → Banners. Same reasoning as
+// the hero slides: an empty list is a normal state (the app renders no rail), so
+// a read failure must not fail the whole home payload. That also keeps the home
+// screen working before db/migrations/20260806000000_spotlight_banners.sql is
+// applied.
+async function loadSpotlightBanners() {
+  const banners = await supabase
+    .from('spotlight_banners')
+    .select('id,image_url,title,subtitle,display_order')
+    .eq('is_active', true)
+    .order('display_order')
+    .order('created_at');
+
+  if (banners.error) return { data: [] };
+
+  return { data: banners.data || [] };
+}
+
+function publicSpotlightBanner(banner) {
+  return {
+    id: banner.id,
+    image_url: banner.image_url,
+    title: banner.title,
+    subtitle: banner.subtitle || null,
+    display_order: banner.display_order || 0
+  };
+}
+
+// Resolves a Spotlight banner's two selection lists to one list of product ids:
+// the loose products it picked, plus every active product in the categories it
+// picked. Additive by design — a banner may use either or both.
+async function loadSpotlightProductIds(bannerId) {
+  const [picked, categories] = await Promise.all([
+    supabase.from('spotlight_banner_products').select('product_id').eq('banner_id', bannerId),
+    supabase.from('spotlight_banner_categories').select('category_id').eq('banner_id', bannerId)
+  ]);
+
+  if (picked.error) return { error: picked.error };
+  if (categories.error) return { error: categories.error };
+
+  const productIds = new Set((picked.data || []).map((row) => row.product_id));
+  const categoryIds = (categories.data || []).map((row) => row.category_id);
+
+  if (categoryIds.length) {
+    const inCategories = await supabase
+      .from('products')
+      .select('id')
+      .eq('status', 'active')
+      .in('category_id', categoryIds);
+
+    if (inCategories.error) return { error: inCategories.error };
+
+    for (const product of inCategories.data || []) productIds.add(product.id);
+  }
+
+  return { data: [...productIds] };
+}
+
 // How long each hero slide dwells before the carousel advances itself. The
 // column is constrained to 2..60; this is the last line of defence so a bad
 // value can never reach the app as a 0-second timer.
@@ -3496,7 +3554,7 @@ customerRouter.get('/customer/home', async (req, res) => {
     error: 'Invalid home request.'
   });
 
-  const [locations, categories, liquorTypes, catalog, heroBanners, heroRotationSeconds, goldenHour] = await Promise.all([
+  const [locations, categories, liquorTypes, catalog, heroBanners, heroRotationSeconds, spotlightBanners, goldenHour] = await Promise.all([
     loadServiceLocations(),
 
     supabase
@@ -3521,6 +3579,8 @@ customerRouter.get('/customer/home', async (req, res) => {
     loadHomeHeroBanners(),
 
     loadHomeHeroRotationSeconds(),
+
+    loadSpotlightBanners(),
 
     // Never in the error check below: the launch modal is a greeting, and a
     // missing table or an archived cocktail resolves to null rather than
@@ -3572,6 +3632,7 @@ customerRouter.get('/customer/home', async (req, res) => {
     heroCarousel: {
       rotation_seconds: heroRotationSeconds.data
     },
+    spotlightBanners: (spotlightBanners.data || []).map(publicSpotlightBanner),
     // The launch modal for the hour it is now in Cairo, or null when no mode is
     // live. The app only opens it when a beach cart is already chosen.
     goldenHour,
@@ -3706,6 +3767,69 @@ customerRouter.get('/customer/shop/categories/:identifier/products', async (req,
       location_id: locationId,
       sort: parsed.data.sort || 'display_order'
     }
+  });
+});
+
+// The grid behind a Spotlight banner. The banner itself comes back with it so
+// the app's sheet can render its image, title and subtitle from one call rather
+// than depending on the home payload it was opened from still being current.
+customerRouter.get('/customer/spotlight/:id/products', async (req, res) => {
+  const bannerId = z.string().uuid().safeParse(req.params.id);
+  if (!bannerId.success) return res.status(400).json({ error: 'Invalid spotlight banner id.' });
+
+  const parsed = z.object({
+    location_id: optionalUuid,
+    locationId: optionalUuid
+  }).safeParse(req.query);
+
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid spotlight products request.' });
+
+  const locationId = parsed.data.location_id || parsed.data.locationId || null;
+
+  const banner = await supabase
+    .from('spotlight_banners')
+    .select('id,image_url,title,subtitle,display_order')
+    .eq('id', req.params.id)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (banner.error) return res.status(400).json({ error: banner.error.message });
+  if (!banner.data) return res.status(404).json({ error: 'Spotlight banner not found.' });
+
+  const productIds = await loadSpotlightProductIds(banner.data.id);
+  if (productIds.error) return res.status(400).json({ error: productIds.error.message });
+
+  // A banner with nothing selected yet is a valid draft, not an error — and it
+  // must never fall through to `loadCatalog` with an empty id list, which would
+  // answer with the entire catalog.
+  if (!productIds.data.length) {
+    return res.json({
+      banner: publicSpotlightBanner(banner.data),
+      results: []
+    });
+  }
+
+  const catalog = await loadCatalog({
+    locationId,
+    productIds: productIds.data
+  });
+
+  if (catalog.error) return res.status(400).json({ error: catalog.error.message });
+
+  const customer = await findCustomerFromRequest(req);
+  let favoriteProductIds = new Set();
+
+  if (customer) {
+    try {
+      favoriteProductIds = await loadCustomerFavoriteIdSet(customer.id);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+  }
+
+  res.json({
+    banner: publicSpotlightBanner(banner.data),
+    results: catalog.data.cards.map((card) => addFavoriteFlagToCard(card, favoriteProductIds))
   });
 });
 

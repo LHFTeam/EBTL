@@ -24,6 +24,7 @@ import '../models/profile_models.dart';
 import '../models/referral_models.dart';
 import '../models/shop_models.dart';
 import '../models/spirit_models.dart';
+import '../models/spotlight_models.dart';
 import 'cart_revision.dart';
 
 class ApiService {
@@ -210,6 +211,25 @@ class ApiService {
     );
 
     return ShopResponse.fromJson(json);
+  }
+
+  /// The products behind a Spotlight banner, resolved from the loose products
+  /// and whole categories marketing selected for it in the dashboard.
+  static Future<SpotlightProductsResponse> fetchSpotlightProducts({
+    required String bannerId,
+    String? locationId,
+  }) async {
+    await ensureSession();
+
+    final json = await _request(
+      method: 'GET',
+      path:
+          '/api/customer/spotlight/${Uri.encodeComponent(bannerId)}/products',
+      query: {'location_id': locationId},
+      attachToken: true,
+    );
+
+    return SpotlightProductsResponse.fromJson(json);
   }
 
   static Future<ShopCategoryProductsResponse> fetchShopCategoryProducts({

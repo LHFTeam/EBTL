@@ -4473,6 +4473,42 @@ textarea {
   }
 }
 
+/* Marketing → The Spotlight. The two product pickers sit full-width under the
+   row's preview/fields/actions columns, so they get the whole grid width rather
+   than being squeezed into one of them. */
+.spotlightSelection {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 14px;
+  margin-top: 4px;
+}
+
+.selectionPicker {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+
+/* Capped and scrolling: a catalog of a hundred products must not push the rest
+   of the tab off the page. */
+.selectionPickerList {
+  display: grid;
+  gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border, var(--line));
+  border-radius: 12px;
+  background: white;
+}
+
+@media (max-width: 720px) {
+  .spotlightSelection {
+    grid-template-columns: 1fr;
+  }
+}
+
 .rotationInput {
   width: 90px;
   border: 1px solid var(--brand-border, var(--line));

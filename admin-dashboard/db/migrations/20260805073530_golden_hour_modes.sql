@@ -1,14 +1,13 @@
 -- EBTL: Golden Hour launch modal (time-of-day modes)
 --
--- NOT YET APPLIED. Unlike its neighbours in this directory, this file is a
--- migration waiting to be run, not a record of one already applied — the
--- session that wrote it had no Supabase credentials. Apply it through the
--- dashboard (or `apply_migration`), then rename it to the ledger version it is
--- recorded under and refresh ../schema/ with ../tools/dump_schema.sql. Until
--- then the Marketing → Golden Hour tab and the app's launch modal have no table
--- to read and the feature is inert: `/api/customer/home` answers with
--- `goldenHour: null` on any read error, so nothing breaks in the meantime.
--- It is idempotent and safe to re-run.
+-- The Postgres schema is managed in Supabase and is NOT otherwise tracked in
+-- this repo (see AGENTS.md). This file is the record of a migration already
+-- applied to the live project (`apply_migration`, ledger version
+-- 20260805073530). It is idempotent and safe to re-run.
+--
+-- The read path stays defensive anyway: `/api/customer/home` answers with
+-- `goldenHour: null` on any read error, so a modal that cannot be read costs
+-- nobody a home screen.
 --
 -- Why: when the customer app opens and a beach cart is already chosen, it
 -- greets the customer with one cocktail suggestion suited to the hour — a
