@@ -239,6 +239,23 @@ CREATE TABLE IF NOT EXISTS public.employees (
 );
 ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
 
+CREATE TABLE IF NOT EXISTS public.golden_hour_modes (
+    mode text NOT NULL,
+    is_active boolean DEFAULT false NOT NULL,
+    start_time time without time zone NOT NULL,
+    end_time time without time zone NOT NULL,
+    title text,
+    subtitle text,
+    product_id uuid,
+    image_url text,
+    image_caption text,
+    spirit_pill_scheme text DEFAULT 'sand'::text NOT NULL,
+    pills jsonb DEFAULT '[]'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.golden_hour_modes ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS public.home_hero_banners (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     image_url text NOT NULL,
@@ -690,6 +707,30 @@ CREATE TABLE IF NOT EXISTS public.shop_settings (
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 ALTER TABLE public.shop_settings ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.spotlight_banner_categories (
+    banner_id uuid NOT NULL,
+    category_id uuid NOT NULL
+);
+ALTER TABLE public.spotlight_banner_categories ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.spotlight_banner_products (
+    banner_id uuid NOT NULL,
+    product_id uuid NOT NULL
+);
+ALTER TABLE public.spotlight_banner_products ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.spotlight_banners (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    image_url text NOT NULL,
+    title text NOT NULL,
+    subtitle text,
+    display_order integer NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.spotlight_banners ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS public.stock_movements (
     id uuid DEFAULT gen_random_uuid() NOT NULL,

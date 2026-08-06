@@ -40,6 +40,9 @@ CREATE POLICY "Customers can update own customer record" ON public.customers AS 
 CREATE POLICY "Managers can read employee credentials metadata" ON public.employee_credentials AS PERMISSIVE FOR SELECT TO public USING (is_manager_or_admin());
 CREATE POLICY "Managers can manage employees" ON public.employees AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
 CREATE POLICY "Staff can read employee records" ON public.employees AS PERMISSIVE FOR SELECT TO authenticated USING (((auth_user_id = ( SELECT auth.uid() AS uid)) OR is_manager_or_admin()));
+CREATE POLICY "Managers can manage golden hour modes" ON public.golden_hour_modes AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Public can read active golden hour modes" ON public.golden_hour_modes AS PERMISSIVE FOR SELECT TO anon, authenticated USING ((is_active = true));
+CREATE POLICY "Staff can read golden hour modes" ON public.golden_hour_modes AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
 CREATE POLICY "Managers can manage home hero banners" ON public.home_hero_banners AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
 CREATE POLICY "Public can read active home hero banners" ON public.home_hero_banners AS PERMISSIVE FOR SELECT TO anon, authenticated USING ((is_active = true));
 CREATE POLICY "Staff can read home hero banners" ON public.home_hero_banners AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
@@ -100,6 +103,13 @@ CREATE POLICY "Managers can manage recipes" ON public.recipes AS PERMISSIVE FOR 
 CREATE POLICY "Staff can read recipes" ON public.recipes AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
 CREATE POLICY "Managers can manage shop settings" ON public.shop_settings AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
 CREATE POLICY "Public can read shop settings" ON public.shop_settings AS PERMISSIVE FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Managers can manage spotlight banner categories" ON public.spotlight_banner_categories AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Public can read spotlight banner categories" ON public.spotlight_banner_categories AS PERMISSIVE FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Managers can manage spotlight banner products" ON public.spotlight_banner_products AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Public can read spotlight banner products" ON public.spotlight_banner_products AS PERMISSIVE FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Managers can manage spotlight banners" ON public.spotlight_banners AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Public can read active spotlight banners" ON public.spotlight_banners AS PERMISSIVE FOR SELECT TO anon, authenticated USING ((is_active = true));
+CREATE POLICY "Staff can read spotlight banners" ON public.spotlight_banners AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
 CREATE POLICY "Staff can manage stock_movements" ON public.stock_movements AS PERMISSIVE FOR ALL TO authenticated USING (is_staff()) WITH CHECK (is_staff());
 CREATE POLICY "Staff can manage stock_transfer_items" ON public.stock_transfer_items AS PERMISSIVE FOR ALL TO authenticated USING (is_staff()) WITH CHECK (is_staff());
 CREATE POLICY "Staff can manage stock_transfers" ON public.stock_transfers AS PERMISSIVE FOR ALL TO authenticated USING (is_staff()) WITH CHECK (is_staff());

@@ -8,6 +8,12 @@ COMMENT ON COLUMN public.customer_top_liquor_types.rank IS 'Which of the two kep
 COMMENT ON COLUMN public.customers.referral_attributed_at IS 'When this customer was attributed to a referrer (first successful code apply).';
 COMMENT ON COLUMN public.customers.referral_code IS 'The customer''s own shareable referral code (e.g. EBTL-XXXXX). Lazily generated.';
 COMMENT ON COLUMN public.customers.referred_by_customer_id IS 'The customer who referred this customer, if they applied a referral code.';
+COMMENT ON TABLE public.golden_hour_modes IS 'The four time-of-day variants of the customer app''s launch modal ("Golden Hour"). Exactly four rows, seeded and edited from Marketing → Golden Hour; never created or deleted through the API.';
+COMMENT ON COLUMN public.golden_hour_modes.end_time IS 'Exclusive end of the window this mode covers, in Africa/Cairo.';
+COMMENT ON COLUMN public.golden_hour_modes.pills IS 'Pills shown after the leading spirit pill, in order: [{"label": "…", "scheme": "…"}]. Up to four; the array length is the count.';
+COMMENT ON COLUMN public.golden_hour_modes.product_id IS 'The cocktail the modal pitches, and the one its Add to Cart adds. Required before a mode can be switched on; nulled rather than blocking if the product is ever deleted, which switches the mode off on its next read.';
+COMMENT ON COLUMN public.golden_hour_modes.spirit_pill_scheme IS 'Colour scheme of the leading pill only. Its text is always "Your <liquor type>", derived from the chosen cocktail rather than stored.';
+COMMENT ON COLUMN public.golden_hour_modes.start_time IS 'Inclusive start of the window this mode covers, in Africa/Cairo. May be later than end_time, which means the window wraps past midnight.';
 COMMENT ON TABLE public.home_hero_banners IS 'CMS-driven slides for the customer app home hero carousel. Only image_url and display_order are required; the app falls back to its bundled slides when no active row exists.';
 COMMENT ON COLUMN public.home_hero_banners.deep_link IS 'Optional in-app destination for a tap: finder | explore | cart | orders | cocktail/<slug> | category/<category id>. Null makes the slide non-tappable.';
 COMMENT ON COLUMN public.home_hero_banners.display_order IS 'Ascending carousel position. Required — marketing always chooses where a slide sits.';
@@ -45,3 +51,9 @@ COMMENT ON TABLE public.referrals IS 'One row per attributed referral. status: p
 COMMENT ON COLUMN public.referrals.qualifying_order_id IS 'The referee order that unlocked the referrer reward (idempotency guard).';
 COMMENT ON TABLE public.shop_settings IS 'Global customer app shop-screen settings. Keep exactly one row with id=true.';
 COMMENT ON COLUMN public.shop_settings.banner_image_url IS 'Public WebP banner image URL for the customer app shop screen. Text/CTA stay static in the app.';
+COMMENT ON TABLE public.spotlight_banner_categories IS 'Whole categories picked for a Spotlight banner, resolved to active products at request time.';
+COMMENT ON TABLE public.spotlight_banner_products IS 'Loose products picked for a Spotlight banner. Unioned with the products of spotlight_banner_categories to build the banner sheet.';
+COMMENT ON TABLE public.spotlight_banners IS 'CMS-driven banners for the customer app home "The Spotlight" rail. Tapping one opens a sheet titled `title` over a grid of the products selected in spotlight_banner_products and spotlight_banner_categories.';
+COMMENT ON COLUMN public.spotlight_banners.display_order IS 'Ascending position in the Spotlight rail. Required — marketing always chooses where a banner sits.';
+COMMENT ON COLUMN public.spotlight_banners.subtitle IS 'Optional line under the sheet title.';
+COMMENT ON COLUMN public.spotlight_banners.title IS 'Heading of the sheet the banner opens. Required — a sheet with no title has no heading to show.';
