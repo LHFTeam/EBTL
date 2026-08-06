@@ -49,6 +49,10 @@ class HomeScreenVisuals {
   static const double heroSlideGap = 2;
 
   // Home Liquor Bottle Cards
+  //
+  // Laid out as a fixed 3-column grid on Home. The aspect ratio is width /
+  // height of each cell — below 1 the cards are taller than they are wide,
+  // giving the tall bottle art room to breathe.
   static const bool showHomeLiquorBottleCardName = false;
-  static const double homeLiquorBottleCardHeight = 130;
+  static const double homeLiquorBottleCardAspectRatio = 0.82;
 }

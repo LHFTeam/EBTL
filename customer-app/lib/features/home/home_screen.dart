@@ -314,21 +314,27 @@ class _HomeScreenState extends State<HomeScreen> {
         title: 'Choose Your Bottle',
         subtitle: 'Pick the liquor you already have.',
       ),
-      SizedBox(
-        height: HomeScreenVisuals.homeLiquorBottleCardHeight,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.fromLTRB(22, 0, 22, 4),
-          itemCount: liquorTypes.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 8),
-          itemBuilder: (context, index) {
-            final liquor = liquorTypes[index];
-
-            return BottleCard(
-              liquor: liquor,
-              onTap: () => widget.onOpenFinderWithBottle(liquor),
-            );
-          },
+      Padding(
+        padding: const EdgeInsets.fromLTRB(22, 0, 22, 4),
+        // A fixed 3-column grid, laid out inside the vertical page scroll, so
+        // every bottle is visible at once instead of tucked into a carousel.
+        // The cards keep the delivered `liquorTypes` order — grid children fill
+        // row by row, top to bottom, the same order the carousel iterated.
+        child: GridView.count(
+          crossAxisCount: 3,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          childAspectRatio: HomeScreenVisuals.homeLiquorBottleCardAspectRatio,
+          children: [
+            for (final liquor in liquorTypes)
+              BottleCard(
+                liquor: liquor,
+                onTap: () => widget.onOpenFinderWithBottle(liquor),
+              ),
+          ],
         ),
       ),
       const SizedBox(height: 26),

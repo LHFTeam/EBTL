@@ -467,7 +467,7 @@ class CocktailDetailHero extends StatelessWidget {
             top: MediaQuery.of(context).padding.top + 10,
             child: Row(
               children: [
-                CircleIconButton(icon: Icons.arrow_back, onTap: onBack),
+                CircleIconButton(icon: Icons.close, onTap: onBack),
                 const Spacer(),
                 CircleIconButton(
                   icon: isFavorite ? Icons.favorite : Icons.favorite_border,
@@ -1618,20 +1618,21 @@ class CocktailDetailAddBar extends StatelessWidget {
         ? 'Choose a beach cart to check availability.'
         : cocktail.availabilityMessage;
 
-    final label = isAdding
+    // The right-hand price is shown only when there is a price to add; the
+    // other states (loading, no location, unavailable) fall back to a single
+    // centered label on the button.
+    final fallbackLabel = isAdding
         ? 'Adding...'
-        : enabled && price != null
-        ? 'Add · ${formatMoney(price, currency)}'
         : !hasLocation
         ? 'Choose Beach Cart First'
         : 'Unavailable';
 
     return Container(
       padding: EdgeInsets.fromLTRB(
-        22,
-        12,
-        22,
-        12 + MediaQuery.of(context).padding.bottom,
+        20,
+        10,
+        20,
+        10 + MediaQuery.of(context).padding.bottom,
       ),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.98),
@@ -1661,7 +1662,7 @@ class CocktailDetailAddBar extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 9),
+            const SizedBox(height: 8),
           ],
           Row(
             children: [
@@ -1671,13 +1672,21 @@ class CocktailDetailAddBar extends StatelessWidget {
                 onIncrement: onIncrement,
                 onDecrement: onDecrement,
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               Expanded(
                 child: SizedBox(
-                  height: 58,
-                  child: ElevatedButton.icon(
+                  height: 50,
+                  child: ElevatedButton(
                     onPressed: enabled ? onAdd : null,
-                    icon: isAdding
+                    style: ebtlCoralButtonStyle(
+                      radius: 16,
+                      withDisabledColors: true,
+                    ).copyWith(
+                      padding: const WidgetStatePropertyAll(
+                        EdgeInsets.symmetric(horizontal: 18),
+                      ),
+                    ),
+                    child: isAdding
                         ? const SizedBox(
                             width: 18,
                             height: 18,
@@ -1686,15 +1695,35 @@ class CocktailDetailAddBar extends StatelessWidget {
                               color: Colors.white,
                             ),
                           )
-                        : const Icon(Icons.shopping_bag_outlined),
-                    label: Text(label),
-                    style: ebtlCoralButtonStyle(
-                      withDisabledColors: true,
-                      textStyle: GoogleFonts.manrope(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
+                        : enabled && price != null
+                        ? Row(
+                            children: [
+                              Text(
+                                'Add',
+                                style: GoogleFonts.manrope(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                formatMoney(price, currency),
+                                style: GoogleFonts.manrope(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
+                          )
+                        : Text(
+                            fallbackLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.manrope(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                   ),
                 ),
               ),
@@ -1723,48 +1752,57 @@ class QuantityStepper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 58,
+      height: 50,
       decoration: BoxDecoration(
         color: EbtlColors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: EbtlColors.border),
       ),
       child: Row(
         children: [
-          SizedBox(
-            width: 50,
-            child: IconButton(
-              onPressed: enabled && quantity > 1 ? onDecrement : null,
-              icon: const Icon(Icons.remove),
-              color: EbtlColors.navy,
-            ),
+          _StepperButton(
+            icon: Icons.remove,
+            onPressed: enabled && quantity > 1 ? onDecrement : null,
           ),
           Container(
-            width: 48,
+            width: 32,
             alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              border: Border.symmetric(
-                vertical: BorderSide(color: EbtlColors.border),
-              ),
-            ),
             child: Text(
               quantity.toString(),
               style: GoogleFonts.manrope(
-                fontSize: 18,
+                fontSize: 16,
                 fontWeight: FontWeight.w900,
                 color: enabled ? EbtlColors.navy : EbtlColors.muted,
               ),
             ),
           ),
-          SizedBox(
-            width: 50,
-            child: IconButton(
-              onPressed: enabled ? onIncrement : null,
-              icon: const Icon(Icons.add),
-              color: EbtlColors.navy,
-            ),
+          _StepperButton(
+            icon: Icons.add,
+            onPressed: enabled ? onIncrement : null,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _StepperButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  const _StepperButton({required this.icon, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 42,
+      child: IconButton(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18),
+        color: EbtlColors.navy,
+        disabledColor: EbtlColors.muted,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
       ),
     );
   }
