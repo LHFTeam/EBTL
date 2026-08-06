@@ -6,6 +6,7 @@ import '../../models/app_data.dart';
 import '../../models/cocktail_models.dart';
 import '../../models/common_models.dart';
 import '../../models/profile_models.dart';
+import '../../models/spotlight_models.dart';
 import '../../services/analytics_service.dart';
 import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
@@ -16,6 +17,8 @@ import 'widgets/beach_cart_picker_sheet.dart';
 import 'widgets/home_context_header.dart';
 import 'widgets/home_hero_carousel.dart';
 import 'widgets/home_modules.dart';
+import 'widgets/home_spotlight_rail.dart';
+import 'widgets/spotlight_sheet.dart';
 
 /// Which of the three Home layouts the customer gets. Resolved from their
 /// state on every build — never chosen by hand.
@@ -249,6 +252,7 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(height: 10),
       ],
       if (currentMode == HomeMode.liveOrder) ...buildOrderAgain(),
+      ...buildSpotlight(),
       ...buildBottleRail(),
       ...buildCategoryChips(),
       ...buildFeaturedRail(),
@@ -301,6 +305,30 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       const SizedBox(height: 26),
     ];
+  }
+
+  /// The Spotlight rail. No banners, no section — unlike the hero carousel there
+  /// is nothing bundled to fall back to.
+  List<Widget> buildSpotlight() {
+    final banners = widget.data.spotlightBanners;
+    if (banners.isEmpty) return const [];
+
+    return [
+      const HomeSectionHeader(title: 'The Spotlight'),
+      HomeSpotlightRail(banners: banners, onOpenBanner: openSpotlightBanner),
+      const SizedBox(height: 26),
+    ];
+  }
+
+  void openSpotlightBanner(SpotlightBanner banner) {
+    showSpotlightSheet(
+      context: context,
+      banner: banner,
+      locationId: widget.data.selectedLocationId,
+      onCartChanged: widget.onCartChanged,
+      onOpenCocktail: (product) =>
+          widget.onOpenCocktail(Cocktail.fromShopProduct(product)),
+    );
   }
 
   List<Widget> buildBottleRail() {

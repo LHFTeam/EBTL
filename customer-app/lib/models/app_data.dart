@@ -4,6 +4,7 @@ import 'cocktail_models.dart';
 import 'common_models.dart';
 import 'finder_models.dart';
 import 'golden_hour_models.dart';
+import 'spotlight_models.dart';
 
 class AppData {
   final HeroContent hero;
@@ -11,6 +12,12 @@ class AppData {
   /// CMS-driven slides for the Home hero carousel, in display order. Empty
   /// means marketing has none live and the carousel shows its bundled slides.
   final List<HomeHeroBanner> heroBanners;
+
+  /// CMS-driven banners for Home's "The Spotlight" rail, in display order. Empty
+  /// means marketing has none live and Home renders no rail — there is no
+  /// fallback, because a Spotlight banner's whole purpose is a curated product
+  /// set only the dashboard can define.
+  final List<SpotlightBanner> spotlightBanners;
 
   /// How long each hero slide dwells before the carousel advances itself, set
   /// in the dashboard. Falls back to [HomeHeroBanner.defaultRotation].
@@ -32,6 +39,7 @@ class AppData {
   const AppData({
     required this.hero,
     required this.heroBanners,
+    required this.spotlightBanners,
     required this.heroRotation,
     required this.goldenHour,
     required this.serviceAreas,
@@ -53,6 +61,7 @@ class AppData {
     return AppData(
       hero: hero,
       heroBanners: heroBanners,
+      spotlightBanners: spotlightBanners,
       heroRotation: heroRotation,
       goldenHour: goldenHour,
       serviceAreas: serviceAreas,
@@ -102,6 +111,12 @@ class AppData {
       heroBanners: sortHeroBanners(
         readMapList(homeJson['heroBanners'])
             .map(HomeHeroBanner.fromJson)
+            .where((banner) => banner.isRenderable)
+            .toList(),
+      ),
+      spotlightBanners: sortSpotlightBanners(
+        readMapList(homeJson['spotlightBanners'])
+            .map(SpotlightBanner.fromJson)
             .where((banner) => banner.isRenderable)
             .toList(),
       ),

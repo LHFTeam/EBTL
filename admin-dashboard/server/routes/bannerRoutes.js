@@ -75,6 +75,29 @@ const heroSettingsPatchSchema = z.object({
   rotation_seconds: z.coerce.number().int().min(2).max(60)
 });
 
+// A Spotlight banner opens its own sheet rather than a deep link, so `title` is
+// required — it is that sheet's heading. The product selection is two additive
+// lists; a banner may carry loose products, whole categories, or both.
+const uuidList = z.array(uuid).max(200).optional();
+
+const spotlightFieldsSchema = z.object({
+  title: z.string().trim().min(1).max(80),
+  subtitle: optionalText(200),
+  display_order: z.coerce.number().int().min(0),
+  is_active: z.boolean().optional(),
+  product_ids: uuidList,
+  category_ids: uuidList
+});
+
+const spotlightCreateSchema = spotlightFieldsSchema.extend({
+  image: imageUploadSchema
+});
+
+// Partial so a PATCH can touch one field, but the selections stay all-or-nothing
+// per list: sending `product_ids` replaces that list wholesale, omitting it
+// leaves it alone.
+const spotlightPatchSchema = spotlightFieldsSchema.partial();
+
 async function ensureShopSettings() {
   const current = await supabase
     .from('shop_settings')
@@ -111,19 +134,71 @@ async function ensureHeroSettings() {
     .single();
 }
 
+// Replaces one banner's selection list wholesale. `undefined` means the PATCH
+// did not mention the list and it is left alone; an empty array clears it.
+async function replaceSpotlightSelection({ table, column, bannerId, ids }) {
+  if (!Array.isArray(ids)) return { error: null };
+
+  const cleared = await supabase.from(table).delete().eq('banner_id', bannerId);
+  if (cleared.error) return { error: cleared.error };
+  if (!ids.length) return { error: null };
+
+  const unique = [...new Set(ids)];
+  return supabase.from(table).insert(unique.map((id) => ({ banner_id: bannerId, [column]: id })));
+}
+
+// The Spotlight rows with their two selection lists folded in, so the tab can
+// render every banner's pickers from one response.
+//
+// An empty list on a read error rather than a propagated failure: the Spotlight
+// tables ship in a migration that may not be applied yet (see
+// db/migrations/20260806000000_spotlight_banners.sql), and a missing table must
+// not take the whole Banners tab down with it. A write against them still
+// surfaces its real error.
+async function loadSpotlightBanners() {
+  const banners = await supabase
+    .from('spotlight_banners')
+    .select('*')
+    .order('display_order')
+    .order('created_at');
+
+  if (banners.error) return { data: [] };
+
+  const bannerIds = (banners.data || []).map((banner) => banner.id);
+
+  if (!bannerIds.length) return { data: [] };
+
+  const [products, categories] = await Promise.all([
+    supabase.from('spotlight_banner_products').select('banner_id,product_id').in('banner_id', bannerIds),
+    supabase.from('spotlight_banner_categories').select('banner_id,category_id').in('banner_id', bannerIds)
+  ]);
+
+  if (products.error || categories.error) return { data: [] };
+
+  return {
+    data: banners.data.map((banner) => ({
+      ...banner,
+      product_ids: (products.data || []).filter((row) => row.banner_id === banner.id).map((row) => row.product_id),
+      category_ids: (categories.data || []).filter((row) => row.banner_id === banner.id).map((row) => row.category_id)
+    }))
+  };
+}
+
 // Everything the Banners tab needs in one call: the hero carousel rows and its
-// rotation setting, the shop banner image, and the catalog rows behind the
-// deep-link pickers.
+// rotation setting, the shop banner image, the Spotlight rows, and the catalog
+// rows behind the deep-link and Spotlight-selection pickers.
 bannerRouter.get('/banners', requireArea('banners'), async (_req, res) => {
-  const [heroBanners, heroSettings, shopSettings, categories, cocktails] = await Promise.all([
+  const [heroBanners, heroSettings, shopSettings, categories, cocktails, spotlightBanners, products] = await Promise.all([
     supabase.from('home_hero_banners').select('*').order('display_order').order('created_at'),
     ensureHeroSettings(),
     ensureShopSettings(),
     supabase.from('product_categories').select('id,name').eq('is_active', true).order('sort_order').order('name'),
-    supabase.from('products').select('slug,name').eq('status', 'active').eq('product_type', 'cocktail').order('name')
+    supabase.from('products').select('slug,name').eq('status', 'active').eq('product_type', 'cocktail').order('name'),
+    loadSpotlightBanners(),
+    supabase.from('products').select('id,name,product_type').eq('status', 'active').order('name')
   ]);
 
-  for (const result of [heroBanners, heroSettings, shopSettings, categories, cocktails]) {
+  for (const result of [heroBanners, heroSettings, shopSettings, categories, cocktails, products]) {
     if (result.error) return res.status(400).json({ error: result.error.message });
   }
 
@@ -131,9 +206,14 @@ bannerRouter.get('/banners', requireArea('banners'), async (_req, res) => {
     heroBanners: heroBanners.data || [],
     heroSettings: heroSettings.data,
     shopSettings: shopSettings.data,
+    spotlightBanners: spotlightBanners.data || [],
     deepLinkOptions: {
       categories: categories.data || [],
       cocktails: (cocktails.data || []).filter((cocktail) => cocktail.slug)
+    },
+    spotlightOptions: {
+      categories: categories.data || [],
+      products: products.data || []
     }
   });
 });
@@ -261,6 +341,165 @@ bannerRouter.delete('/banners/hero/:id', requireArea('banners'), async (req, res
   if (!banner.data) return res.status(404).json({ error: 'Hero banner not found.' });
 
   const deleted = await supabase.from('home_hero_banners').delete().eq('id', req.params.id);
+  if (deleted.error) return res.status(400).json({ error: deleted.error.message });
+
+  await removeStoredAsset(banner.data.image_url);
+
+  res.json({ deleted: true, id: req.params.id });
+});
+
+bannerRouter.post('/banners/spotlight', requireArea('banners'), async (req, res) => {
+  const parsed = spotlightCreateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid spotlight banner') });
+
+  const imageBuffer = parseWebpUpload(parsed.data.image, res, 'Spotlight banner image');
+  if (!imageBuffer) return;
+
+  const uploaded = await uploadWebpAsset({ folder: 'banners/spotlight', ownerId: 'new', buffer: imageBuffer });
+  if (uploaded.error) return res.status(400).json({ error: uploaded.error.message });
+
+  const created = await supabase
+    .from('spotlight_banners')
+    .insert(clean({
+      image_url: uploaded.publicUrl,
+      title: parsed.data.title,
+      subtitle: parsed.data.subtitle ?? null,
+      display_order: parsed.data.display_order,
+      is_active: parsed.data.is_active
+    }))
+    .select('*')
+    .single();
+
+  // Same reasoning as the hero banner: the row is what makes the upload
+  // reachable, so a failed insert leaves an orphan worth dropping.
+  if (created.error) {
+    await supabase.storage.from(SHOP_ASSETS_BUCKET).remove([uploaded.storagePath]);
+    return res.status(400).json({ error: created.error.message });
+  }
+
+  const selections = await Promise.all([
+    replaceSpotlightSelection({
+      table: 'spotlight_banner_products',
+      column: 'product_id',
+      bannerId: created.data.id,
+      ids: parsed.data.product_ids
+    }),
+    replaceSpotlightSelection({
+      table: 'spotlight_banner_categories',
+      column: 'category_id',
+      bannerId: created.data.id,
+      ids: parsed.data.category_ids
+    })
+  ]);
+
+  for (const selection of selections) {
+    if (selection.error) return res.status(400).json({ error: selection.error.message });
+  }
+
+  res.json({
+    banner: {
+      ...created.data,
+      product_ids: parsed.data.product_ids || [],
+      category_ids: parsed.data.category_ids || []
+    }
+  });
+});
+
+bannerRouter.patch('/banners/spotlight/:id', requireArea('banners'), async (req, res) => {
+  const bannerId = uuid.safeParse(req.params.id);
+  if (!bannerId.success) return res.status(400).json({ error: 'Invalid spotlight banner id.' });
+
+  const parsed = spotlightPatchSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: zodErrorMessage(parsed.error, 'Invalid spotlight banner update') });
+
+  const { product_ids: productIds, category_ids: categoryIds, ...columns } = parsed.data;
+  const payload = clean(columns);
+
+  if (!Object.keys(payload).length && !Array.isArray(productIds) && !Array.isArray(categoryIds)) {
+    return res.status(400).json({ error: 'No spotlight banner fields were provided to update.' });
+  }
+
+  // A selection-only PATCH still has to prove the banner exists, which the
+  // update below does on its way to returning the row.
+  const updated = Object.keys(payload).length
+    ? await supabase.from('spotlight_banners').update(payload).eq('id', req.params.id).select('*').single()
+    : await supabase.from('spotlight_banners').select('*').eq('id', req.params.id).single();
+
+  if (updated.error) return res.status(400).json({ error: updated.error.message });
+
+  const selections = await Promise.all([
+    replaceSpotlightSelection({
+      table: 'spotlight_banner_products',
+      column: 'product_id',
+      bannerId: req.params.id,
+      ids: productIds
+    }),
+    replaceSpotlightSelection({
+      table: 'spotlight_banner_categories',
+      column: 'category_id',
+      bannerId: req.params.id,
+      ids: categoryIds
+    })
+  ]);
+
+  for (const selection of selections) {
+    if (selection.error) return res.status(400).json({ error: selection.error.message });
+  }
+
+  res.json({ banner: updated.data });
+});
+
+bannerRouter.post('/banners/spotlight/:id/image', requireArea('banners'), async (req, res) => {
+  const bannerId = uuid.safeParse(req.params.id);
+  if (!bannerId.success) return res.status(400).json({ error: 'Invalid spotlight banner id.' });
+
+  const imageBuffer = parseWebpUpload(req.body, res, 'Spotlight banner image');
+  if (!imageBuffer) return;
+
+  const banner = await supabase
+    .from('spotlight_banners')
+    .select('id,image_url')
+    .eq('id', req.params.id)
+    .maybeSingle();
+
+  if (banner.error) return res.status(400).json({ error: banner.error.message });
+  if (!banner.data) return res.status(404).json({ error: 'Spotlight banner not found.' });
+
+  const uploaded = await uploadWebpAsset({ folder: 'banners/spotlight', ownerId: req.params.id, buffer: imageBuffer });
+  if (uploaded.error) return res.status(400).json({ error: uploaded.error.message });
+
+  const updated = await supabase
+    .from('spotlight_banners')
+    .update({ image_url: uploaded.publicUrl })
+    .eq('id', req.params.id)
+    .select('*')
+    .single();
+
+  if (updated.error) {
+    await supabase.storage.from(SHOP_ASSETS_BUCKET).remove([uploaded.storagePath]);
+    return res.status(400).json({ error: updated.error.message });
+  }
+
+  await removeStoredAsset(banner.data.image_url);
+
+  res.json({ banner: updated.data, image_url: uploaded.publicUrl, storage_path: uploaded.storagePath });
+});
+
+// The selection rows go with it through `on delete cascade`.
+bannerRouter.delete('/banners/spotlight/:id', requireArea('banners'), async (req, res) => {
+  const bannerId = uuid.safeParse(req.params.id);
+  if (!bannerId.success) return res.status(400).json({ error: 'Invalid spotlight banner id.' });
+
+  const banner = await supabase
+    .from('spotlight_banners')
+    .select('id,image_url')
+    .eq('id', req.params.id)
+    .maybeSingle();
+
+  if (banner.error) return res.status(400).json({ error: banner.error.message });
+  if (!banner.data) return res.status(404).json({ error: 'Spotlight banner not found.' });
+
+  const deleted = await supabase.from('spotlight_banners').delete().eq('id', req.params.id);
   if (deleted.error) return res.status(400).json({ error: deleted.error.message });
 
   await removeStoredAsset(banner.data.image_url);

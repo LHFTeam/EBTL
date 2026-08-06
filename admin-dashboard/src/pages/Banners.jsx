@@ -37,6 +37,27 @@ const blankBanner = {
   is_active: true
 };
 
+const TITLE_MAX = 80;
+const SUBTITLE_MAX = 200;
+
+// A Spotlight banner opens its own sheet rather than a deep link, so the title
+// is required — it is that sheet's heading — and the destination is the product
+// selection instead of a link.
+const blankSpotlight = {
+  title: '',
+  subtitle: '',
+  display_order: 0,
+  is_active: true,
+  product_ids: [],
+  category_ids: []
+};
+
+function toggleId(ids, id, checked) {
+  const current = new Set(ids || []);
+  if (checked) current.add(id); else current.delete(id);
+  return [...current];
+}
+
 function fileSizeLabel(bytes) {
   if (!bytes) return '0 KB';
   if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`;
@@ -127,6 +148,30 @@ function DeepLinkFields({ draft, options, onPatch }) {
   </>;
 }
 
+// A scrollable checkbox list. Used for both Spotlight selections: the two lists
+// are additive, so a banner may tick loose products, whole categories, or both.
+function SelectionPicker({ label, hint, options, selectedIds, onToggle }) {
+  const selected = new Set(selectedIds || []);
+
+  return <div className="selectionPicker">
+    <b>{label} <span className="muted smallText">({selected.size} selected)</span></b>
+    <p className="muted smallText noPad">{hint}</p>
+    <div className="selectionPickerList">
+      {options.length ? options.map((option) => <label className="checkboxField" key={option.id}>
+        <input
+          type="checkbox"
+          checked={selected.has(option.id)}
+          onChange={(e) => onToggle(option.id, e.target.checked)}
+        />
+        <span>
+          {option.name}
+          {option.product_type && <span className="muted smallText"> · {option.product_type}</span>}
+        </span>
+      </label>) : <span className="muted smallText">Nothing to choose from.</span>}
+    </div>
+  </div>;
+}
+
 export default function Banners() {
   const { data, loading, error, reload } = useLoad(() => api('/api/banners'));
   const messageRef = useRef(null);
@@ -138,10 +183,16 @@ export default function Banners() {
   const [bannerEdits, setBannerEdits] = useState({});
   const [bannerImageFiles, setBannerImageFiles] = useState({});
   const [rotationSeconds, setRotationSeconds] = useState(ROTATION_DEFAULT_SECONDS);
+  const [newSpotlight, setNewSpotlight] = useState(blankSpotlight);
+  const [newSpotlightFile, setNewSpotlightFile] = useState(null);
+  const [spotlightEdits, setSpotlightEdits] = useState({});
+  const [spotlightImageFiles, setSpotlightImageFiles] = useState({});
 
   const heroBanners = data?.heroBanners || [];
+  const spotlightBanners = data?.spotlightBanners || [];
   const shopSettings = data?.shopSettings || {};
   const deepLinkOptions = data?.deepLinkOptions || { cocktails: [], categories: [] };
+  const spotlightOptions = data?.spotlightOptions || { products: [], categories: [] };
 
   // Keyed off the payload rather than the derived array: `data?.heroBanners ||
   // []` is a fresh array on every render while the load is in flight.
@@ -157,6 +208,17 @@ export default function Banners() {
 
   useEffect(() => {
     setRotationSeconds(data?.heroSettings?.rotation_seconds ?? ROTATION_DEFAULT_SECONDS);
+  }, [data]);
+
+  useEffect(() => {
+    setSpotlightEdits(Object.fromEntries((data?.spotlightBanners || []).map((banner) => [banner.id, {
+      title: banner.title || '',
+      subtitle: banner.subtitle || '',
+      display_order: banner.display_order ?? 0,
+      is_active: !!banner.is_active,
+      product_ids: banner.product_ids || [],
+      category_ids: banner.category_ids || []
+    }])));
   }, [data]);
 
   function showMessage(text, type = 'ok') {
@@ -299,6 +361,98 @@ export default function Banners() {
       await api(`/api/banners/hero/${bannerId}`, { method: 'DELETE' });
       setBannerImageFiles((current) => ({ ...current, [bannerId]: null }));
     }, 'Hero banner deleted.');
+  }
+
+  async function addSpotlightBanner(e) {
+    e.preventDefault();
+
+    if (!newSpotlightFile) {
+      showMessage('Choose a .webp banner image first.', 'error');
+      return;
+    }
+
+    await runAction(async () => {
+      await api('/api/banners/spotlight', {
+        method: 'POST',
+        body: JSON.stringify({
+          image: await imageUploadPayload(newSpotlightFile),
+          title: newSpotlight.title,
+          subtitle: newSpotlight.subtitle,
+          display_order: newSpotlight.display_order,
+          is_active: toBool(newSpotlight.is_active),
+          product_ids: newSpotlight.product_ids,
+          category_ids: newSpotlight.category_ids
+        })
+      });
+
+      setNewSpotlight(blankSpotlight);
+      setNewSpotlightFile(null);
+    }, 'Spotlight banner added.');
+  }
+
+  function patchSpotlightEdit(bannerId, patch) {
+    setSpotlightEdits((current) => ({
+      ...current,
+      [bannerId]: {
+        ...(current[bannerId] || {}),
+        ...patch
+      }
+    }));
+  }
+
+  async function saveSpotlightBanner(bannerId) {
+    const draft = spotlightEdits[bannerId] || {};
+
+    await runAction(async () => {
+      await api(`/api/banners/spotlight/${bannerId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          title: draft.title ?? '',
+          subtitle: draft.subtitle ?? '',
+          // Same as the hero banner: a cleared number input must leave the
+          // stored order alone rather than coercing to 0.
+          display_order: draft.display_order === '' ? undefined : draft.display_order,
+          is_active: toBool(draft.is_active),
+          product_ids: draft.product_ids || [],
+          category_ids: draft.category_ids || []
+        })
+      });
+    }, 'Spotlight banner updated.');
+  }
+
+  async function setSpotlightBannerActive(bannerId, isActive) {
+    await runAction(async () => {
+      await api(`/api/banners/spotlight/${bannerId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_active: isActive })
+      });
+    }, isActive ? 'Spotlight banner shown.' : 'Spotlight banner hidden.');
+  }
+
+  async function uploadSpotlightImage(bannerId) {
+    const file = spotlightImageFiles[bannerId];
+
+    if (!file) {
+      showMessage('Choose a .webp banner image first.', 'error');
+      return;
+    }
+
+    await runAction(async () => {
+      await api(`/api/banners/spotlight/${bannerId}/image`, {
+        method: 'POST',
+        body: JSON.stringify(await imageUploadPayload(file))
+      });
+      setSpotlightImageFiles((current) => ({ ...current, [bannerId]: null }));
+    }, 'Spotlight banner image replaced.');
+  }
+
+  async function deleteSpotlightBanner(bannerId) {
+    if (!window.confirm('Delete this spotlight banner? Its image and product selection go with it and this cannot be undone.')) return;
+
+    await runAction(async () => {
+      await api(`/api/banners/spotlight/${bannerId}`, { method: 'DELETE' });
+      setSpotlightImageFiles((current) => ({ ...current, [bannerId]: null }));
+    }, 'Spotlight banner deleted.');
   }
 
   async function uploadShopBanner(e) {
@@ -469,6 +623,152 @@ export default function Banners() {
             </div>
           </div>;
         }) : <div className="empty">No hero banners yet — the app is showing its three built-in slides.</div>}
+      </div>
+    </Section>
+
+    <Section title="The Spotlight">
+      <p className="muted smallText noPad">
+        The banner rail under the hero on the app's Home tab. Banners show in ascending order. Tapping one opens a
+        sheet with the banner image across the top, the title and subtitle under it, and a grid of the products
+        selected below — three to a row. Artwork should be a wide WebP at a <b>2.5 : 1</b> ratio (for example
+        1250 × 500); anything else is scaled to fit and may letterbox. With no active banners the app shows no
+        Spotlight section at all.
+      </p>
+
+      <form className="miniForm bannerAddForm" onSubmit={addSpotlightBanner}>
+        <label className="fileButton">
+          <input
+            type="file"
+            accept="image/webp,.webp"
+            onChange={(e) => chooseWebpImage(e.target.files?.[0], setNewSpotlightFile)}
+          />
+          <span>{newSpotlightFile ? 'Change WebP image' : 'Choose WebP image *'}</span>
+        </label>
+        <input
+          required
+          maxLength={TITLE_MAX}
+          placeholder="Sheet title *"
+          value={newSpotlight.title}
+          onChange={(e) => setNewSpotlight({ ...newSpotlight, title: e.target.value })}
+        />
+        <input
+          maxLength={SUBTITLE_MAX}
+          placeholder="Subtitle (optional)"
+          value={newSpotlight.subtitle}
+          onChange={(e) => setNewSpotlight({ ...newSpotlight, subtitle: e.target.value })}
+        />
+        <input
+          required
+          type="number"
+          step="1"
+          min="0"
+          placeholder="Order *"
+          value={newSpotlight.display_order}
+          onChange={(e) => setNewSpotlight({ ...newSpotlight, display_order: e.target.value })}
+        />
+        <label className="checkboxField">
+          <input
+            type="checkbox"
+            checked={toBool(newSpotlight.is_active)}
+            onChange={(e) => setNewSpotlight({ ...newSpotlight, is_active: e.target.checked })}
+          />
+          <span>Active</span>
+        </label>
+        <button className="primary" disabled={!newSpotlightFile || !newSpotlight.title.trim()}>Add banner</button>
+      </form>
+      {newSpotlightFile && <div className="selectedFile">Selected: {newSpotlightFile.name} · {fileSizeLabel(newSpotlightFile.size)}</div>}
+
+      <div className="spotlightSelection">
+        <SelectionPicker
+          label="Products"
+          hint="Individual products to show in this banner's sheet."
+          options={spotlightOptions.products}
+          selectedIds={newSpotlight.product_ids}
+          onToggle={(id, checked) => setNewSpotlight({ ...newSpotlight, product_ids: toggleId(newSpotlight.product_ids, id, checked) })}
+        />
+        <SelectionPicker
+          label="Categories"
+          hint="Whole categories. Every active product in them is included, so a product added later shows up on its own."
+          options={spotlightOptions.categories}
+          selectedIds={newSpotlight.category_ids}
+          onToggle={(id, checked) => setNewSpotlight({ ...newSpotlight, category_ids: toggleId(newSpotlight.category_ids, id, checked) })}
+        />
+      </div>
+
+      <div className="shopAdminList">
+        {spotlightBanners.length ? spotlightBanners.map((banner) => {
+          const draft = spotlightEdits[banner.id] || {};
+          const selectedFile = spotlightImageFiles[banner.id];
+
+          return <div className="shopCategoryRow" key={banner.id}>
+            <BannerImagePreview src={banner.image_url} label="No banner image" />
+
+            <div className="bannerFields">
+              <input
+                maxLength={TITLE_MAX}
+                value={draft.title || ''}
+                placeholder="Sheet title *"
+                onChange={(e) => patchSpotlightEdit(banner.id, { title: e.target.value })}
+              />
+              <input
+                maxLength={SUBTITLE_MAX}
+                value={draft.subtitle || ''}
+                placeholder="Subtitle (optional)"
+                onChange={(e) => patchSpotlightEdit(banner.id, { subtitle: e.target.value })}
+              />
+              <input
+                type="number"
+                min="0"
+                value={draft.display_order ?? 0}
+                onChange={(e) => patchSpotlightEdit(banner.id, { display_order: e.target.value })}
+              />
+              <label className="checkboxField">
+                <input
+                  type="checkbox"
+                  checked={toBool(draft.is_active)}
+                  onChange={(e) => patchSpotlightEdit(banner.id, { is_active: e.target.checked })}
+                />
+                <span>Active</span>
+              </label>
+            </div>
+
+            <div className="shopCategoryActions">
+              <button className="primary" type="button" onClick={() => saveSpotlightBanner(banner.id)}>Save</button>
+              <button type="button" onClick={() => setSpotlightBannerActive(banner.id, !banner.is_active)}>
+                {banner.is_active ? 'Hide' : 'Show'}
+              </button>
+
+              <label className="fileButton">
+                <input
+                  type="file"
+                  accept="image/webp,.webp"
+                  onChange={(e) => chooseWebpImage(e.target.files?.[0], (file) => setSpotlightImageFiles((current) => ({ ...current, [banner.id]: file })))}
+                />
+                <span>{selectedFile ? 'Change image' : 'Replace image'}</span>
+              </label>
+              <button type="button" disabled={!selectedFile} onClick={() => uploadSpotlightImage(banner.id)}>Upload image</button>
+              <button type="button" className="danger" onClick={() => deleteSpotlightBanner(banner.id)}>Delete</button>
+              {selectedFile && <span className="selectedFile">{selectedFile.name} · {fileSizeLabel(selectedFile.size)}</span>}
+            </div>
+
+            <div className="spotlightSelection">
+              <SelectionPicker
+                label="Products"
+                hint="Individual products to show in this banner's sheet. Save to apply."
+                options={spotlightOptions.products}
+                selectedIds={draft.product_ids}
+                onToggle={(id, checked) => patchSpotlightEdit(banner.id, { product_ids: toggleId(draft.product_ids, id, checked) })}
+              />
+              <SelectionPicker
+                label="Categories"
+                hint="Whole categories. Every active product in them is included. Save to apply."
+                options={spotlightOptions.categories}
+                selectedIds={draft.category_ids}
+                onToggle={(id, checked) => patchSpotlightEdit(banner.id, { category_ids: toggleId(draft.category_ids, id, checked) })}
+              />
+            </div>
+          </div>;
+        }) : <div className="empty">No spotlight banners yet — the app is showing no Spotlight section.</div>}
       </div>
     </Section>
 
