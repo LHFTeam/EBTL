@@ -5,13 +5,13 @@ with **one current exception**, called out below.
 
 ## Pending
 
-- `20260805000000_golden_hour_modes.sql` — **not applied.** It was written in a
-  session with no Supabase credentials, so it carries a placeholder timestamp
-  rather than a ledger version. Apply it, rename it to the version the ledger
-  records, add it to the table below, and refresh `../schema/`. Until then the
-  Marketing → Golden Hour tab has no table to read and the app's launch modal
-  stays inert (`/api/customer/home` answers `goldenHour: null`), so nothing
-  else breaks in the meantime.
+- `20260807000000_spotlight_banner_markdown_slide.sql` — **not applied.** It
+  was written in a session with no Supabase credentials, so it carries a
+  placeholder timestamp rather than a ledger version. Apply it, rename it to
+  the version the ledger records, add it to the table below, and refresh
+  `../schema/`. Until then the dashboard's Spotlight markdown-slide fields
+  have no columns to write to, so keep them out of use in the UI (or expect
+  writes to fail) until this is applied.
 
 The schema is owned by the Supabase dashboard, so this directory is a record
 rather than a pipeline: **none of these files should be re-run.** They are here
