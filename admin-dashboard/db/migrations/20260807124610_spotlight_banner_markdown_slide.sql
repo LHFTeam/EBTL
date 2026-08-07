@@ -1,13 +1,9 @@
 -- EBTL: Spotlight banners — link to a markdown slide instead of a product grid
 --
 -- The Postgres schema is managed in Supabase and is NOT otherwise tracked in
--- this repo (see AGENTS.md). This file is **not yet applied** — written in a
--- session with no Supabase credentials, so it carries a placeholder timestamp
--- rather than a ledger version. Apply it with `apply_migration`, rename it to
--- the version the ledger records, add it to the table in README.md, and
--- refresh `../schema/`. Until then the dashboard has no column to write to and
--- every Spotlight banner keeps opening its product-grid sheet, so nothing else
--- breaks in the meantime. It is idempotent and safe to re-run.
+-- this repo (see AGENTS.md). This file is the record of a migration already
+-- applied to the live project (`apply_migration`, ledger version
+-- 20260807124610). It is idempotent and safe to re-run.
 --
 -- Why: a Spotlight banner's destination has always been its own sheet over a
 -- curated product grid (20260806211254_spotlight_banners.sql). Marketing also
