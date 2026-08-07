@@ -42,3 +42,12 @@ CREATE TRIGGER trg_generate_transfer_number BEFORE INSERT ON public.stock_transf
 CREATE TRIGGER trg_post_stock_transfer_movements AFTER UPDATE OF status ON public.stock_transfers FOR EACH ROW EXECUTE FUNCTION public.post_stock_transfer_movements();
 CREATE TRIGGER trg_stock_transfers_updated_at BEFORE UPDATE ON public.stock_transfers FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 CREATE TRIGGER trg_suppliers_updated_at BEFORE UPDATE ON public.suppliers FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- Demand forecasting module (server/forecast/), migration 20260807171440.
+-- Appended as a block rather than sorted inline; the next full run of
+-- ../tools/dump_schema.sql will re-sort these into place.
+-- ---------------------------------------------------------------------------
+
+CREATE TRIGGER set_forecast_campaigns_updated_at BEFORE UPDATE ON public.forecast_campaigns FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER set_forecast_cart_assumptions_updated_at BEFORE UPDATE ON public.forecast_cart_assumptions FOR EACH ROW EXECUTE FUNCTION set_updated_at();

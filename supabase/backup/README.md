@@ -48,6 +48,14 @@ empty.
 | RLS policies | 86, across 53 RLS-enabled tables |
 | Table / column comments | 36 |
 
+Those totals predate the demand-forecasting module, which migration
+`20260807171440_forecast_module` added on 2026-08-07 and which is appended to
+each file above as a labelled block: **16 `forecast_*` tables**, 16 primary
+keys, 23 check constraints, 21 foreign keys, 11 indexes, 2 triggers, 32 RLS
+policies and 6 comments. The module is self-contained — its foreign keys point
+outwards only (`locations`, `products`, `promotions`, `employees`), so nothing
+else in the schema depends on it and it restores in the same pass as the rest.
+
 Files apply in order and each is independently runnable:
 
 1. `01_prelude.sql` — extensions, enum types, standalone sequences

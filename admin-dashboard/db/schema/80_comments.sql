@@ -59,3 +59,16 @@ COMMENT ON COLUMN public.spotlight_banners.display_order IS 'Ascending position 
 COMMENT ON COLUMN public.spotlight_banners.markdown_body IS 'Markdown copy for a content_type = ''markdown'' banner''s slide. Supports headings (its first heading takes the place of the sheet title), images, and ordered/unordered lists. Unused and ignored when content_type = ''products''.';
 COMMENT ON COLUMN public.spotlight_banners.subtitle IS 'Optional line under the sheet title.';
 COMMENT ON COLUMN public.spotlight_banners.title IS 'Heading of the sheet the banner opens. Required — a sheet with no title has no heading to show.';
+
+-- ---------------------------------------------------------------------------
+-- Demand forecasting module (server/forecast/), migration 20260807171440.
+-- Appended as a block rather than sorted inline; the next full run of
+-- ../tools/dump_schema.sql will re-sort these into place.
+-- ---------------------------------------------------------------------------
+
+COMMENT ON TABLE public.forecast_demand_daily_cart IS 'Per-cart per-day demand facts. baseline_units is units with campaign uplift divided out, and is what the model smooths.';
+COMMENT ON TABLE public.forecast_cart_state IS 'Holt-Winters multiplicative state per cart. dow_index is renormalised to mean 1 on every update; dow_obs_count drives shrinkage toward the pooled network profile.';
+COMMENT ON TABLE public.forecast_product_state IS 'Dirichlet pseudo-counts for the product mix per cart, with exponential forgetting.';
+COMMENT ON TABLE public.forecast_campaigns IS 'Forecast-side campaign calendar. Decoupled from the promotions code engine: a campaign here changes forecasts only and grants no discount.';
+COMMENT ON TABLE public.forecast_campaign_effects IS 'Pooled log-uplift per campaign type and discount bucket. The empirical-Bayes prior a new campaign starts from.';
+COMMENT ON COLUMN public.forecast_daily_cart.p90 IS 'Stocking quantile (newsvendor critical fractile). Quantiles do not add: this is computed from the cart-level negative binomial, never by summing product p90s.';
