@@ -41,16 +41,27 @@ const TITLE_MAX = 80;
 const SUBTITLE_MAX = 200;
 
 // A Spotlight banner opens its own sheet rather than a deep link, so the title
-// is required — it is that sheet's heading — and the destination is the product
-// selection instead of a link.
+// is required — it is that sheet's heading — and the destination is either the
+// product selection or a markdown slide, chosen by content_type.
 const blankSpotlight = {
   title: '',
   subtitle: '',
   display_order: 0,
   is_active: true,
   product_ids: [],
-  category_ids: []
+  category_ids: [],
+  content_type: 'products',
+  markdown_body: ''
 };
+
+const MARKDOWN_BODY_MAX = 20000;
+
+// Keep in step with server/routes/bannerRoutes.js's spotlightContentTypeSchema
+// and the app's SpotlightContentType.
+const spotlightContentTypes = [
+  { value: 'products', label: 'Curated products' },
+  { value: 'markdown', label: 'Markdown slide' }
+];
 
 function toggleId(ids, id, checked) {
   const current = new Set(ids || []);
@@ -119,6 +130,40 @@ function BannerImagePreview({ src, label = 'No image' }) {
   return <div className="imagePreviewBox shopImagePreviewBox">
     {src ? <img className="cocktailImagePreview" src={src} alt="" /> : <span className="imagePlaceholder">{label}</span>}
   </div>;
+}
+
+// Which sheet a Spotlight banner opens, shared by the add form and each
+// banner row. A markdown slide's own first heading becomes the sheet's
+// title, styled the same as the product-grid sheet's title — see
+// customer-app/lib/features/home/widgets/spotlight_markdown_sheet.dart.
+function SpotlightContentTypeField({ draft, onPatch }) {
+  return <label className="fieldStack">
+    <span>Opens</span>
+    <select
+      value={draft.content_type || 'products'}
+      onChange={(e) => onPatch({ content_type: e.target.value })}
+    >
+      {spotlightContentTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+    </select>
+  </label>;
+}
+
+function SpotlightMarkdownField({ draft, onPatch }) {
+  return <label className="fieldStack spotlightMarkdownField">
+    <span>Markdown slide content *</span>
+    <textarea
+      rows="8"
+      maxLength={MARKDOWN_BODY_MAX}
+      placeholder={'# Heading\n\nBody copy, **bold**, _italic_...\n\n- bullet\n1. numbered\n\n![alt text](https://.../image.webp)'}
+      value={draft.markdown_body || ''}
+      onChange={(e) => onPatch({ markdown_body: e.target.value })}
+    />
+    <small>
+      Use Markdown. A first-level heading (<code># Like this</code>) renders the same size and weight as a
+      product-grid banner's sheet title; ##, ### and #### headings step down from there. Images, bullet and
+      numbered lists are supported. Do not paste raw HTML.
+    </small>
+  </label>;
 }
 
 // The destination select plus its dependent picker, shared by the add form and
@@ -217,7 +262,9 @@ export default function Banners() {
       display_order: banner.display_order ?? 0,
       is_active: !!banner.is_active,
       product_ids: banner.product_ids || [],
-      category_ids: banner.category_ids || []
+      category_ids: banner.category_ids || [],
+      content_type: banner.content_type || 'products',
+      markdown_body: banner.markdown_body || ''
     }])));
   }, [data]);
 
@@ -381,7 +428,9 @@ export default function Banners() {
           display_order: newSpotlight.display_order,
           is_active: toBool(newSpotlight.is_active),
           product_ids: newSpotlight.product_ids,
-          category_ids: newSpotlight.category_ids
+          category_ids: newSpotlight.category_ids,
+          content_type: newSpotlight.content_type,
+          markdown_body: newSpotlight.content_type === 'markdown' ? newSpotlight.markdown_body : ''
         })
       });
 
@@ -414,7 +463,9 @@ export default function Banners() {
           display_order: draft.display_order === '' ? undefined : draft.display_order,
           is_active: toBool(draft.is_active),
           product_ids: draft.product_ids || [],
-          category_ids: draft.category_ids || []
+          category_ids: draft.category_ids || [],
+          content_type: draft.content_type || 'products',
+          markdown_body: draft.content_type === 'markdown' ? (draft.markdown_body ?? '') : ''
         })
       });
     }, 'Spotlight banner updated.');
@@ -629,10 +680,10 @@ export default function Banners() {
     <Section title="The Spotlight">
       <p className="muted smallText noPad">
         The banner rail under the hero on the app's Home tab. Banners show in ascending order. Tapping one opens a
-        sheet with the banner image across the top, the title and subtitle under it, and a grid of the products
-        selected below — three to a row. Artwork should be a wide WebP at a <b>2.5 : 1</b> ratio (for example
-        1250 × 500); anything else is scaled to fit and may letterbox. With no active banners the app shows no
-        Spotlight section at all.
+        sheet with the banner image across the top, then either a grid of the products selected below — three to a
+        row — or a markdown slide, depending on what "Opens" is set to. Artwork should be a wide WebP at a
+        <b> 2.5 : 1</b> ratio (for example 1250 × 500); anything else is scaled to fit and may letterbox. With no
+        active banners the app shows no Spotlight section at all.
       </p>
 
       <form className="miniForm bannerAddForm" onSubmit={addSpotlightBanner}>
@@ -674,26 +725,44 @@ export default function Banners() {
           />
           <span>Active</span>
         </label>
-        <button className="primary" disabled={!newSpotlightFile || !newSpotlight.title.trim()}>Add banner</button>
+        <SpotlightContentTypeField
+          draft={newSpotlight}
+          onPatch={(patch) => setNewSpotlight({ ...newSpotlight, ...patch })}
+        />
+        <button
+          className="primary"
+          disabled={
+            !newSpotlightFile
+            || !newSpotlight.title.trim()
+            || (newSpotlight.content_type === 'markdown' && !newSpotlight.markdown_body.trim())
+          }
+        >
+          Add banner
+        </button>
       </form>
       {newSpotlightFile && <div className="selectedFile">Selected: {newSpotlightFile.name} · {fileSizeLabel(newSpotlightFile.size)}</div>}
 
-      <div className="spotlightSelection">
-        <SelectionPicker
-          label="Products"
-          hint="Individual products to show in this banner's sheet."
-          options={spotlightOptions.products}
-          selectedIds={newSpotlight.product_ids}
-          onToggle={(id, checked) => setNewSpotlight({ ...newSpotlight, product_ids: toggleId(newSpotlight.product_ids, id, checked) })}
-        />
-        <SelectionPicker
-          label="Categories"
-          hint="Whole categories. Every active product in them is included, so a product added later shows up on its own."
-          options={spotlightOptions.categories}
-          selectedIds={newSpotlight.category_ids}
-          onToggle={(id, checked) => setNewSpotlight({ ...newSpotlight, category_ids: toggleId(newSpotlight.category_ids, id, checked) })}
-        />
-      </div>
+      {newSpotlight.content_type === 'markdown'
+        ? <SpotlightMarkdownField
+            draft={newSpotlight}
+            onPatch={(patch) => setNewSpotlight({ ...newSpotlight, ...patch })}
+          />
+        : <div className="spotlightSelection">
+            <SelectionPicker
+              label="Products"
+              hint="Individual products to show in this banner's sheet."
+              options={spotlightOptions.products}
+              selectedIds={newSpotlight.product_ids}
+              onToggle={(id, checked) => setNewSpotlight({ ...newSpotlight, product_ids: toggleId(newSpotlight.product_ids, id, checked) })}
+            />
+            <SelectionPicker
+              label="Categories"
+              hint="Whole categories. Every active product in them is included, so a product added later shows up on its own."
+              options={spotlightOptions.categories}
+              selectedIds={newSpotlight.category_ids}
+              onToggle={(id, checked) => setNewSpotlight({ ...newSpotlight, category_ids: toggleId(newSpotlight.category_ids, id, checked) })}
+            />
+          </div>}
 
       <div className="shopAdminList">
         {spotlightBanners.length ? spotlightBanners.map((banner) => {
@@ -730,6 +799,10 @@ export default function Banners() {
                 />
                 <span>Active</span>
               </label>
+              <SpotlightContentTypeField
+                draft={draft}
+                onPatch={(patch) => patchSpotlightEdit(banner.id, patch)}
+              />
             </div>
 
             <div className="shopCategoryActions">
@@ -751,22 +824,27 @@ export default function Banners() {
               {selectedFile && <span className="selectedFile">{selectedFile.name} · {fileSizeLabel(selectedFile.size)}</span>}
             </div>
 
-            <div className="spotlightSelection">
-              <SelectionPicker
-                label="Products"
-                hint="Individual products to show in this banner's sheet. Save to apply."
-                options={spotlightOptions.products}
-                selectedIds={draft.product_ids}
-                onToggle={(id, checked) => patchSpotlightEdit(banner.id, { product_ids: toggleId(draft.product_ids, id, checked) })}
-              />
-              <SelectionPicker
-                label="Categories"
-                hint="Whole categories. Every active product in them is included. Save to apply."
-                options={spotlightOptions.categories}
-                selectedIds={draft.category_ids}
-                onToggle={(id, checked) => patchSpotlightEdit(banner.id, { category_ids: toggleId(draft.category_ids, id, checked) })}
-              />
-            </div>
+            {draft.content_type === 'markdown'
+              ? <SpotlightMarkdownField
+                  draft={draft}
+                  onPatch={(patch) => patchSpotlightEdit(banner.id, patch)}
+                />
+              : <div className="spotlightSelection">
+                  <SelectionPicker
+                    label="Products"
+                    hint="Individual products to show in this banner's sheet. Save to apply."
+                    options={spotlightOptions.products}
+                    selectedIds={draft.product_ids}
+                    onToggle={(id, checked) => patchSpotlightEdit(banner.id, { product_ids: toggleId(draft.product_ids, id, checked) })}
+                  />
+                  <SelectionPicker
+                    label="Categories"
+                    hint="Whole categories. Every active product in them is included. Save to apply."
+                    options={spotlightOptions.categories}
+                    selectedIds={draft.category_ids}
+                    onToggle={(id, checked) => patchSpotlightEdit(banner.id, { category_ids: toggleId(draft.category_ids, id, checked) })}
+                  />
+                </div>}
           </div>;
         }) : <div className="empty">No spotlight banners yet — the app is showing no Spotlight section.</div>}
       </div>

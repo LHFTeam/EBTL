@@ -197,8 +197,11 @@ ALTER TABLE public.referrals ADD CONSTRAINT referrals_referee_discount_nonnegati
 ALTER TABLE public.referrals ADD CONSTRAINT referrals_referrer_reward_nonnegative_chk CHECK ((referrer_reward_amount >= (0)::numeric));
 ALTER TABLE public.referrals ADD CONSTRAINT referrals_status_chk CHECK ((status = ANY (ARRAY['pending'::text, 'qualified'::text, 'rewarded'::text, 'void'::text])));
 ALTER TABLE public.shop_settings ADD CONSTRAINT shop_settings_singleton CHECK ((id = true));
+ALTER TABLE public.spotlight_banners ADD CONSTRAINT spotlight_banners_content_type_valid CHECK ((content_type = ANY (ARRAY['products'::text, 'markdown'::text])));
 ALTER TABLE public.spotlight_banners ADD CONSTRAINT spotlight_banners_display_order_non_negative CHECK ((display_order >= 0));
 ALTER TABLE public.spotlight_banners ADD CONSTRAINT spotlight_banners_image_url_not_blank CHECK ((length(btrim(image_url)) > 0));
+ALTER TABLE public.spotlight_banners ADD CONSTRAINT spotlight_banners_markdown_body_max_20000 CHECK (((markdown_body IS NULL) OR (char_length(markdown_body) <= 20000)));
+ALTER TABLE public.spotlight_banners ADD CONSTRAINT spotlight_banners_markdown_body_required_when_markdown CHECK (((content_type <> 'markdown'::text) OR (length(btrim(COALESCE(markdown_body, ''::text))) > 0)));
 ALTER TABLE public.spotlight_banners ADD CONSTRAINT spotlight_banners_subtitle_max_200 CHECK (((subtitle IS NULL) OR (char_length(subtitle) <= 200)));
 ALTER TABLE public.spotlight_banners ADD CONSTRAINT spotlight_banners_title_max_80 CHECK ((char_length(title) <= 80));
 ALTER TABLE public.spotlight_banners ADD CONSTRAINT spotlight_banners_title_not_blank CHECK ((length(btrim(title)) > 0));

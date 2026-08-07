@@ -80,23 +80,43 @@ const heroSettingsPatchSchema = z.object({
 // lists; a banner may carry loose products, whole categories, or both.
 const uuidList = z.array(uuid).max(200).optional();
 
+// Which sheet a tap opens: the curated product grid (the original behaviour,
+// and the default so existing banners are unaffected) or a markdown slide.
+const spotlightContentTypeSchema = z.enum(['products', 'markdown']);
+
 const spotlightFieldsSchema = z.object({
   title: z.string().trim().min(1).max(80),
   subtitle: optionalText(200),
   display_order: z.coerce.number().int().min(0),
   is_active: z.boolean().optional(),
   product_ids: uuidList,
-  category_ids: uuidList
+  category_ids: uuidList,
+  content_type: spotlightContentTypeSchema.optional(),
+  markdown_body: optionalText(20000)
 });
 
-const spotlightCreateSchema = spotlightFieldsSchema.extend({
-  image: imageUploadSchema
-});
+// Mirrors the DB check constraint: a markdown banner with nothing written is a
+// draft, not a slide worth shipping. Only enforced when content_type is
+// actually part of this request — a PATCH that only touches, say,
+// display_order must not be blocked by a markdown_body it never mentioned.
+function requiresMarkdownBodyWhenMarkdown(value) {
+  return value.content_type !== 'markdown' || (value.markdown_body ?? '').length > 0;
+}
+const markdownBodyRefinement = {
+  message: 'A markdown slide needs markdown_body.',
+  path: ['markdown_body']
+};
+
+const spotlightCreateSchema = spotlightFieldsSchema
+  .extend({ image: imageUploadSchema })
+  .refine(requiresMarkdownBodyWhenMarkdown, markdownBodyRefinement);
 
 // Partial so a PATCH can touch one field, but the selections stay all-or-nothing
 // per list: sending `product_ids` replaces that list wholesale, omitting it
 // leaves it alone.
-const spotlightPatchSchema = spotlightFieldsSchema.partial();
+const spotlightPatchSchema = spotlightFieldsSchema
+  .partial()
+  .refine(requiresMarkdownBodyWhenMarkdown, markdownBodyRefinement);
 
 async function ensureShopSettings() {
   const current = await supabase
@@ -365,7 +385,9 @@ bannerRouter.post('/banners/spotlight', requireArea('banners'), async (req, res)
       title: parsed.data.title,
       subtitle: parsed.data.subtitle ?? null,
       display_order: parsed.data.display_order,
-      is_active: parsed.data.is_active
+      is_active: parsed.data.is_active,
+      content_type: parsed.data.content_type,
+      markdown_body: parsed.data.markdown_body ?? null
     }))
     .select('*')
     .single();

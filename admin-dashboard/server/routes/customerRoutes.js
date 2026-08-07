@@ -2158,7 +2158,7 @@ async function loadHomeHeroBanners() {
 async function loadSpotlightBanners() {
   const banners = await supabase
     .from('spotlight_banners')
-    .select('id,image_url,title,subtitle,display_order')
+    .select('id,image_url,title,subtitle,display_order,content_type,markdown_body')
     .eq('is_active', true)
     .order('display_order')
     .order('created_at');
@@ -2174,7 +2174,12 @@ function publicSpotlightBanner(banner) {
     image_url: banner.image_url,
     title: banner.title,
     subtitle: banner.subtitle || null,
-    display_order: banner.display_order || 0
+    display_order: banner.display_order || 0,
+    content_type: banner.content_type || 'products',
+    // Only a markdown banner's copy is ever the app's business — leaving it
+    // off a products banner's payload keeps that response the same shape it
+    // was before this column existed.
+    markdown_body: banner.content_type === 'markdown' ? banner.markdown_body || null : null
   };
 }
 

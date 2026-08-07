@@ -4446,7 +4446,7 @@ textarea {
 
 .bannerFields {
   display: grid;
-  grid-template-columns: minmax(160px, 1.6fr) minmax(160px, 2fr) minmax(150px, 1fr) minmax(150px, 1fr) 90px auto;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
   align-items: center;
 }
@@ -4481,6 +4481,13 @@ textarea {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 14px;
+  margin-top: 4px;
+}
+
+/* A markdown-slide banner's copy, in place of .spotlightSelection's product
+   pickers — same full-row span, single column. */
+.spotlightMarkdownField {
+  grid-column: 1 / -1;
   margin-top: 4px;
 }
 

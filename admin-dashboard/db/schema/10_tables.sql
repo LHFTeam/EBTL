@@ -728,7 +728,9 @@ CREATE TABLE IF NOT EXISTS public.spotlight_banners (
     display_order integer NOT NULL,
     is_active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    content_type text DEFAULT 'products'::text NOT NULL,
+    markdown_body text
 );
 ALTER TABLE public.spotlight_banners ENABLE ROW LEVEL SECURITY;
 

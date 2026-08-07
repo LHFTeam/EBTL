@@ -42,6 +42,8 @@ SpotlightBanner banner({
   String title = 'Lunch in minutes',
   String? subtitle,
   int displayOrder = 0,
+  SpotlightContentType contentType = SpotlightContentType.products,
+  String? markdownBody,
 }) {
   return SpotlightBanner(
     id: id,
@@ -49,6 +51,8 @@ SpotlightBanner banner({
     title: title,
     subtitle: subtitle,
     displayOrder: displayOrder,
+    contentType: contentType,
+    markdownBody: markdownBody,
   );
 }
 
@@ -121,6 +125,54 @@ void main() {
 
     test('a payload with no spotlight banners leaves the list empty', () {
       expect(appDataWith(const []).spotlightBanners, isEmpty);
+    });
+
+    test('an unrecognised or missing content_type reads as products', () {
+      final data = appDataWith([
+        {
+          'id': 's1',
+          'image_url': 'https://cdn.ebtl.test/a.webp',
+          'title': 'Products banner',
+        },
+        {
+          'id': 's2',
+          'image_url': 'https://cdn.ebtl.test/b.webp',
+          'title': 'Typo banner',
+          'content_type': 'not-a-real-type',
+        },
+      ]);
+
+      expect(
+        data.spotlightBanners.map((banner) => banner.contentType),
+        [SpotlightContentType.products, SpotlightContentType.products],
+      );
+    });
+
+    test('a markdown banner reads its content_type and markdown_body', () {
+      final data = appDataWith([
+        {
+          'id': 's1',
+          'image_url': 'https://cdn.ebtl.test/a.webp',
+          'title': 'Recipe of the week',
+          'content_type': 'markdown',
+          'markdown_body': '# Recipe of the week\n\nMuddle, shake, pour.',
+        },
+      ]);
+
+      final slide = data.spotlightBanners.first;
+      expect(slide.contentType, SpotlightContentType.markdown);
+      expect(slide.markdownBody, '# Recipe of the week\n\nMuddle, shake, pour.');
+      expect(slide.isMarkdownSlide, isTrue);
+    });
+
+    test('a markdown banner with no body does not report as a slide', () {
+      final slide = banner(contentType: SpotlightContentType.markdown);
+      expect(slide.isMarkdownSlide, isFalse);
+    });
+
+    test('a products banner never reports as a markdown slide', () {
+      final slide = banner(markdownBody: '# Ignored');
+      expect(slide.isMarkdownSlide, isFalse);
     });
   });
 

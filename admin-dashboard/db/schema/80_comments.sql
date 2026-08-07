@@ -54,6 +54,8 @@ COMMENT ON COLUMN public.shop_settings.banner_image_url IS 'Public WebP banner i
 COMMENT ON TABLE public.spotlight_banner_categories IS 'Whole categories picked for a Spotlight banner, resolved to active products at request time.';
 COMMENT ON TABLE public.spotlight_banner_products IS 'Loose products picked for a Spotlight banner. Unioned with the products of spotlight_banner_categories to build the banner sheet.';
 COMMENT ON TABLE public.spotlight_banners IS 'CMS-driven banners for the customer app home "The Spotlight" rail. Tapping one opens a sheet titled `title` over a grid of the products selected in spotlight_banner_products and spotlight_banner_categories.';
+COMMENT ON COLUMN public.spotlight_banners.content_type IS 'Which sheet tapping this banner opens: ''products'' (the curated grid from spotlight_banner_products/spotlight_banner_categories, the original and default behaviour) or ''markdown'' (markdown_body rendered as a slide).';
 COMMENT ON COLUMN public.spotlight_banners.display_order IS 'Ascending position in the Spotlight rail. Required — marketing always chooses where a banner sits.';
+COMMENT ON COLUMN public.spotlight_banners.markdown_body IS 'Markdown copy for a content_type = ''markdown'' banner''s slide. Supports headings (its first heading takes the place of the sheet title), images, and ordered/unordered lists. Unused and ignored when content_type = ''products''.';
 COMMENT ON COLUMN public.spotlight_banners.subtitle IS 'Optional line under the sheet title.';
 COMMENT ON COLUMN public.spotlight_banners.title IS 'Heading of the sheet the banner opens. Required — a sheet with no title has no heading to show.';

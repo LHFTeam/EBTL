@@ -11,6 +11,7 @@ import '../../../services/analytics_service.dart';
 import '../../../services/api_service.dart';
 import '../../../shared/widgets/app_state_widgets.dart';
 import '../../../shared/widgets/network_or_asset_image.dart';
+import '../../../shared/widgets/sheet_close_button.dart';
 import '../../shop/widgets/shop_product_detail_sheet.dart';
 import '../../shop/widgets/shop_product_widgets.dart';
 
@@ -226,7 +227,7 @@ class _SpotlightSheetState extends State<SpotlightSheet> {
                     Positioned(
                       top: MediaQuery.paddingOf(context).top + 8,
                       right: 12,
-                      child: const _SheetCloseButton(),
+                      child: const SheetCloseButton(),
                     ),
                   ],
                 ),
@@ -313,35 +314,6 @@ class _SpotlightSheetState extends State<SpotlightSheet> {
                 ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The sheet's only chrome. It sits over marketing's artwork, so it carries its
-/// own scrim rather than relying on the image being light enough behind it.
-class _SheetCloseButton extends StatelessWidget {
-  const _SheetCloseButton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: EbtlColors.navy.withValues(alpha: 0.55),
-      shape: const CircleBorder(),
-      child: InkWell(
-        onTap: () => Navigator.of(context).pop(),
-        customBorder: const CircleBorder(),
-        child: const SizedBox(
-          width: 36,
-          height: 36,
-          child: Center(
-            child: Icon(
-              Icons.close_rounded,
-              size: 20,
-              color: EbtlColors.white,
-            ),
           ),
         ),
       ),

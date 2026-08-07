@@ -18,6 +18,7 @@ import 'widgets/home_context_header.dart';
 import 'widgets/home_hero_carousel.dart';
 import 'widgets/home_modules.dart';
 import 'widgets/home_spotlight_rail.dart';
+import 'widgets/spotlight_markdown_sheet.dart';
 import 'widgets/spotlight_sheet.dart';
 
 /// Which of the three Home layouts the customer gets. Resolved from their
@@ -320,7 +321,15 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
   }
 
+  /// A markdown-slide banner opens its own read-only slide; every other
+  /// banner keeps opening the curated product grid, same as before this
+  /// destination existed.
   void openSpotlightBanner(SpotlightBanner banner) {
+    if (banner.isMarkdownSlide) {
+      showSpotlightMarkdownSheet(context: context, banner: banner);
+      return;
+    }
+
     showSpotlightSheet(
       context: context,
       banner: banner,
