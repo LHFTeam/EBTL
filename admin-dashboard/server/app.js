@@ -26,6 +26,8 @@ import { bannerRouter } from './routes/bannerRoutes.js';
 import { goldenHourRouter } from './routes/goldenHourRoutes.js';
 import { promotionRouter } from './routes/promotionRoutes.js';
 import { referralRouter } from './routes/referralRoutes.js';
+// Self-contained demand-forecasting module; see server/forecast/README.md.
+import { forecastRouter } from './forecast/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -105,6 +107,7 @@ export function createApp() {
   app.use('/api', goldenHourRouter);
   app.use('/api', promotionRouter);
   app.use('/api', referralRouter);
+  app.use('/api', forecastRouter);
   app.use('/api', customerRouter);
   app.use('/api', inventoryRouter);
   app.use('/api', transferRouter);

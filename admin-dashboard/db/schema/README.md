@@ -16,16 +16,22 @@ Captured from project `pfcncajijvtvsdwgwbjl` ("EBTL 1", eu-west-1, Postgres 17).
 | --- | --- |
 | `00_extensions_and_types.sql` | 4 extensions, 11 enum types, 2 sequences |
 | `05_private_schema.sql` | the `private` schema and its one SECURITY DEFINER function |
-| `10_tables.sql` | 57 tables — columns, defaults, generated/identity columns, RLS enablement |
-| `20_constraints.sql` | 278 constraints — 57 PK, 30 unique, 96 check, 95 FK |
-| `30_indexes.sql` | 89 indexes (the 87 constraint-backed ones live in `20_`) |
+| `10_tables.sql` | 73 tables — columns, defaults, generated/identity columns, RLS enablement |
+| `20_constraints.sql` | 338 constraints — 73 PK, 30 unique, 119 check, 116 FK |
+| `30_indexes.sql` | 100 indexes (the constraint-backed ones live in `20_`) |
 | `40_views.sql` | 8 views |
 | `50_functions.sql` | 13 functions in `public` |
-| `60_triggers.sql` | 36 triggers |
-| `70_rls_policies.sql` | 91 RLS policies |
-| `80_comments.sql` | 45 table and column comments |
+| `60_triggers.sql` | 38 triggers |
+| `70_rls_policies.sql` | 123 RLS policies |
+| `80_comments.sql` | 51 table and column comments |
 
 These counts are what the files contain, and they match the live catalogs as of
+2026-08-07 — the forecasting module (migration 20260807171440) brought 16
+`forecast_*` tables in, appended as a labelled block at the end of each file
+rather than sorted inline; the next full `../tools/dump_schema.sql` run will
+re-sort them, which is a formatting diff rather than a schema change.
+
+Earlier counts matched as of
 2026-08-04 — the spirit-profile and home-hero-banner work landed together and
 each brought its own tables into the capture.
 

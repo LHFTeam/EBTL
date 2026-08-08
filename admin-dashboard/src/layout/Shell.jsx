@@ -8,6 +8,8 @@ import Liquors from '../pages/Liquors.jsx';
 import Shop from '../pages/Shop.jsx';
 import Dashboard from '../pages/Dashboard.jsx';
 import Analytics from '../pages/Analytics.jsx';
+import Forecast from '../forecast/Forecast.jsx';
+import ForecastCampaigns from '../forecast/ForecastCampaigns.jsx';
 import Banners from '../pages/Banners.jsx';
 import GoldenHour from '../pages/GoldenHour.jsx';
 import Employees from '../pages/Employees.jsx';
@@ -169,6 +171,8 @@ export default function Shell({ user, access, onLogout }) {
       </header>}
       {active === 'dashboard' && <Dashboard />}
       {active === 'analytics' && <Analytics />}
+      {active === 'forecast' && <Forecast />}
+      {active === 'forecast-campaigns' && <ForecastCampaigns />}
       {active === 'orders' && <Orders
         selectedLocationId={cartLocationState.selectedLocationId}
         selectedLocation={selectedCartLocation}

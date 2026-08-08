@@ -30,6 +30,7 @@ All sixteen entries have a file:
 | 20260805073530 | golden_hour_modes | `20260805073530_golden_hour_modes.sql` |
 | 20260806211254 | spotlight_banners | `20260806211254_spotlight_banners.sql` |
 | 20260807124610 | spotlight_banner_markdown_slide | `20260807124610_…sql` |
+| 20260807171440 | forecast_module | `20260807171440_forecast_module.sql` |
 
 ## Notes on the applied set
 

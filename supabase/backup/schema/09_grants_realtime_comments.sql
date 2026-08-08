@@ -99,3 +99,16 @@ COMMENT ON COLUMN public.referral_settings.referrer_reward_amount IS 'Store cred
 COMMENT ON COLUMN public.referral_settings.reward_cap_per_referrer IS 'Max number of rewarded referrals a single referrer may earn. NULL = unlimited.';
 COMMENT ON COLUMN public.referrals.qualifying_order_id IS 'The referee order that unlocked the referrer reward (idempotency guard).';
 COMMENT ON COLUMN public.shop_settings.banner_image_url IS 'Public WebP banner image URL for the customer app shop screen. Text/CTA stay static in the app.';
+
+-- ---------------------------------------------------------------------------
+-- Demand forecasting module (server/forecast/), migration 20260807171440.
+-- Appended as a block rather than sorted inline; the next full run of
+-- ../tools/dump_schema.sql will re-sort these into place.
+-- ---------------------------------------------------------------------------
+
+COMMENT ON TABLE public.forecast_demand_daily_cart IS 'Per-cart per-day demand facts. baseline_units is units with campaign uplift divided out, and is what the model smooths.';
+COMMENT ON TABLE public.forecast_cart_state IS 'Holt-Winters multiplicative state per cart. dow_index is renormalised to mean 1 on every update; dow_obs_count drives shrinkage toward the pooled network profile.';
+COMMENT ON TABLE public.forecast_product_state IS 'Dirichlet pseudo-counts for the product mix per cart, with exponential forgetting.';
+COMMENT ON TABLE public.forecast_campaigns IS 'Forecast-side campaign calendar. Decoupled from the promotions code engine: a campaign here changes forecasts only and grants no discount.';
+COMMENT ON TABLE public.forecast_campaign_effects IS 'Pooled log-uplift per campaign type and discount bucket. The empirical-Bayes prior a new campaign starts from.';
+COMMENT ON COLUMN public.forecast_daily_cart.p90 IS 'Stocking quantile (newsvendor critical fractile). Quantiles do not add: this is computed from the cart-level negative binomial, never by summing product p90s.';

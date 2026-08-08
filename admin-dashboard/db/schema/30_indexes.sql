@@ -94,3 +94,21 @@ CREATE INDEX idx_stock_movements_location_created ON public.stock_movements USIN
 CREATE INDEX idx_stock_transfer_items_transfer ON public.stock_transfer_items USING btree (transfer_id);
 CREATE INDEX idx_stock_transfers_locations ON public.stock_transfers USING btree (from_location_id, to_location_id);
 CREATE INDEX idx_stock_transfers_status_requested ON public.stock_transfers USING btree (status, requested_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- Demand forecasting module (server/forecast/), migration 20260807171440.
+-- Appended as a block rather than sorted inline; the next full run of
+-- ../tools/dump_schema.sql will re-sort these into place.
+-- ---------------------------------------------------------------------------
+
+CREATE INDEX forecast_accuracy_cart_date_idx ON public.forecast_accuracy_cart USING btree (business_date);
+CREATE INDEX forecast_accuracy_product_date_idx ON public.forecast_accuracy_product USING btree (business_date);
+CREATE INDEX forecast_campaigns_promotion_idx ON public.forecast_campaigns USING btree (promotion_id) WHERE (promotion_id IS NOT NULL);
+CREATE INDEX forecast_campaigns_window_idx ON public.forecast_campaigns USING btree (starts_on, ends_on) WHERE is_active;
+CREATE INDEX forecast_daily_cart_date_idx ON public.forecast_daily_cart USING btree (business_date);
+CREATE INDEX forecast_daily_product_date_idx ON public.forecast_daily_product USING btree (business_date);
+CREATE INDEX forecast_daily_product_lookup_idx ON public.forecast_daily_product USING btree (location_id, business_date, expected_units DESC);
+CREATE INDEX forecast_demand_daily_cart_date_idx ON public.forecast_demand_daily_cart USING btree (business_date);
+CREATE INDEX forecast_demand_daily_product_date_idx ON public.forecast_demand_daily_product USING btree (business_date);
+CREATE INDEX forecast_demand_daily_product_product_idx ON public.forecast_demand_daily_product USING btree (product_id, business_date);
+CREATE INDEX forecast_runs_started_idx ON public.forecast_runs USING btree (started_at DESC);
