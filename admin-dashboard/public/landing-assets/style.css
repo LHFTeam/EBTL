@@ -760,8 +760,8 @@ img { display: block; max-width: 100%; }
   .leaf-lower {
     z-index: 8;
     width: 120px;
-    bottom: 288px;
-    left: 50px;
+    bottom: 400px;
+    left: 75px;
     animation: floatIn 780ms ease 760ms both, driftLeafTwo 6.6s ease-in-out 1.5s infinite;
   }
 }
