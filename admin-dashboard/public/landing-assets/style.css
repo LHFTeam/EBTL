@@ -750,7 +750,7 @@ img { display: block; max-width: 100%; }
   .hero-content { width: min(100% - 32px, 390px); padding-top: 86px; }
   .hero-actions { margin-top: 20px; width: 205px; }
   .primary-cta { min-height: 46px; }
-  .asset-cocktail { width: 432px !important; left: -78px !important; bottom: -70px !important; z-index: 6 !important;}
+  .asset-cocktail { width: 432px !important; left: -98px !important; bottom: -100px !important; z-index: 6 !important;}
   .asset-shot { width: 164px; right: -82px; bottom: 14px; }
   .asset-strawberry { width: 66px; right: 50px; top: 124px; }
   .section { padding-inline: 16px; }
