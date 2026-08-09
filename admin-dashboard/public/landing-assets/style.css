@@ -750,7 +750,7 @@ img { display: block; max-width: 100%; }
   .hero-content { width: min(100% - 32px, 390px); padding-top: 86px; }
   .hero-actions { margin-top: 20px; width: 205px; }
   .primary-cta { min-height: 46px; }
-  .asset-cocktail { width: 196px; left: -82px; bottom: 46px; }
+  .asset-cocktail { width: 216px !important; left: -78px !important; bottom: 36px !important;}
   .asset-shot { width: 164px; right: -82px; bottom: 14px; }
   .asset-strawberry { width: 66px; right: 50px; top: 124px; }
   .section { padding-inline: 16px; }
@@ -772,10 +772,4 @@ img { display: block; max-width: 100%; }
   .hero-background,
   .phone-orbit,
   .floating-asset { transform: none !important; }
-}
-
-.ebtl-asset-cocktail {
-  width: 216px !important;
-  left: -78px !important;
-  bottom: 36px !important;
 }
