@@ -761,7 +761,7 @@ img { display: block; max-width: 100%; }
   .download-section { padding-inline: 16px; }
   .download-card { border-radius: 32px; }
   .leaf-lower {
-    z-index: 0;
+    z-index: 5;
     width: 120px;
     bottom: 288px;
     left: 50px;
