@@ -403,7 +403,7 @@ img { display: block; max-width: 100%; }
 }
 .asset-cocktail {
   width: clamp(424px, 48vw, 820px);
-  left: clamp(120px, -8vw, 100px);
+  left: clamp(220px, 8vw, 200px);
   bottom: -100px;
   transform: translate3d(0, calc(var(--scroll-progress) * 26px), 0) rotate(-10deg);
   animation: floatIn 850ms cubic-bezier(.2,.8,.2,1) 520ms both, driftGlass 8s ease-in-out 1.3s infinite;
@@ -424,16 +424,16 @@ img { display: block; max-width: 100%; }
 }
 .leaf-top {
   z-index: 6;
-  width: 80px;
+  width: 180px;
   top: 42px;
-  right: 16px;
+  left: 150px;
   animation: floatIn 780ms ease 570ms both, driftLeafOne 5.8s ease-in-out 1.3s infinite;
 }
 .leaf-lower {
   z-index: 0;
   width: 160px;
   bottom: 288px;
-  left: -50px;
+  left: 150px;
   animation: floatIn 780ms ease 760ms both, driftLeafTwo 6.6s ease-in-out 1.5s infinite;
 }
 .hero-sparkles span {
