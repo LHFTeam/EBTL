@@ -773,3 +773,9 @@ img { display: block; max-width: 100%; }
   .phone-orbit,
   .floating-asset { transform: none !important; }
 }
+
+.ebtl-asset-cocktail {
+  width: 216px !important;
+  left: -78px !important;
+  bottom: 36px !important;
+}
