@@ -757,9 +757,9 @@ img { display: block; max-width: 100%; }
   .download-section { padding-inline: 16px; }
   .download-card { border-radius: 32px; }
   .leaf-lower {
-    z-index: 8;
-    width: 120px;
-    bottom: 200px !important;
+    z-index: 5;
+    width: 140px;
+    bottom: 170px !important;
     left: 85px;
     animation: floatIn 780ms ease 760ms both, driftLeafTwo 6.6s ease-in-out 1.5s infinite;
   }
