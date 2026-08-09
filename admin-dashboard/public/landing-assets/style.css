@@ -722,7 +722,7 @@ img { display: block; max-width: 100%; }
   .mini-drink-card p { display: none; }
   .app-tabbar { min-height: 48px; font-size: .48rem; padding-bottom: 8px; }
   .asset-strawberry { width: 74px; right: 48px; top: 114px; }
-  .asset-cocktail { width: 216px; left: -78px; bottom: 36px; }
+  .asset-cocktail { width: 316px; left: -78px; bottom: 36px; }
   .asset-shot { width: 178px; right: -74px; bottom: 20px; }
   .lemon-wheel {
     top: 96px;
@@ -750,7 +750,7 @@ img { display: block; max-width: 100%; }
   .hero-content { width: min(100% - 32px, 390px); padding-top: 86px; }
   .hero-actions { margin-top: 20px; width: 205px; }
   .primary-cta { min-height: 46px; }
-  .asset-cocktail { width: 216px !important; left: -78px !important; bottom: 36px !important;}
+  .asset-cocktail { width: 316px !important; left: -78px !important; bottom: 36px !important;}
   .asset-shot { width: 164px; right: -82px; bottom: 14px; }
   .asset-strawberry { width: 66px; right: 50px; top: 124px; }
   .section { padding-inline: 16px; }
