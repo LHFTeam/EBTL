@@ -431,10 +431,10 @@ img { display: block; max-width: 100%; }
   animation: floatIn 780ms ease 570ms both, driftLeafOne 5.8s ease-in-out 1.3s infinite;
 }
 .leaf-lower {
-  z-index: 6;
+  z-index: 0;
   width: 120px;
-  bottom: 188px;
-  left: 28px;
+  bottom: 288px;
+  left: 50px;
   animation: floatIn 780ms ease 760ms both, driftLeafTwo 6.6s ease-in-out 1.5s infinite;
 }
 .hero-sparkles span {
