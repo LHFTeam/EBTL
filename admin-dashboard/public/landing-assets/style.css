@@ -396,7 +396,7 @@ img { display: block; max-width: 100%; }
 }
 .asset-strawberry {
   width: clamp(76px, 9vw, 136px);
-  right: clamp(0px, 3vw, 46px);
+  right: clamp(-100px, 3vw, -80px);
   top: 42px;
   transform: translate3d(0, calc(var(--scroll-progress) * -34px), 0) rotate(13deg);
   animation: floatIn 820ms cubic-bezier(.2,.8,.2,1) 340ms both, driftBerry 6.5s ease-in-out 1.1s infinite;
@@ -404,7 +404,7 @@ img { display: block; max-width: 100%; }
 .asset-cocktail {
   width: clamp(424px, 48vw, 820px);
   left: clamp(-20px, -8vw, -10px);
-  bottom: -14px;
+  bottom: -100px;
   transform: translate3d(0, calc(var(--scroll-progress) * 26px), 0) rotate(-10deg);
   animation: floatIn 850ms cubic-bezier(.2,.8,.2,1) 520ms both, driftGlass 8s ease-in-out 1.3s infinite;
 }
