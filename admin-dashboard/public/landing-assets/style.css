@@ -696,7 +696,7 @@ img { display: block; max-width: 100%; }
   .phone-orbit {
     position: absolute;
     width: min(57.6vw, 240px);
-    left: 83%;
+    left: 63%;
     right: auto;
     bottom: calc(min(57.6vw, 240px) * -0.154);
     transform: translateX(-50%) rotate(10deg);
