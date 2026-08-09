@@ -403,7 +403,7 @@ img { display: block; max-width: 100%; }
 }
 .asset-cocktail {
   width: clamp(424px, 48vw, 820px);
-  left: clamp(-20px, -8vw, -10px);
+  left: clamp(120px, -8vw, 100px);
   bottom: -100px;
   transform: translate3d(0, calc(var(--scroll-progress) * 26px), 0) rotate(-10deg);
   animation: floatIn 850ms cubic-bezier(.2,.8,.2,1) 520ms both, driftGlass 8s ease-in-out 1.3s infinite;
