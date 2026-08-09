@@ -760,6 +760,15 @@ img { display: block; max-width: 100%; }
   .step-card { min-height: auto; }
   .download-section { padding-inline: 16px; }
   .download-card { border-radius: 32px; }
+  .leaf-lower {
+    z-index: 0;
+    width: 120px;
+    bottom: 288px;
+    left: 50px;
+    animation: floatIn 780ms ease 760ms both, driftLeafTwo 6.6s ease-in-out 1.5s infinite;
+  }
+
+  
 }
 
 @media (prefers-reduced-motion: reduce) {
