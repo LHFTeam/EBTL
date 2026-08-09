@@ -130,7 +130,7 @@ img { display: block; max-width: 100%; }
   margin: 28px 0 0;
   color: var(--navy);
   font-family: "Playfair Display", Georgia, serif;
-  font-size: clamp(4.9rem, 9.2vw, 8.6rem);
+  font-size: clamp(4.9rem, 9.2vw, 6.0rem);
   line-height: 0.95;
   letter-spacing: -0.045em;
 }
