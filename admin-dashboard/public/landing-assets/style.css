@@ -728,7 +728,6 @@ img { display: block; max-width: 100%; }
   }
   .leaf-top { top: 30px; right: 54px; }
   .leaf-lower {
-    top: 500px;
     bottom: auto;
     left: 24px;
     width: 120px;
