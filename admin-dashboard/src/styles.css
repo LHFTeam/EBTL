@@ -336,6 +336,24 @@ nav button:hover {
 
 /* Tables */
 
+.ingredientTabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.ingredientTabs button {
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+}
+
+.ingredientTabs button.active {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+
 .tableWrap {
   overflow: auto;
   border: 1px solid var(--line);
