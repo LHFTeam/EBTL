@@ -58,7 +58,8 @@ async function findLinkedProduct(ingredientId) {
     .select('recipe_id')
     .eq('ingredient_id', ingredientId);
 
-  if (recipeItems.error || !recipeItems.data?.length) return recipeItems;
+  if (recipeItems.error) return recipeItems;
+  if (!recipeItems.data?.length) return { data: null };
 
   const recipeIds = [...new Set(recipeItems.data.map((item) => item.recipe_id))];
   const recipes = await supabase
@@ -66,7 +67,8 @@ async function findLinkedProduct(ingredientId) {
     .select('product_id')
     .in('id', recipeIds);
 
-  if (recipes.error || !recipes.data?.length) return recipes;
+  if (recipes.error) return recipes;
+  if (!recipes.data?.length) return { data: null };
 
   const productIds = [...new Set(recipes.data.map((recipe) => recipe.product_id))];
   return supabase
@@ -76,6 +78,126 @@ async function findLinkedProduct(ingredientId) {
     .order('name')
     .limit(1)
     .maybeSingle();
+}
+
+// Every table that keeps a non-nullable foreign key on ingredients(id). Postgres
+// would refuse the delete anyway; checking first turns that into a message that
+// says which record is holding the ingredient. `order_item_removed_ingredients`
+// is deliberately absent: its key is ON DELETE SET NULL next to a name snapshot,
+// so that history survives the delete on its own.
+const ingredientReferences = [
+  ['recipe_items', 'it is used in a product recipe'],
+  ['order_item_inventory_components', 'it appears in past order history'],
+  ['cart_item_removed_ingredients', 'a customer cart still references it'],
+  ['stock_movements', 'it has stock movement history'],
+  ['stock_transfer_items', 'it appears on a stock transfer'],
+  ['purchase_order_items', 'it appears on a purchase order']
+];
+
+async function findIngredientReference(ingredientId) {
+  for (const [table, reason] of ingredientReferences) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('ingredient_id')
+      .eq('ingredient_id', ingredientId)
+      .limit(1);
+
+    if (error) return { error };
+    if (data?.length) return { reason };
+  }
+
+  return {};
+}
+
+function isNewerRecipe(recipe, other) {
+  if (!other) return true;
+  if (recipe.version !== other.version) return recipe.version > other.version;
+  return String(recipe.created_at) > String(other.created_at);
+}
+
+// The products whose recipes call for this ingredient. An ingredient can sit in
+// an older recipe version that the product no longer serves, and that still
+// blocks archiving and deleting, so those rows are listed too and marked as not
+// current rather than hidden.
+async function loadProductsUsingIngredient(ingredientId) {
+  const recipeItems = await supabase
+    .from('recipe_items')
+    .select('recipe_id,quantity,unit,is_optional,is_customer_supplied')
+    .eq('ingredient_id', ingredientId);
+
+  if (recipeItems.error) return recipeItems;
+  if (!recipeItems.data.length) return { data: [] };
+
+  const usageByRecipeId = new Map(recipeItems.data.map((item) => [item.recipe_id, item]));
+  const usedRecipes = await supabase
+    .from('recipes')
+    .select('id,product_id,version,status,yield_servings,created_at')
+    .in('id', [...usageByRecipeId.keys()]);
+
+  if (usedRecipes.error) return usedRecipes;
+  if (!usedRecipes.data.length) return { data: [] };
+
+  const productIds = [...new Set(usedRecipes.data.map((recipe) => recipe.product_id).filter(Boolean))];
+  if (!productIds.length) return { data: [] };
+
+  const [products, allRecipes] = await Promise.all([
+    supabase
+      .from('products')
+      .select('id,name,name_ar,product_type,status,image_url,short_description')
+      .in('id', productIds)
+      .order('name'),
+    supabase
+      .from('recipes')
+      .select('id,product_id,version,created_at')
+      .in('product_id', productIds)
+  ]);
+
+  if (products.error) return products;
+  if (allRecipes.error) return allRecipes;
+
+  // The product's live recipe is its highest version, newest first on a tie —
+  // the same ordering the catalog uses to pick a product's current recipe.
+  const currentRecipeIdByProduct = new Map();
+  const newestRecipeByProduct = new Map();
+  for (const recipe of allRecipes.data) {
+    if (isNewerRecipe(recipe, newestRecipeByProduct.get(recipe.product_id))) {
+      newestRecipeByProduct.set(recipe.product_id, recipe);
+      currentRecipeIdByProduct.set(recipe.product_id, recipe.id);
+    }
+  }
+
+  // One row per product: the current recipe when it uses the ingredient,
+  // otherwise the newest version that does.
+  const recipeByProduct = new Map();
+  for (const recipe of usedRecipes.data) {
+    const chosen = recipeByProduct.get(recipe.product_id);
+    const isCurrent = currentRecipeIdByProduct.get(recipe.product_id) === recipe.id;
+    if (!chosen || isCurrent || (!chosen.isCurrent && isNewerRecipe(recipe, chosen.recipe))) {
+      recipeByProduct.set(recipe.product_id, { recipe, isCurrent });
+    }
+  }
+
+  const rows = products.data
+    .filter((product) => recipeByProduct.has(product.id))
+    .map((product) => {
+      const { recipe, isCurrent } = recipeByProduct.get(product.id);
+      const usage = usageByRecipeId.get(recipe.id) || {};
+
+      return {
+        ...product,
+        quantity: usage.quantity ?? null,
+        unit: usage.unit || null,
+        is_optional: Boolean(usage.is_optional),
+        is_customer_supplied: Boolean(usage.is_customer_supplied),
+        recipe_id: recipe.id,
+        recipe_version: recipe.version,
+        recipe_status: recipe.status,
+        yield_servings: recipe.yield_servings,
+        is_current_recipe: isCurrent
+      };
+    });
+
+  return { data: rows };
 }
 
 const iconKey = z.string()
@@ -148,6 +270,56 @@ ingredientRouter.patch('/ingredient-categories/:id', requireArea('ingredients'),
   }
 
   const { data, error } = await supabase.from('ingredient_categories').update(parsed.data).eq('id', req.params.id).select().single();
+  if (error) return sendCategoryError(error, res);
+  return res.json(data);
+});
+
+ingredientRouter.delete('/ingredient-categories/:id', requireArea('ingredients'), async (req, res) => {
+  const category = await supabase
+    .from('ingredient_categories')
+    .select('id,name')
+    .eq('id', req.params.id)
+    .maybeSingle();
+
+  if (category.error) return sendCategoryError(category.error, res);
+  if (!category.data) return res.status(404).json({ error: 'Ingredient category not found.' });
+
+  // Archiving a category only has to clear the active ingredients; deleting it
+  // has to clear every one, because the foreign key does not care whether the
+  // ingredient holding the category is archived.
+  const linked = await supabase
+    .from('ingredients')
+    .select('name,is_active', { count: 'exact' })
+    .eq('category_id', category.data.id)
+    .order('name')
+    .limit(1);
+
+  if (linked.error) return sendCategoryError(linked.error, res);
+
+  if (linked.data?.length) {
+    const [blocker] = linked.data;
+    // Name one ingredient rather than all of them, and say when it is archived —
+    // otherwise the ingredient blocking the delete is nowhere to be seen in the
+    // Active view the admin is most likely looking at.
+    const blockerLabel = `"${blocker.name}"${blocker.is_active ? '' : ' (archived)'}`;
+    const others = (linked.count ?? linked.data.length) - 1;
+    const assigned = others > 0
+      ? `${blockerLabel} and ${others} other ${others === 1 ? 'ingredient' : 'ingredients'}`
+      : blockerLabel;
+
+    return res.status(409).json({
+      error: `"${category.data.name}" cannot be deleted because it is still assigned to ${assigned}. ` +
+        `Move ${others > 0 ? 'those ingredients' : 'that ingredient'} to another category first.`
+    });
+  }
+
+  const { data, error } = await supabase
+    .from('ingredient_categories')
+    .delete()
+    .eq('id', category.data.id)
+    .select('id,name')
+    .single();
+
   if (error) return sendCategoryError(error, res);
   return res.json(data);
 });
@@ -228,6 +400,94 @@ ingredientRouter.patch('/ingredients/:id', requireArea('ingredients'), async (re
     .update(clean(payload))
     .eq('id', req.params.id)
     .select()
+    .single();
+
+  if (error) return sendIngredientError(error, res);
+  return res.json(data);
+});
+
+ingredientRouter.get('/ingredients/:id/products', requireArea('ingredients'), async (req, res) => {
+  const ingredient = await supabase
+    .from('ingredients')
+    .select('id,name,name_ar,base_unit,is_active')
+    .eq('id', req.params.id)
+    .maybeSingle();
+
+  if (ingredient.error) return sendIngredientError(ingredient.error, res);
+  if (!ingredient.data) return res.status(404).json({ error: 'Ingredient not found.' });
+
+  const products = await loadProductsUsingIngredient(ingredient.data.id);
+  if (products.error) return sendIngredientError(products.error, res);
+
+  return res.json({ ingredient: ingredient.data, products: products.data });
+});
+
+// Permanent delete, archived ingredients only. Archiving stays the normal way to
+// retire an ingredient; this exists for rows that were never really used (typos,
+// duplicates) and should not sit in the Archived view forever.
+ingredientRouter.delete('/ingredients/:id', requireArea('ingredients'), async (req, res) => {
+  const { data: existing, error: readError } = await supabase
+    .from('ingredients')
+    .select('id,name,is_active')
+    .eq('id', req.params.id)
+    .maybeSingle();
+
+  if (readError) return sendIngredientError(readError, res);
+  if (!existing) return res.status(404).json({ error: 'Ingredient not found.' });
+
+  if (existing.is_active) {
+    return res.status(409).json({
+      error: 'Only archived ingredients can be deleted permanently. Archive this ingredient first.'
+    });
+  }
+
+  const linkedProduct = await findLinkedProduct(existing.id);
+  if (linkedProduct.error) return sendIngredientError(linkedProduct.error, res);
+  if (linkedProduct.data) {
+    const productLabel = linkedProduct.data.product_type === 'cocktail' ? 'cocktail' : 'product';
+    return res.status(409).json({
+      error: `"${existing.name}" cannot be deleted because it is linked to the ${productLabel} "${linkedProduct.data.name}". Remove it from the ${productLabel} recipe first.`
+    });
+  }
+
+  const reference = await findIngredientReference(existing.id);
+  if (reference.error) return sendIngredientError(reference.error, res);
+  if (reference.reason) {
+    return res.status(409).json({
+      error: `"${existing.name}" cannot be deleted because ${reference.reason}. It stays archived so those records keep their ingredient.`
+    });
+  }
+
+  // Inventory balances are derived state, not history: the stock movement trigger
+  // maintains them. Anything with real movements was already refused above, so a
+  // surviving row here is an empty leftover and is cleared with the ingredient.
+  const balances = await supabase
+    .from('inventory_balances')
+    .select('quantity_on_hand,reserved_quantity')
+    .eq('ingredient_id', existing.id);
+
+  if (balances.error) return sendIngredientError(balances.error, res);
+
+  const hasStock = (balances.data || []).some(
+    (balance) => Number(balance.quantity_on_hand) !== 0 || Number(balance.reserved_quantity) !== 0
+  );
+
+  if (hasStock) {
+    return res.status(409).json({
+      error: `"${existing.name}" cannot be deleted because it still has stock on hand. Adjust its balances to zero first.`
+    });
+  }
+
+  if (balances.data?.length) {
+    const clearedBalances = await supabase.from('inventory_balances').delete().eq('ingredient_id', existing.id);
+    if (clearedBalances.error) return sendIngredientError(clearedBalances.error, res);
+  }
+
+  const { data, error } = await supabase
+    .from('ingredients')
+    .delete()
+    .eq('id', existing.id)
+    .select('id,name')
     .single();
 
   if (error) return sendIngredientError(error, res);

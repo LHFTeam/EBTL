@@ -4,6 +4,7 @@ import { baseUnits } from '../config/constants.js';
 import { Loading, Message, Section, SimpleTable } from '../components/ui.jsx';
 import { useLoad } from '../hooks/useLoad.js';
 import { splitTags, toBool, yesNo } from '../utils/format.js';
+import IngredientProducts from './IngredientProducts.jsx';
 
 const blank = {
   name: '',
@@ -103,20 +104,25 @@ export default function Ingredients() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('active');
+  const [productsFor, setProductsFor] = useState(null);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
 
   const categories = categoriesLoad.data || [];
+
+  // Deleting a category the filter is pointing at would otherwise leave a filter
+  // no button can clear, so a selection that no longer exists means all.
+  const activeCategoryFilter = categories.some(category => category.id === categoryFilter) ? categoryFilter : '';
 
   const matchingRows = useMemo(() => {
     const searchText = search.trim().toLowerCase();
     return (data || []).filter(row => {
       const matchesSearch = !searchText || [row.name, row.category, row.icon_key, row.base_unit]
         .some(value => String(value || '').toLowerCase().includes(searchText));
-      const matchesCategory = !categoryFilter || row.category_id === categoryFilter;
+      const matchesCategory = !activeCategoryFilter || row.category_id === activeCategoryFilter;
       return matchesSearch && matchesCategory;
     });
-  }, [data, search, categoryFilter]);
+  }, [data, search, activeCategoryFilter]);
 
   const statusCounts = useMemo(() => ({
     active: matchingRows.filter(row => row.is_active).length,
@@ -128,7 +134,7 @@ export default function Ingredients() {
     [matchingRows, statusFilter]
   );
 
-  const filtersApplied = Boolean(search || categoryFilter);
+  const filtersApplied = Boolean(search || activeCategoryFilter);
 
   const baseUnitChanged = editing && original && original.base_unit !== form.base_unit;
   const costPreview = calculatedCostPreview(form);
@@ -244,8 +250,42 @@ export default function Ingredients() {
     }
   }
 
+  async function deleteIngredient(row) {
+    setMsg('');
+    setErr('');
+
+    const confirmed = confirm(
+      `Permanently delete ${row.name}?\n\n` +
+      'This removes the ingredient from the database and cannot be undone. It only works when nothing else ' +
+      'still references it — recipes, stock history, transfers, purchase orders, and past orders all keep it archived instead.'
+    );
+    if (!confirmed) return;
+
+    try {
+      await api(`/api/ingredients/${row.id}`, { method: 'DELETE' });
+      if (editing === row.id) resetForm();
+      setMsg('Ingredient permanently deleted.');
+      reload();
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
+
+  function showProducts(row) {
+    setProductsFor({ id: row.id, name: row.name });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   if (loading || error || categoriesLoad.loading || categoriesLoad.error) {
     return <Loading error={error || categoriesLoad.error} onRetry={() => { reload(); categoriesLoad.reload(); }} />;
+  }
+
+  if (productsFor) {
+    return <IngredientProducts
+      ingredientId={productsFor.id}
+      ingredientName={productsFor.name}
+      onBack={() => setProductsFor(null)}
+    />;
   }
 
   return <div className="grid">
@@ -316,13 +356,13 @@ export default function Ingredients() {
           <button type="button" className={statusFilter === 'archived' ? 'active' : ''} aria-pressed={statusFilter === 'archived'} onClick={() => setStatusFilter('archived')}>Archived ({statusCounts.archived})</button>
         </div>
         <div className="categoryFilterButtons" role="group" aria-label="Filter ingredients by category">
-          <button type="button" className={!categoryFilter ? 'active' : ''} aria-pressed={!categoryFilter} onClick={() => setCategoryFilter('')}>All categories</button>
+          <button type="button" className={!activeCategoryFilter ? 'active' : ''} aria-pressed={!activeCategoryFilter} onClick={() => setCategoryFilter('')}>All categories</button>
           {categories.map(category => (
             <button
               type="button"
               key={category.id}
-              className={categoryFilter === category.id ? 'active' : ''}
-              aria-pressed={categoryFilter === category.id}
+              className={activeCategoryFilter === category.id ? 'active' : ''}
+              aria-pressed={activeCategoryFilter === category.id}
               onClick={() => setCategoryFilter(category.id)}
             >
               {category.name}
@@ -347,7 +387,9 @@ export default function Ingredients() {
         }}
         actions={(row) => <div className="inlineActions">
           <button onClick={() => edit(row)}>Edit</button>
+          <button onClick={() => showProducts(row)}>Products</button>
           <button onClick={() => archiveIngredient(row)}>{row.is_active ? 'Archive' : 'Restore'}</button>
+          {!row.is_active && <button className="danger" onClick={() => deleteIngredient(row)}>Delete</button>}
         </div>}
       />
     </Section>
@@ -394,6 +436,29 @@ function IngredientCategories({ categories, reload }) {
     }
   }
 
+  async function remove(category) {
+    setMsg('');
+    setErr('');
+
+    const confirmed = confirm(
+      `Permanently delete ${category.name}?\n\n` +
+      'This removes the category from the database and cannot be undone. It only works when no ingredient still uses it, archived ingredients included.'
+    );
+    if (!confirmed) return;
+
+    try {
+      await api(`/api/ingredient-categories/${category.id}`, { method: 'DELETE' });
+      if (editing === category.id) {
+        setEditing(null);
+        setName('');
+      }
+      setMsg('Ingredient category permanently deleted.');
+      reload();
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
+
   return <>
     <Section title={editing ? 'Edit Ingredient Category' : 'Add Ingredient Category'} action={editing && <button onClick={() => { setEditing(null); setName(''); }}>Cancel edit</button>}>
       <form className="miniForm" onSubmit={save}>
@@ -411,6 +476,7 @@ function IngredientCategories({ categories, reload }) {
         actions={category => <div className="inlineActions">
           <button onClick={() => { setEditing(category.id); setName(category.name); }}>{'Edit'}</button>
           <button onClick={() => toggle(category)}>{category.is_active ? 'Archive' : 'Restore'}</button>
+          <button className="danger" onClick={() => remove(category)}>Delete</button>
         </div>}
       />
     </Section>
