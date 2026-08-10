@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/network/api_exception.dart';
@@ -6,6 +8,7 @@ import '../../models/app_data.dart';
 import '../../models/cocktail_models.dart';
 import '../../models/common_models.dart';
 import '../../models/profile_models.dart';
+import '../../models/shop_models.dart';
 import '../../models/spotlight_models.dart';
 import '../../services/analytics_service.dart';
 import '../../services/api_service.dart';
@@ -13,6 +16,9 @@ import '../../shared/widgets/app_state_widgets.dart';
 import '../../shared/widgets/bottle_widgets.dart';
 import '../../shared/widgets/cocktail_card_widgets.dart';
 import '../../shared/widgets/section_block.dart';
+import '../search/catalog_search.dart';
+import '../search/search_collection_screen.dart';
+import '../search/widgets/search_results_panel.dart';
 import 'widgets/beach_cart_picker_sheet.dart';
 import 'widgets/home_context_header.dart';
 import 'widgets/home_hero_carousel.dart';
@@ -52,8 +58,11 @@ class HomeScreen extends StatefulWidget {
 
   final int unreadNotificationCount;
   final VoidCallback onOpenNotifications;
-  final VoidCallback onOpenSearch;
+
+  /// The search text, shared with Explore through the shell so a query
+  /// survives a tab switch.
   final String searchQuery;
+  final ValueChanged<String> onSearchQueryChanged;
   final VoidCallback onOpenCart;
   final VoidCallback onOpenShop;
   /// Opens the live order's own detail screen. The card tracks one order, so
@@ -62,7 +71,7 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onOpenOrderHistory;
   final VoidCallback onOpenFinder;
   final ValueChanged<LiquorType> onOpenFinderWithBottle;
-  final ValueChanged<Cocktail> onOpenCocktail;
+  final Future<void> Function(Cocktail cocktail) onOpenCocktail;
   final ValueChanged<Category> onOpenCategory;
   /// Follows a hero banner's deep link. Only called for banners that carry one.
   final ValueChanged<HomeHeroBanner> onOpenHeroBanner;
@@ -76,8 +85,8 @@ class HomeScreen extends StatefulWidget {
     required this.pastOrders,
     required this.unreadNotificationCount,
     required this.onOpenNotifications,
-    required this.onOpenSearch,
     required this.searchQuery,
+    required this.onSearchQueryChanged,
     required this.onOpenCart,
     required this.onOpenShop,
     required this.onOpenLiveOrder,
@@ -103,6 +112,117 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// The order whose "add again" request is in flight, if any.
   String? reorderingOrderId;
+
+  late final TextEditingController searchController;
+  final FocusNode searchFocusNode = FocusNode();
+  Timer? searchDebounce;
+
+  /// The query the results below the header are showing. Empty means Home is
+  /// showing its modules instead.
+  String appliedQuery = '';
+
+  /// The catalog the query is matched against. It is only fetched once the
+  /// customer actually searches — Home itself does not need it, and paging
+  /// every category is not something startup should pay for.
+  Future<SearchCatalog>? catalogFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    searchController = TextEditingController(text: widget.searchQuery);
+    appliedQuery = widget.searchQuery.trim();
+    if (appliedQuery.isNotEmpty) ensureCatalog();
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // A beach cart carries its own prices and availability, so the catalog is
+    // re-fetched rather than reused across carts.
+    if (oldWidget.data.selectedLocationId != widget.data.selectedLocationId &&
+        catalogFuture != null) {
+      loadCatalog();
+    }
+
+    // The query is shell state shared with Explore; a search typed there is
+    // already applied by the time Home is looked at again.
+    if (widget.searchQuery.trim() != searchController.text.trim()) {
+      searchDebounce?.cancel();
+      searchController.text = widget.searchQuery;
+      appliedQuery = widget.searchQuery.trim();
+      if (appliedQuery.isNotEmpty) ensureCatalog();
+    }
+  }
+
+  @override
+  void dispose() {
+    searchDebounce?.cancel();
+    searchController.dispose();
+    searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  /// Fetches the catalog the first time a search needs it.
+  void ensureCatalog() {
+    catalogFuture ??= SearchCatalog.load(
+      locationId: widget.data.selectedLocationId,
+    );
+  }
+
+  /// Fetches it again — after a beach-cart change, or a retry.
+  void loadCatalog() {
+    catalogFuture = SearchCatalog.load(
+      locationId: widget.data.selectedLocationId,
+    );
+  }
+
+  /// Debounced so a fast typist searches once, not once per keystroke — the
+  /// same 250ms Explore uses.
+  void updateSearch(String value) {
+    widget.onSearchQueryChanged(value);
+    if (value.trim().isNotEmpty) ensureCatalog();
+
+    searchDebounce?.cancel();
+    searchDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      setState(() => appliedQuery = value.trim());
+      AnalyticsService.logSearch(
+        surface: 'home',
+        hasQuery: value.trim().isNotEmpty,
+      );
+    });
+  }
+
+  void clearSearch() {
+    searchDebounce?.cancel();
+    searchController.clear();
+    widget.onSearchQueryChanged('');
+    setState(() => appliedQuery = '');
+    searchFocusNode.requestFocus();
+  }
+
+  Future<void> openSearchProduct(ShopProduct product) {
+    return openCatalogProduct(
+      context,
+      product: product,
+      locationId: widget.data.selectedLocationId,
+      onCartChanged: widget.onCartChanged,
+      onOpenCocktail: widget.onOpenCocktail,
+    );
+  }
+
+  void openSearchCollection(String title, List<ShopProduct> products) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SearchCollectionScreen(
+          title: title,
+          products: products,
+          onOpenProduct: openSearchProduct,
+        ),
+      ),
+    );
+  }
 
   HomeMode get mode {
     if (widget.liveOrder != null) return HomeMode.liveOrder;
@@ -220,16 +340,54 @@ class _HomeScreenState extends State<HomeScreen> {
           onOpenLocationPicker: openLocationPicker,
           unreadNotificationCount: widget.unreadNotificationCount,
           onOpenNotifications: widget.onOpenNotifications,
-          onOpenSearch: widget.onOpenSearch,
-          searchQuery: widget.searchQuery,
+          searchController: searchController,
+          searchFocusNode: searchFocusNode,
+          onSearchChanged: updateSearch,
+          onClearSearch: clearSearch,
         ),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.only(top: 18, bottom: 100),
-            children: buildModules(),
+            children: appliedQuery.isEmpty
+                ? buildModules()
+                : [buildSearchResults()],
           ),
         ),
       ],
+    );
+  }
+
+  /// The search dropdown, in place of the modules, for as long as a query is
+  /// applied — the same results Explore shows, from the same catalog.
+  Widget buildSearchResults() {
+    return FutureBuilder<SearchCatalog>(
+      future: catalogFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const EbtlLoadingSection(label: 'Searching...');
+        }
+
+        if (snapshot.hasError) {
+          return InlineErrorCard(
+            message: apiErrorMessage(snapshot.error!),
+            onRetry: () => setState(loadCatalog),
+          );
+        }
+
+        final catalog = snapshot.data;
+        if (catalog == null) {
+          return const EmptyStateCard(
+            message: 'No matches found. Try a different search.',
+          );
+        }
+
+        return SearchResultsPanel(
+          catalog: catalog,
+          results: catalog.search(appliedQuery),
+          onOpenProduct: openSearchProduct,
+          onOpenCollection: openSearchCollection,
+        );
+      },
     );
   }
 

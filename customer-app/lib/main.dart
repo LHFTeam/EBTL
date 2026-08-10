@@ -158,8 +158,9 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   static const Duration _liveOrderPollInterval = Duration(seconds: 20);
 
   int selectedIndex = EbtlBottomNav.homeIndex;
+  /// The search text, shared by Home and Explore so a query typed on one is
+  /// still there on the other.
   String searchQuery = '';
-  int searchActivation = 0;
 
   /// The last successfully loaded payload. Kept across refreshes so a reload
   /// never unmounts the tab subtree — screens hold their own fetched state, and
@@ -651,12 +652,9 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     AnalyticsService.logScreenView(_screenNames[safeIndex]);
   }
 
-  void openSearch() {
-    setState(() {
-      selectedIndex = EbtlBottomNav.exploreIndex;
-      searchActivation++;
-    });
-    AnalyticsService.logScreenView('explore_search');
+  void updateSearchQuery(String query) {
+    if (query == searchQuery) return;
+    setState(() => searchQuery = query);
   }
 
   Future<void> selectLocation(ServiceLocation location) async {
@@ -741,8 +739,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         pastOrders: pastOrders,
         unreadNotificationCount: unreadNotificationCount,
         onOpenNotifications: openNotifications,
-        onOpenSearch: openSearch,
         searchQuery: searchQuery,
+        onSearchQueryChanged: updateSearchQuery,
         onOpenCart: openCart,
         onOpenShop: () => handleBottomNavTap(EbtlBottomNav.exploreIndex),
         onOpenLiveOrder: openOrderDetail,
@@ -759,15 +757,13 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         data: data,
         onCartChanged: handleCartChanged,
         onOpenFinder: () => openFinder(),
-        onOpenProduct: (product) =>
-            openCocktailDetail(data, Cocktail.fromShopProduct(product)),
+        onOpenCocktail: (cocktail) => openCocktailDetail(data, cocktail),
         unreadNotificationCount: unreadNotificationCount,
         onOpenNotifications: openNotifications,
         activeOrdersCount: activeOrdersCount,
         onOpenActiveOrders: openActiveOrders,
         searchQuery: searchQuery,
-        searchActivation: searchActivation,
-        onSearchQueryChanged: (query) => setState(() => searchQuery = query),
+        onSearchQueryChanged: updateSearchQuery,
         onSearchCollectionClosed: () =>
             setState(() => selectedIndex = EbtlBottomNav.homeIndex),
       ),

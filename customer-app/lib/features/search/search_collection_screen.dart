@@ -6,7 +6,8 @@ import '../../shared/widgets/app_state_widgets.dart';
 import '../shop/widgets/shop_product_widgets.dart';
 import '../shop/widgets/shop_simple_header.dart';
 
-/// A category or tag reached from Explore search results.
+/// A category, tag or ingredient reached from the search results on Home or
+/// Explore.
 class SearchCollectionScreen extends StatelessWidget {
   final String title;
   final List<ShopProduct> products;
