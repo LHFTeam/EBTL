@@ -3,9 +3,134 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/ebtl_colors.dart';
 import '../../../models/shop_models.dart';
-import '../../../shared/widgets/app_state_widgets.dart';
 import '../../../shared/widgets/network_or_asset_image.dart';
 import '../catalog_search.dart';
+
+/// The floating card the search results hang in, under the field they belong
+/// to. Solid white with a shadow — it sits over whatever the screen was
+/// already showing rather than replacing it.
+class SearchDropdownCard extends StatelessWidget {
+  final Widget child;
+
+  const SearchDropdownCard({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 430),
+      decoration: BoxDecoration(
+        color: EbtlColors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: EbtlColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: child,
+    );
+  }
+}
+
+/// A line of text inside the dropdown — nothing matched, or the catalog could
+/// not be loaded — with an optional action under it.
+class SearchDropdownMessage extends StatelessWidget {
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  const SearchDropdownMessage({
+    super.key,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final label = actionLabel;
+    final action = onAction;
+
+    return Padding(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            message,
+            style: GoogleFonts.manrope(
+              fontSize: 13,
+              height: 1.35,
+              fontWeight: FontWeight.w700,
+              color: EbtlColors.muted,
+            ),
+          ),
+          if (label != null && action != null) ...[
+            const SizedBox(height: 10),
+            InkWell(
+              onTap: action,
+              child: Text(
+                label,
+                style: GoogleFonts.manrope(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                  color: EbtlColors.coral,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Hangs [child] off the search field [link] is attached to, floating over the
+/// page. Drop it into a [Stack] laid over the screen's own content.
+///
+/// Anchoring to the field rather than to the page means the dropdown follows a
+/// field that scrolls — as Explore's does — and disappears with it.
+class SearchResultsDropdown extends StatelessWidget {
+  /// The gutter both screens lay their pages out on, and so the width of the
+  /// search field the dropdown lines up with.
+  static const double _pageGutter = 22;
+
+  /// The gap between the bottom of the field and the top of the card.
+  static const double _gap = 8;
+
+  final LayerLink link;
+  final Widget child;
+
+  const SearchResultsDropdown({
+    super.key,
+    required this.link,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: 0,
+      top: 0,
+      child: CompositedTransformFollower(
+        link: link,
+        showWhenUnlinked: false,
+        targetAnchor: Alignment.bottomLeft,
+        followerAnchor: Alignment.topLeft,
+        offset: const Offset(0, _gap),
+        child: SizedBox(
+          width: MediaQuery.sizeOf(context).width - _pageGutter * 2,
+          child: child,
+        ),
+      ),
+    );
+  }
+}
 
 /// The dropdown of everything a query matched: products first, then the
 /// categories, tags and ingredients that open a collection of their own.
@@ -33,27 +158,14 @@ class SearchResultsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (results.isEmpty) {
-      return const EmptyStateCard(
-        message: 'No matches found. Try a different search.',
+      return const SearchDropdownCard(
+        child: SearchDropdownMessage(
+          message: 'No matches found. Try a different search.',
+        ),
       );
     }
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(22, 0, 22, 18),
-      constraints: const BoxConstraints(maxHeight: 430),
-      decoration: BoxDecoration(
-        color: EbtlColors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: EbtlColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
+    return SearchDropdownCard(
       child: ListView(
         shrinkWrap: true,
         padding: EdgeInsets.zero,

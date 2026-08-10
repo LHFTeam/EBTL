@@ -115,6 +115,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   late final TextEditingController searchController;
   final FocusNode searchFocusNode = FocusNode();
+
+  /// Anchors the results dropdown to the search field in the header.
+  final LayerLink searchFieldLink = LayerLink();
   Timer? searchDebounce;
 
   /// The query the results below the header are showing. Empty means Home is
@@ -125,6 +128,10 @@ class _HomeScreenState extends State<HomeScreen> {
   /// customer actually searches — Home itself does not need it, and paging
   /// every category is not something startup should pay for.
   Future<SearchCatalog>? catalogFuture;
+
+  /// The same catalog once it has arrived, so the keyboard's search key can
+  /// act on it without waiting on the future again.
+  SearchCatalog? loadedCatalog;
 
   @override
   void initState() {
@@ -165,16 +172,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Fetches the catalog the first time a search needs it.
   void ensureCatalog() {
-    catalogFuture ??= SearchCatalog.load(
-      locationId: widget.data.selectedLocationId,
-    );
+    catalogFuture ??= fetchCatalog();
   }
 
   /// Fetches it again — after a beach-cart change, or a retry.
   void loadCatalog() {
-    catalogFuture = SearchCatalog.load(
+    catalogFuture = fetchCatalog();
+  }
+
+  Future<SearchCatalog> fetchCatalog() async {
+    loadedCatalog = null;
+    final catalog = await SearchCatalog.load(
       locationId: widget.data.selectedLocationId,
     );
+
+    loadedCatalog = catalog;
+    return catalog;
   }
 
   /// Debounced so a fast typist searches once, not once per keystroke — the
@@ -200,6 +213,21 @@ class _HomeScreenState extends State<HomeScreen> {
     widget.onSearchQueryChanged('');
     setState(() => appliedQuery = '');
     searchFocusNode.requestFocus();
+  }
+
+  /// The keyboard's search key opens everything the query matched as its own
+  /// screen. With nothing behind it — no catalog yet, or no products — it just
+  /// puts the keyboard away and leaves the dropdown up.
+  void submitSearch(String value) {
+    final query = value.trim();
+    final products = query.isEmpty
+        ? const <ShopProduct>[]
+        : loadedCatalog?.search(query).products ?? const <ShopProduct>[];
+
+    searchFocusNode.unfocus();
+    if (products.isEmpty) return;
+
+    openSearchCollection(query, products);
   }
 
   Future<void> openSearchProduct(ShopProduct product) {
@@ -342,42 +370,64 @@ class _HomeScreenState extends State<HomeScreen> {
           onOpenNotifications: widget.onOpenNotifications,
           searchController: searchController,
           searchFocusNode: searchFocusNode,
+          searchFieldLink: searchFieldLink,
           onSearchChanged: updateSearch,
+          onSubmitSearch: submitSearch,
           onClearSearch: clearSearch,
         ),
+        // The modules stay put while a search is typed — the results hang off
+        // the field, over them, rather than taking their place.
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.only(top: 18, bottom: 100),
-            children: appliedQuery.isEmpty
-                ? buildModules()
-                : [buildSearchResults()],
+          child: Stack(
+            children: [
+              ListView(
+                padding: const EdgeInsets.only(top: 18, bottom: 100),
+                children: buildModules(),
+              ),
+              if (appliedQuery.isNotEmpty)
+                SearchResultsDropdown(
+                  link: searchFieldLink,
+                  child: buildSearchResults(),
+                ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  /// The search dropdown, in place of the modules, for as long as a query is
-  /// applied — the same results Explore shows, from the same catalog.
+  /// What hangs under the field while a query is applied: the same results
+  /// Explore shows, from the same catalog, plus the states of fetching it.
   Widget buildSearchResults() {
     return FutureBuilder<SearchCatalog>(
       future: catalogFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const EbtlLoadingSection(label: 'Searching...');
+          return const SearchDropdownCard(
+            child: EbtlLoadingSection(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              size: 56,
+              showLabel: false,
+            ),
+          );
         }
 
         if (snapshot.hasError) {
-          return InlineErrorCard(
-            message: apiErrorMessage(snapshot.error!),
-            onRetry: () => setState(loadCatalog),
+          return SearchDropdownCard(
+            child: SearchDropdownMessage(
+              message: apiErrorMessage(snapshot.error!),
+              actionLabel: 'Try again',
+              onAction: () => setState(loadCatalog),
+            ),
           );
         }
 
         final catalog = snapshot.data;
         if (catalog == null) {
-          return const EmptyStateCard(
-            message: 'No matches found. Try a different search.',
+          return const SearchDropdownCard(
+            child: SearchDropdownMessage(
+              message: 'No matches found. Try a different search.',
+            ),
           );
         }
 

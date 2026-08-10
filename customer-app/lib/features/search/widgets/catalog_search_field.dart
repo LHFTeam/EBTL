@@ -16,20 +16,38 @@ class CatalogSearchField extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode? focusNode;
   final ValueChanged<String> onChanged;
+
+  /// Called when the keyboard's search key is pressed.
+  final ValueChanged<String>? onSubmitted;
   final VoidCallback onClear;
   final String hintText;
+
+  /// Anchors the results dropdown to this field, so it hangs off the pill
+  /// instead of pushing the page around. See [SearchResultsDropdown].
+  final LayerLink? layerLink;
 
   const CatalogSearchField({
     super.key,
     required this.controller,
     required this.onChanged,
     required this.onClear,
+    this.onSubmitted,
     this.focusNode,
+    this.layerLink,
     this.hintText = 'Search cocktails, mixers, snacks',
   });
 
   @override
   Widget build(BuildContext context) {
+    final link = layerLink;
+    if (link != null) {
+      return CompositedTransformTarget(link: link, child: buildField());
+    }
+
+    return buildField();
+  }
+
+  Widget buildField() {
     return Container(
       height: height,
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -50,6 +68,7 @@ class CatalogSearchField extends StatelessWidget {
               textAlignVertical: TextAlignVertical.center,
               cursorColor: EbtlColors.coral,
               onChanged: onChanged,
+              onSubmitted: onSubmitted,
               style: GoogleFonts.manrope(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
