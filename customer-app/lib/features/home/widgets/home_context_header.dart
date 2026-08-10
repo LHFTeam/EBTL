@@ -20,7 +20,12 @@ class HomeContextHeader extends StatelessWidget {
   /// controller, the debounce and the results.
   final TextEditingController searchController;
   final FocusNode searchFocusNode;
+
+  /// Anchors the results dropdown to the field, so it hangs off the header
+  /// over the modules below.
+  final LayerLink searchFieldLink;
   final ValueChanged<String> onSearchChanged;
+  final ValueChanged<String> onSubmitSearch;
   final VoidCallback onClearSearch;
 
   const HomeContextHeader({
@@ -31,7 +36,9 @@ class HomeContextHeader extends StatelessWidget {
     required this.onOpenNotifications,
     required this.searchController,
     required this.searchFocusNode,
+    required this.searchFieldLink,
     required this.onSearchChanged,
+    required this.onSubmitSearch,
     required this.onClearSearch,
   });
 
@@ -67,7 +74,9 @@ class HomeContextHeader extends StatelessWidget {
               CatalogSearchField(
                 controller: searchController,
                 focusNode: searchFocusNode,
+                layerLink: searchFieldLink,
                 onChanged: onSearchChanged,
+                onSubmitted: onSubmitSearch,
                 onClear: onClearSearch,
               ),
             ],

@@ -261,6 +261,56 @@ void main() {
       );
     });
 
+    testWidgets('floats over the page instead of replacing it', (tester) async {
+      // What the screens do: the page keeps rendering, and the dropdown hangs
+      // off the field on top of it.
+      final controller = TextEditingController(text: 'salt');
+      addTearDown(controller.dispose);
+      final link = LayerLink();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Stack(
+              children: [
+                Column(
+                  children: [
+                    // The 22pt page gutters both screens lay the field out on.
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 22),
+                      child: CatalogSearchField(
+                        controller: controller,
+                        layerLink: link,
+                        onChanged: (_) {},
+                        onClear: () {},
+                      ),
+                    ),
+                    const Text('the page underneath'),
+                  ],
+                ),
+                SearchResultsDropdown(
+                  link: link,
+                  child: SearchResultsPanel(
+                    catalog: _catalog,
+                    results: _catalog.search('salt'),
+                    onOpenProduct: (_) {},
+                    onOpenCollection: (_, _) {},
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('the page underneath'), findsOneWidget);
+      expect(find.text('Salted Chips'), findsOneWidget);
+
+      // Wide as the field it hangs from: the page width less both gutters.
+      final width = tester.getSize(find.byType(SearchResultsDropdown)).width;
+      expect(width, tester.getSize(find.byType(CatalogSearchField)).width);
+    });
+
     testWidgets('opens a product, and a collection for everything else', (
       tester,
     ) async {
