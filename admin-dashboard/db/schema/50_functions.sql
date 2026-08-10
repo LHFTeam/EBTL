@@ -2,8 +2,9 @@
 --
 -- Four kinds live here: RLS helpers (current_employee_id/role, is_staff,
 -- is_manager_or_admin) used by the policies in 70_rls_policies.sql; trigger
--- functions wired up in 60_triggers.sql; the inventory posting logic; and one
--- RPC (transition_cart_order_status) called by the staff app.
+-- functions wired up in 60_triggers.sql; the inventory posting logic; and two
+-- RPCs called by the admin server (transition_cart_order_status and
+-- delete_ingredient_cascade).
 
 CREATE OR REPLACE FUNCTION public.apply_stock_movement_to_balance()
  RETURNS trigger
@@ -129,6 +130,52 @@ AS $function$
   where e.auth_user_id = (select auth.uid())
     and e.is_active = true
   limit 1;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.delete_ingredient_cascade(p_ingredient_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_name         text;
+  v_product_name text;
+  v_product_type text;
+begin
+  select name into v_name from ingredients where id = p_ingredient_id;
+  if v_name is null then
+    return jsonb_build_object('status', 'not_found');
+  end if;
+
+  select p.name, p.product_type
+    into v_product_name, v_product_type
+  from recipe_items ri
+  join recipes r on r.id = ri.recipe_id
+  join products p on p.id = r.product_id
+  where ri.ingredient_id = p_ingredient_id
+  order by p.name
+  limit 1;
+
+  if v_product_name is not null then
+    return jsonb_build_object(
+      'status',       'in_recipe',
+      'product_name', v_product_name,
+      'product_type', v_product_type
+    );
+  end if;
+
+  delete from stock_movements                 where ingredient_id = p_ingredient_id;
+  delete from inventory_balances              where ingredient_id = p_ingredient_id;
+  delete from stock_transfer_items            where ingredient_id = p_ingredient_id;
+  delete from purchase_order_items            where ingredient_id = p_ingredient_id;
+  delete from order_item_inventory_components where ingredient_id = p_ingredient_id;
+  delete from cart_item_removed_ingredients   where ingredient_id = p_ingredient_id;
+
+  delete from ingredients where id = p_ingredient_id;
+
+  return jsonb_build_object('status', 'deleted', 'id', p_ingredient_id, 'name', v_name);
+end;
 $function$;
 
 CREATE OR REPLACE FUNCTION public.generate_transfer_number()

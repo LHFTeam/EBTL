@@ -10,7 +10,7 @@ be read alongside the changes that produced it.
 ## Ledger mapping
 
 Supabase records what it has applied in `supabase_migrations.schema_migrations`.
-All sixteen entries have a file:
+All eighteen entries have a file:
 
 | Ledger version | Name | File |
 | --- | --- | --- |
@@ -31,8 +31,15 @@ All sixteen entries have a file:
 | 20260806211254 | spotlight_banners | `20260806211254_spotlight_banners.sql` |
 | 20260807124610 | spotlight_banner_markdown_slide | `20260807124610_…sql` |
 | 20260807171440 | forecast_module | `20260807171440_forecast_module.sql` |
+| 20260810132333 | normalize_ingredient_categories | `20260810120000_normalize_ingredient_categories.sql` |
+| 20260810174101 | cascade_ingredient_delete | `20260810174101_cascade_ingredient_delete.sql` |
 
 ## Notes on the applied set
+
+`normalize_ingredient_categories` is the one file whose name does not match its
+ledger version: it was saved as `20260810120000_…` before the ledger assigned
+`20260810132333`. Renaming it would break nothing, but the mapping above is what
+makes the pair readable until then.
 
 Six of them were recorded with no file in the repo and were backfilled
 from the ledger's stored statements. They carry a header saying so. The four

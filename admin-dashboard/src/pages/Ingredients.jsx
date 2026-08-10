@@ -256,8 +256,10 @@ export default function Ingredients() {
 
     const confirmed = confirm(
       `Permanently delete ${row.name}?\n\n` +
-      'This removes the ingredient from the database and cannot be undone. It only works when nothing else ' +
-      'still references it — recipes, stock history, transfers, purchase orders, and past orders all keep it archived instead.'
+      'This also deletes everything tied to it: inventory balances (including any stock still on hand), ' +
+      'stock movements, transfer and purchase order lines, its components on past orders, and any customer ' +
+      'cart that removed it. This cannot be undone.\n\n' +
+      'Ingredients used in a product or cocktail recipe cannot be deleted — remove them from the recipe first.'
     );
     if (!confirmed) return;
 
