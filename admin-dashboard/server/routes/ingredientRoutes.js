@@ -274,6 +274,56 @@ ingredientRouter.patch('/ingredient-categories/:id', requireArea('ingredients'),
   return res.json(data);
 });
 
+ingredientRouter.delete('/ingredient-categories/:id', requireArea('ingredients'), async (req, res) => {
+  const category = await supabase
+    .from('ingredient_categories')
+    .select('id,name')
+    .eq('id', req.params.id)
+    .maybeSingle();
+
+  if (category.error) return sendCategoryError(category.error, res);
+  if (!category.data) return res.status(404).json({ error: 'Ingredient category not found.' });
+
+  // Archiving a category only has to clear the active ingredients; deleting it
+  // has to clear every one, because the foreign key does not care whether the
+  // ingredient holding the category is archived.
+  const linked = await supabase
+    .from('ingredients')
+    .select('name,is_active', { count: 'exact' })
+    .eq('category_id', category.data.id)
+    .order('name')
+    .limit(1);
+
+  if (linked.error) return sendCategoryError(linked.error, res);
+
+  if (linked.data?.length) {
+    const [blocker] = linked.data;
+    // Name one ingredient rather than all of them, and say when it is archived —
+    // otherwise the ingredient blocking the delete is nowhere to be seen in the
+    // Active view the admin is most likely looking at.
+    const blockerLabel = `"${blocker.name}"${blocker.is_active ? '' : ' (archived)'}`;
+    const others = (linked.count ?? linked.data.length) - 1;
+    const assigned = others > 0
+      ? `${blockerLabel} and ${others} other ${others === 1 ? 'ingredient' : 'ingredients'}`
+      : blockerLabel;
+
+    return res.status(409).json({
+      error: `"${category.data.name}" cannot be deleted because it is still assigned to ${assigned}. ` +
+        `Move ${others > 0 ? 'those ingredients' : 'that ingredient'} to another category first.`
+    });
+  }
+
+  const { data, error } = await supabase
+    .from('ingredient_categories')
+    .delete()
+    .eq('id', category.data.id)
+    .select('id,name')
+    .single();
+
+  if (error) return sendCategoryError(error, res);
+  return res.json(data);
+});
+
 ingredientRouter.post('/ingredients', requireArea('ingredients'), async (req, res) => {
   const parsed = ingredientCreateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid ingredient' });
