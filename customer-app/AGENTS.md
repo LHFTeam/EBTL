@@ -74,9 +74,10 @@ Notes:
   the app shell smoke test (`widget_test.dart`), JSON parsing
   (`notification_models_test.dart`), the checkout result states, the bottom
   nav's tab set and badge placement (`ebtl_bottom_nav_test.dart`), and the
-  Explore hero/badges (`explore_widgets_test.dart`), the spirit-profile
-  payloads (`spirit_models_test.dart`), and the Golden Hour launch modal's
-  parsing and pill row (`golden_hour_test.dart`). Screens that call
+  Explore hero/badges (`explore_widgets_test.dart`), the shared catalog search
+  — matching, field and results panel (`catalog_search_test.dart`), the
+  spirit-profile payloads (`spirit_models_test.dart`), and the Golden Hour
+  launch modal's parsing and pill row (`golden_hour_test.dart`). Screens that call
   `ApiService` statics directly are not testable without a backend — test the
   widgets they compose instead, as those files do.
 - Some CI/agent environments do not have the Flutter SDK installed. If
@@ -117,7 +118,8 @@ lib/
     crash_reporting_service.dart    # Crashlytics + global uncaught-error hooks.
     clarity_service.dart    # Microsoft Clarity session replay (release-only).
   features/<feature>/       # One folder per screen/flow:
-                            # home, explore, finder, shop, cocktail_detail,
+                            # home, explore, search (the catalog search Home and
+                            # Explore share), finder, shop, cocktail_detail,
                             # cart, checkout (includes OrderConfirmedScreen),
                             # profile (orders, favorites, spirits, edit sheet),
                             # onboarding
@@ -241,6 +243,17 @@ tree):
    usually from the Explore hero — go on top with `Navigator.push`.
    `ShopScreen` still exists but is no longer wired into the nav; Explore
    replaced it.
+
+**Search is one feature on two surfaces.** Home and Explore both render
+`CatalogSearchField` and, while a query is applied, `SearchResultsPanel`
+(`features/search/`) — a live field that searches in place, debounced 250 ms,
+over the `SearchCatalog` stitched from every shop category. Neither screen
+navigates to search: Home swaps its modules for the results, Explore swaps its
+browse content. The query text itself is `RootShell.searchQuery`, passed to
+both with `onSearchQueryChanged`, so a search typed on one tab is still there
+on the other. Explore already holds the catalog for its badges; Home fetches
+it only once the customer actually types. Change the field or the matching in
+`features/search/`, never in one screen alone.
 
 ### Data flow pattern (follow it for new screens)
 

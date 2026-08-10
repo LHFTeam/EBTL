@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/ebtl_colors.dart';
+import '../../search/widgets/catalog_search_field.dart';
 
 /// The fixed block at the top of Home: the beach-cart chip, the notifications
 /// button and the search field. It does not scroll — it is the context the
@@ -14,8 +15,13 @@ class HomeContextHeader extends StatelessWidget {
   final VoidCallback onOpenLocationPicker;
   final int unreadNotificationCount;
   final VoidCallback onOpenNotifications;
-  final VoidCallback onOpenSearch;
-  final String searchQuery;
+
+  /// The search field is a live input — the screen behind it owns the
+  /// controller, the debounce and the results.
+  final TextEditingController searchController;
+  final FocusNode searchFocusNode;
+  final ValueChanged<String> onSearchChanged;
+  final VoidCallback onClearSearch;
 
   const HomeContextHeader({
     super.key,
@@ -23,8 +29,10 @@ class HomeContextHeader extends StatelessWidget {
     required this.onOpenLocationPicker,
     required this.unreadNotificationCount,
     required this.onOpenNotifications,
-    required this.onOpenSearch,
-    required this.searchQuery,
+    required this.searchController,
+    required this.searchFocusNode,
+    required this.onSearchChanged,
+    required this.onClearSearch,
   });
 
   @override
@@ -56,7 +64,12 @@ class HomeContextHeader extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              _SearchField(onTap: onOpenSearch, query: searchQuery),
+              CatalogSearchField(
+                controller: searchController,
+                focusNode: searchFocusNode,
+                onChanged: onSearchChanged,
+                onClear: onClearSearch,
+              ),
             ],
           ),
         ),
@@ -229,59 +242,6 @@ class _NotificationsButton extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-class _SearchField extends StatelessWidget {
-  final VoidCallback onTap;
-  final String query;
-
-  const _SearchField({required this.onTap, required this.query});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: EbtlColors.white,
-      borderRadius: BorderRadius.circular(999),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
-        child: Container(
-          height: 46,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: EbtlColors.border),
-          ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.search_rounded,
-                size: 18,
-                color: EbtlColors.muted,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  query.trim().isEmpty
-                      ? 'Search cocktails, mixers, snacks'
-                      : query.trim(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.manrope(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: query.trim().isEmpty
-                        ? EbtlColors.muted
-                        : EbtlColors.navy,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
