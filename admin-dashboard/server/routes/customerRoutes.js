@@ -1429,6 +1429,9 @@ function productCardPayload({
     image_url: product.image_url,
     tags: productTagDetails(product.tags || [], productTagsByName).map((tag) => tag.name),
     tag_details: productTagDetails(product.tags || [], productTagsByName),
+    ingredient_names: (recipeItems || [])
+      .map((item) => item.ingredients?.name)
+      .filter(Boolean),
     prep_time_minutes: product.prep_time_minutes,    
     is_featured: product.is_featured,
     display_order: product.display_order,
