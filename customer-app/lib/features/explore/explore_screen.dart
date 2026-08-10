@@ -13,6 +13,7 @@ import '../../services/analytics_service.dart';
 import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import '../../shared/widgets/brand_widgets.dart';
+import '../../shared/widgets/network_or_asset_image.dart';
 import '../../shared/widgets/section_block.dart';
 import '../shop/shop_product_loading.dart';
 import '../shop/widgets/shop_loading_state.dart';
@@ -549,17 +550,52 @@ class _ExploreScreenState extends State<ExploreScreen> {
     final categories = payload.categories
         .where((category) => category.matchesQuery(query))
         .toList();
-    final tagNames = <String>{};
-    for (final product in payload.allProducts) {
-      for (final tagName in [
-        ...product.tags,
-        ...product.tagDetails.map((tag) => tag.name),
-      ]) {
-        if (tagName.toLowerCase().contains(query)) tagNames.add(tagName);
+
+    List<String> matchingValues(
+      Iterable<String> values,
+    ) {
+      final matches = <String, String>{};
+      for (final value in values) {
+        final clean = value.trim();
+        if (clean.toLowerCase().contains(query)) {
+          matches.putIfAbsent(clean.toLowerCase(), () => clean);
+        }
       }
+      final result = matches.values.toList();
+      result.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      return result;
     }
-    final tags = tagNames.toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+    final tags = matchingValues(
+      payload.allProducts.expand(
+        (product) => [
+          ...product.tags,
+          ...product.tagDetails.map((tag) => tag.name),
+        ],
+      ),
+    );
+    final ingredients = matchingValues(
+      payload.allProducts.expand((product) => product.ingredientNames),
+    );
+    final hasResults =
+        products.isNotEmpty ||
+        categories.isNotEmpty ||
+        tags.isNotEmpty ||
+        ingredients.isNotEmpty;
+
+    List<ShopProduct> productsForValue(
+      String value,
+      Iterable<String> Function(ShopProduct product) valuesForProduct,
+    ) {
+      final target = value.toLowerCase();
+      return payload.allProducts
+          .where(
+            (product) => valuesForProduct(
+              product,
+            ).any((candidate) => candidate.toLowerCase() == target),
+          )
+          .toList();
+    }
 
     return CustomScrollView(
       slivers: [
@@ -572,64 +608,83 @@ class _ExploreScreenState extends State<ExploreScreen> {
           ),
         ),
         SliverToBoxAdapter(child: buildSearchField()),
-        if (categories.isNotEmpty || tags.isNotEmpty)
+        if (!hasResults)
+          const SliverToBoxAdapter(
+            child: EmptyStateCard(
+              message: 'No matches found. Try a different search.',
+            ),
+          )
+        else
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(22, 4, 22, 14),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(22, 0, 22, 18),
+              constraints: const BoxConstraints(maxHeight: 430),
+              decoration: BoxDecoration(
+                color: EbtlColors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: EbtlColors.border),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: ListView(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
                 children: [
+                  ...products.map(
+                    (product) => _SearchResultRow(
+                      label: product.name,
+                      typeLabel: product.productTypeLabel,
+                      product: product,
+                      onTap: () => openProduct(product),
+                    ),
+                  ),
                   ...categories.map(
-                    (category) => ActionChip(
-                      avatar: const Icon(Icons.category_outlined, size: 17),
-                      label: Text(category.name),
-                      onPressed: () => openSearchCollection(
+                    (category) => _SearchResultRow(
+                      label: category.name,
+                      typeLabel: 'Category',
+                      onTap: () => openSearchCollection(
                         title: category.name,
                         products: payload.productsFor(category.id),
                       ),
                     ),
                   ),
                   ...tags.map(
-                    (tag) => ActionChip(
-                      avatar: const Icon(Icons.sell_outlined, size: 17),
-                      label: Text(tag),
-                      onPressed: () => openSearchCollection(
+                    (tag) => _SearchResultRow(
+                      label: tag,
+                      typeLabel: 'Tag',
+                      onTap: () => openSearchCollection(
                         title: tag,
-                        products: payload.allProducts
-                            .where(
-                              (product) => [
-                                ...product.tags,
-                                ...product.tagDetails.map((item) => item.name),
-                              ].any(
-                                (name) =>
-                                    name.toLowerCase() == tag.toLowerCase(),
-                              ),
-                            )
-                            .toList(),
+                        products: productsForValue(
+                          tag,
+                          (product) => [
+                            ...product.tags,
+                            ...product.tagDetails.map((item) => item.name),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  ...ingredients.map(
+                    (ingredient) => _SearchResultRow(
+                      label: ingredient,
+                      typeLabel: 'Ingredient',
+                      onTap: () => openSearchCollection(
+                        title: ingredient,
+                        products: productsForValue(
+                          ingredient,
+                          (product) => product.ingredientNames,
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
-            ),
-          ),
-        if (products.isEmpty && categories.isEmpty && tags.isEmpty)
-          const SliverToBoxAdapter(
-            child: EmptyStateCard(
-              message: 'No matches found. Try a different search.',
-            ),
-          )
-        else if (products.isNotEmpty)
-          SliverToBoxAdapter(
-            child: ShopProductGridSection(
-              title:
-                  '${products.length} ${products.length == 1 ? 'result' : 'results'}',
-              items: products,
-              initialVisibleCount: products.length,
-              addingProductId: addingProductId,
-              onProductTap: openProduct,
-              onQuickAdd: quickAddProduct,
             ),
           ),
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -652,6 +707,85 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
     if (!mounted) return;
     widget.onSearchCollectionClosed();
+  }
+}
+
+
+class _SearchResultRow extends StatelessWidget {
+  final String label;
+  final String typeLabel;
+  final ShopProduct? product;
+  final VoidCallback onTap;
+
+  const _SearchResultRow({
+    required this.label,
+    required this.typeLabel,
+    this.product,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 68),
+        padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: EbtlColors.border)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: EbtlColors.coral.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                typeLabel.toUpperCase(),
+                style: GoogleFonts.manrope(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.6,
+                  color: EbtlColors.coral,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.manrope(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: EbtlColors.navy,
+                ),
+              ),
+            ),
+            if (product != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: NetworkOrAssetImage(
+                    imageUrl: product!.imageUrl,
+                    asset: product!.imageAsset,
+                  ),
+                ),
+              )
+            else
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: EbtlColors.muted,
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

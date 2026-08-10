@@ -218,6 +218,7 @@ class ShopProduct {
   final String imageAsset;
   final List<String> tags;
   final List<ProductTag> tagDetails;
+  final List<String> ingredientNames;
   final int prepTimeMinutes;
   final bool isFeatured;
   final int displayOrder;
@@ -240,6 +241,7 @@ class ShopProduct {
     required this.imageAsset,
     required this.tags,
     required this.tagDetails,
+    required this.ingredientNames,
     required this.prepTimeMinutes,
     required this.isFeatured,
     required this.displayOrder,
@@ -273,6 +275,7 @@ class ShopProduct {
       tagDetails: sortProductTags(
         readMapList(json['tag_details']).map(ProductTag.fromJson).toList(),
       ),
+      ingredientNames: readStringList(json['ingredient_names']),
       prepTimeMinutes: readInt(json['prep_time_minutes'], fallback: 5),
       isFeatured: readBool(json['is_featured']),
       displayOrder: readInt(json['display_order']),
@@ -372,6 +375,7 @@ class ShopProduct {
       category?.name ?? '',
       ...tags,
       ...tagDetails.map((tag) => tag.name),
+      ...ingredientNames,
     ].join(' ').toLowerCase();
 
     return searchable.contains(clean);

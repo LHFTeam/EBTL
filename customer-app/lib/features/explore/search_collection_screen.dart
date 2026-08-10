@@ -29,7 +29,7 @@ class SearchCollectionScreen extends StatelessWidget {
             SliverToBoxAdapter(
               child: ShopSimpleHeader(
                 title: title,
-                subtitle: 'Browse products tagged $title.',
+                subtitle: 'Browse matching products.',
                 onBack: () => Navigator.of(context).pop(),
               ),
             ),
