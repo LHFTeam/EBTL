@@ -1,20 +1,30 @@
 /*
   EBTL landing page styles.
 
-  Source of truth is the mobile layout (viewport <= 520px) — it's the
-  hand-verified design. The unprefixed rules below are the desktop layout;
-  the two max-width blocks near the bottom of the file override them back
-  down to tablet and then mobile, so mobile ends up as the union of both.
-  Breakpoint tiers, narrowest to widest:
+  The mobile layout (<= 520px) is the hand-verified design and is FROZEN:
+  it must render identically pixel for pixel. Every other tier is built to
+  match its composition at a larger scale. Tiers, narrowest to widest:
 
-    max-width: 520px    mobile phones   (<= 520px)   — verified baseline
-    max-width: 980px    phablet/tablet  (521–980px)   — adapted from mobile
-    (unprefixed rules)  desktop         (981–1439px)  — adapted from mobile
-    min-width: 1440px   large desktop   (>= 1440px)   — adapted from mobile
+    max-width: 520px                    mobile   — frozen, do not touch
+    min-width: 521px and max-width: 1023px  tablet only
+    max-width: 1023px                   tablet + mobile, SHARED
+    min-width: 1024px                   desktop (phone steps at 1200/1440)
 
-  Fluid values (clamp/vw) carry most of the scaling between tiers; the
-  breakpoints above only exist where the layout itself needs to change
-  (e.g. hero switches from a stacked mobile layout to a two-column grid).
+  Note the shared <= 1023px block reaches mobile, so anything meant for
+  tablets alone belongs in the 521-1023px block, never in the shared one.
+
+  The unprefixed rules hold what the tiers have in common — colour, type,
+  chrome, animation. Hero layout (column widths, heading size, and where
+  each piece of art sits) is owned by the tier blocks at the bottom.
+
+  Every tier keeps the same hero composition:
+    - the four heading lines each stay on one line
+    - the glass sits on the bottom edge, fully visible, left of the phone
+    - the phone sits on the bottom edge, bleeding slightly off it
+    - strawberry, lemon wheel and top leaf cluster in the top-right corner
+    - the lower leaf hovers right of the copy, level with the gap between
+      "We bring" and "the magic."
+    - the shot measure sits in the bottom-right corner where there's room
 */
 :root {
   --navy: #0E2238;
@@ -32,6 +42,10 @@
   --shadow: 0 28px 80px rgba(14, 34, 56, 0.20);
   --soft-shadow: 0 18px 44px rgba(14, 34, 56, 0.12);
   --scroll-progress: 0;
+  /* Multiplier on every scroll-driven transform. Reduced motion sets this
+     to 0, which stops the parallax while leaving the static rotations that
+     the art is designed around intact. */
+  --motion: 1;
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; background: var(--cream); }
@@ -110,6 +124,7 @@ img { display: block; max-width: 100%; }
 
 /* Hero */
 .hero {
+  --hero-pad-top: clamp(86px, 12vh, 132px);
   position: relative;
   min-height: 100svh;
   overflow: hidden;
@@ -123,7 +138,7 @@ img { display: block; max-width: 100%; }
   background-image: url("./images/ebtl-hero-background-clean.webp");
   background-size: cover;
   background-position: center center;
-  transform: scale(calc(1.02 + (var(--scroll-progress) * 0.045)));
+  transform: scale(calc(1.02 + (var(--scroll-progress) * var(--motion) * 0.045)));
   transform-origin: center;
   filter: saturate(1.04) contrast(1.02);
 }
@@ -131,13 +146,11 @@ img { display: block; max-width: 100%; }
   min-height: 100svh;
   width: min(1220px, calc(100% - 40px));
   margin: 0 auto;
-  padding: clamp(86px, 12vh, 132px) 0 74px;
-  display: grid;
-  grid-template-columns: minmax(0, 0.92fr) minmax(360px, 1.08fr);
-  align-items: center;
-  gap: clamp(24px, 5vw, 76px);
+  padding: var(--hero-pad-top) 0 74px;
 }
-.hero-copy { position: relative; z-index: 5; max-width: 620px; }
+/* Hero layout (widths, font sizes, art placement) lives in the tier blocks
+   at the bottom of the file; the rules here are what the tiers share. */
+.hero-copy { position: relative; z-index: 5; }
 .eyebrow,
 .section-kicker {
   margin: 0 0 14px;
@@ -151,7 +164,6 @@ img { display: block; max-width: 100%; }
   margin: 28px 0 0;
   color: var(--navy);
   font-family: "Playfair Display", Georgia, serif;
-  font-size: clamp(4.9rem, 9.2vw, 8.6rem);
   line-height: 0.95;
   letter-spacing: -0.045em;
 }
@@ -165,7 +177,6 @@ img { display: block; max-width: 100%; }
   letter-spacing: -0.035em;
 }
 .hero-subtitle {
-  width: min(100%, 455px);
   margin: 24px 0 0;
   color: #334456;
   font-size: clamp(0.96rem, 1.45vw, 1.15rem);
@@ -209,19 +220,11 @@ img { display: block; max-width: 100%; }
 .primary-cta:hover,
 .secondary-cta:hover { transform: translateY(-2px); }
 
-/* App phone mockup inside the hero */
-.hero-art {
-  position: relative;
-  min-height: 710px;
-  display: grid;
-  place-items: center;
-  z-index: 3;
-}
+/* App phone mockup inside the hero. Both tiers position .hero-art and size
+   the phone; what stays here is the shared chrome and motion. */
 .phone-orbit {
-  position: relative;
-  width: min(58vw, 360px);
   max-width: 100%;
-  transform: translate3d(0, calc(var(--scroll-progress) * -54px), 0) rotate(10deg);
+  transform: translate3d(0, calc(var(--scroll-progress) * var(--motion) * -54px), 0) rotate(10deg);
   filter: drop-shadow(0 38px 38px rgba(14, 34, 56, 0.28));
   animation: phoneIntro 850ms cubic-bezier(.18,.85,.26,1.08) 120ms both;
   z-index: 8;
@@ -417,46 +420,32 @@ img { display: block; max-width: 100%; }
   user-select: none;
   will-change: transform;
 }
+/* Each asset's placement is set per tier; the shared parallax, entrance and
+   idle drift live here. Sizes appear here only where a tier reuses them. */
 .asset-strawberry {
-  width: clamp(76px, 9vw, 136px);
-  right: clamp(0px, 3vw, 46px);
-  top: 42px;
-  transform: translate3d(0, calc(var(--scroll-progress) * -34px), 0) rotate(13deg);
+  transform: translate3d(0, calc(var(--scroll-progress) * var(--motion) * -34px), 0) rotate(13deg);
   animation: floatIn 820ms cubic-bezier(.2,.8,.2,1) 340ms both, driftBerry 6.5s ease-in-out 1.1s infinite;
 }
 .asset-cocktail {
-  width: clamp(424px, 48vw, 820px);
-  left: clamp(-136px, -8vw, -56px);
-  bottom: -14px;
-  transform: translate3d(0, calc(var(--scroll-progress) * 26px), 0) rotate(-10deg);
+  transform: translate3d(0, calc(var(--scroll-progress) * var(--motion) * 26px), 0) rotate(-10deg);
   animation: floatIn 850ms cubic-bezier(.2,.8,.2,1) 520ms both, driftGlass 8s ease-in-out 1.3s infinite;
 }
 .asset-shot {
-  width: clamp(178px, 18vw, 280px);
-  right: clamp(-82px, -5vw, -26px);
-  bottom: 2px;
-  transform: translate3d(0, calc(var(--scroll-progress) * 52px), 0) rotate(-22deg);
+  transform: translate3d(0, calc(var(--scroll-progress) * var(--motion) * 52px), 0) rotate(-22deg);
   animation: floatIn 850ms cubic-bezier(.2,.8,.2,1) 680ms both, driftShot 7.6s ease-in-out 1.5s infinite;
 }
 .lemon-wheel {
   width: 92px;
-  top: 88px;
-  right: 118px;
   transform: rotate(12deg);
   animation: floatIn 780ms ease 450ms both, driftLime 7s ease-in-out 1.2s infinite;
 }
 .leaf-top {
   z-index: 6;
   width: 80px;
-  top: 42px;
-  right: 160px;
   animation: floatIn 780ms ease 570ms both, driftLeafOne 5.8s ease-in-out 1.3s infinite;
 }
 .leaf-lower {
   z-index: 0;
-  width: 120px;
-  bottom: 288px;
-  left: 50px;
   animation: floatIn 780ms ease 760ms both, driftLeafTwo 6.6s ease-in-out 1.5s infinite;
 }
 .hero-sparkles span {
@@ -693,8 +682,16 @@ img { display: block; max-width: 100%; }
   0%, 100% { transform: rotate(45deg) translate(-2px, -2px); }
   50% { transform: rotate(45deg) translate(2px, 2px); }
 }
-/* Tablet / phablet — 521px to 980px, adapted from the mobile design below */
-@media (max-width: 980px) {
+/*
+  Tablet / phablet + mobile — <= 1023px. This block is shared with the
+  frozen mobile design, so anything that should only affect tablets goes in
+  the 521px-and-up block below it, never here.
+*/
+@media (max-width: 1023px) {
+  .hero {
+    --t-h1: clamp(2.94rem, 5.52vw, 5.16rem);
+    --t-copy-w: 350px;
+  }
   .site-nav { height: 66px; grid-template-columns: 52px 1fr 52px; padding-inline: 12px; }
   .hero-content {
     min-height: 100svh;
@@ -703,9 +700,9 @@ img { display: block; max-width: 100%; }
     padding-top: 86px;
     padding-bottom: 80px;
   }
-  .hero-copy { max-width: 350px; }
+  .hero-copy { max-width: var(--t-copy-w); }
   .eyebrow { display: none; }
-  .hero h1 { font-size: clamp(2.94rem, 5.52vw, 5.16rem); }
+  .hero h1 { font-size: var(--t-h1); }
   .hero-subtitle { width: 60vw; margin-top: 18px; font-size: .88rem; line-height: 1.54; }
   .hero-actions { align-items: stretch; width: min(100%, 318px); }
   .primary-cta, .secondary-cta { min-height: 48px; padding: 0 18px; font-size: .84rem; }
@@ -765,6 +762,37 @@ img { display: block; max-width: 100%; }
   .steps-grid { grid-template-columns: 1fr; }
 }
 
+/*
+  Tablet only — 521px to 1023px. Deliberately scoped above the mobile
+  breakpoint so none of it can reach the frozen mobile layout. Everything
+  here exists to hold the same composition rules the other tiers follow:
+  the garnishes stay a visible cluster in the top-right corner, and the
+  lower leaf sits beside the heading rather than drifting to the top left.
+*/
+@media (min-width: 521px) and (max-width: 1023px) {
+  .hero {
+    --t-container: min(calc(100% - 32px), 620px);
+    --t-gutter: calc((100% - var(--t-container)) / 2);
+    --t-leaf-w: 120px;
+  }
+  /* 60vw alone overruns the 350px copy column on wide tablets and the text
+     then runs straight across the phone mockup */
+  .hero-subtitle { width: min(60vw, var(--t-copy-w)); }
+  .leaf-top { right: clamp(150px, 26vw, 300px); top: clamp(28px, 4vh, 56px); }
+  .lemon-wheel { right: clamp(86px, 13vw, 170px); top: clamp(58px, 8vh, 106px); }
+  .asset-strawberry { right: clamp(14px, 3.5vw, 50px); top: clamp(96px, 12vh, 140px); }
+
+  /* Copy starts at a fixed 86px padding + the h1's 28px margin, so the gap
+     between "We bring" and "the magic." lands at 114px + 2.93 x --t-h1 */
+  .leaf-lower {
+    width: var(--t-leaf-w);
+    left: calc(var(--t-gutter) + var(--t-copy-w) + 16px - var(--t-leaf-w) * 0.28);
+    right: auto;
+    bottom: auto;
+    top: calc(114px + var(--t-h1) * 2.93 - var(--t-leaf-w) * 0.486);
+  }
+}
+
 /* Mobile phones — <= 520px. This is the verified, hand-designed baseline. */
 @media (max-width: 520px) {
   .site-nav { height: 62px; }
@@ -794,26 +822,131 @@ img { display: block; max-width: 100%; }
 }
 
 /*
-  Large desktop — >= 1440px. The hero-content grid columns stop growing
-  once the container hits its 1220px cap, but the heading's clamp() keeps
-  scaling the font up to its max — on very wide screens that combination
-  made "You bring" wrap mid-phrase inside its column. Give the copy column
-  more of the fixed-width row so the heading has room to breathe.
+  Desktop — >= 981px. Mirrors the mobile composition at a larger scale: the
+  heading sits in a column on the left while the art is laid over the whole
+  hero, so every piece anchors to the viewport edges rather than to a narrow
+  grid column (which is what used to bury the glass behind the phone and
+  strand the garnishes mid-canvas).
+
+  Sizing hangs off --h1. The four heading lines must each stay on one line;
+  in Playfair Display the widest ("the magic.") measures 4.25x its font
+  size, so the copy column is pinned to 4.42x for ~4% of slack. --h1 is
+  capped against vh as well as vw so the block still clears short laptops.
+
+  The 0.195 / 0.132 / 0.28-style factors below are the transparent margins
+  baked into each .webp, used to line the *visible* art up with an edge.
 */
-@media (min-width: 1440px) {
-  .hero-content { grid-template-columns: minmax(560px, 0.92fr) minmax(360px, 1.08fr); }
-  .hero-copy { max-width: 700px; }
-  .hero-subtitle { width: min(100%, 520px); }
+@media (min-width: 1024px) {
+  .hero {
+    --container: min(1220px, calc(100% - 40px));
+    --gutter: calc((100% - var(--container)) / 2);
+    --h1: max(3rem, min(9.2vw, 6.5rem, 11vh));
+    /* 4.42x keeps the longest heading line on one line; the 400px floor
+       stops the two CTAs wrapping to a second row on short viewports,
+       where --h1 (and so the column) is driven down by the vh cap */
+    --copy-w: max(400px, calc(var(--h1) * 4.42));
+    /* The mockup is drawn at 360px and scaled as a unit, so --phone-scale
+       is a plain number (stepped, since CSS can't divide a length down to
+       one) and the phone's own width follows from it */
+    --phone-scale: 0.7;
+    --phone-w: calc(360px * var(--phone-scale));
+    --phone-right: clamp(60px, 9vw, 220px);
+    --glass-w: clamp(340px, 30vw, 560px);
+    --shot-w: clamp(150px, 14vw, 260px);
+    --leaf-w: clamp(96px, 8vw, 150px);
+    --art-gap: clamp(16px, 1.6vw, 30px);
+  }
+  @media (min-width: 1200px) { .hero { --phone-scale: 0.8; } }
+  @media (min-width: 1440px) { .hero { --phone-scale: 0.94; } }
+  .hero-content { display: flex; align-items: center; }
+  .hero-copy { width: var(--copy-w); max-width: none; }
+  .hero h1 { font-size: var(--h1); }
+  /* em-based width keeps the subtitle at a fixed line count as it scales,
+     so the copy block's height (and the leaf offset below) stays predictable */
+  .hero-subtitle { width: min(100%, 22em); }
+  .hero-art {
+    position: absolute;
+    inset: 0;
+    min-height: 0;
+    display: block;
+    z-index: 2;
+  }
+
+  /* Phone and glass both sit on the bottom edge, glass fully clear of the phone */
+  .phone-orbit {
+    position: absolute;
+    left: auto;
+    right: var(--phone-right);
+    bottom: calc(var(--phone-w) * -0.14);
+    width: var(--phone-w);
+    aspect-ratio: 0.49;
+  }
+  .phone-shell {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 360px;
+    transform-origin: 0 0;
+    transform: scale(var(--phone-scale));
+  }
+  .asset-cocktail {
+    left: auto;
+    right: calc(var(--phone-right) + var(--phone-w) + var(--art-gap) - var(--glass-w) * 0.195);
+    bottom: calc(var(--glass-w) * -0.132 - clamp(0px, 1.5vh, 18px));
+    width: var(--glass-w);
+  }
+  .asset-shot {
+    right: calc(var(--shot-w) * -0.16);
+    bottom: calc(var(--shot-w) * -0.203 + clamp(4px, 1vh, 14px));
+    width: var(--shot-w);
+  }
+
+  /* Garnish cluster, top right corner */
+  .asset-strawberry {
+    width: clamp(76px, 7vw, 130px);
+    right: clamp(40px, 6vw, 150px);
+    top: clamp(72px, 10vh, 132px);
+  }
+  .lemon-wheel {
+    width: clamp(70px, 6.5vw, 118px);
+    right: clamp(124px, 13vw, 285px);
+    top: clamp(112px, 15vh, 196px);
+  }
+  .leaf-top {
+    width: clamp(64px, 5.5vw, 100px);
+    right: clamp(152px, 15vw, 330px);
+    top: clamp(48px, 7vh, 104px);
+  }
+
+  /*
+    Lower leaf hovers just right of the copy, level with the gap between
+    "We bring" and "the magic.". The copy block is centred in the hero's
+    padding box, so the leaf is centred the same way and then offset down
+    to the third baseline (3 lines x 0.95em + the em's 0.08em margin).
+  */
+  .leaf-lower {
+    width: var(--leaf-w);
+    left: calc(var(--gutter) + var(--copy-w) + var(--art-gap) - var(--leaf-w) * 0.28);
+    right: auto;
+    bottom: auto;
+    top: calc(
+      var(--hero-pad-top) + (100% - var(--hero-pad-top) - 74px) / 2
+      + var(--h1) * 0.99 - var(--leaf-w) * 0.486 - 75px
+    );
+  }
 }
 
+/*
+  Reduced motion stops things moving, but the phone's 10deg tilt and the
+  angles on the garnishes are static design, not motion — zeroing --motion
+  drops the scroll parallax and leaves those rotations in place. (Blanket
+  `transform: none` here used to flatten the phone and every garnish.)
+*/
 @media (prefers-reduced-motion: reduce) {
+  :root { --motion: 0; }
   *, *::before, *::after {
     animation-duration: .001ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: .001ms !important;
   }
-  .hero-background,
-  .phone-orbit,
-  .floating-asset { transform: none !important; }
 }
