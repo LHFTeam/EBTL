@@ -158,6 +158,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   static const Duration _liveOrderPollInterval = Duration(seconds: 20);
 
   int selectedIndex = EbtlBottomNav.homeIndex;
+  String searchQuery = '';
+  int searchActivation = 0;
 
   /// The last successfully loaded payload. Kept across refreshes so a reload
   /// never unmounts the tab subtree — screens hold their own fetched state, and
@@ -623,6 +625,14 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     AnalyticsService.logScreenView(_screenNames[safeIndex]);
   }
 
+  void openSearch() {
+    setState(() {
+      selectedIndex = EbtlBottomNav.exploreIndex;
+      searchActivation++;
+    });
+    AnalyticsService.logScreenView('explore_search');
+  }
+
   Future<void> selectLocation(ServiceLocation location) async {
     await ApiService.saveSelectedLocation(location);
     AnalyticsService.logLocationSelected(location.id);
@@ -705,7 +715,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         pastOrders: pastOrders,
         unreadNotificationCount: unreadNotificationCount,
         onOpenNotifications: openNotifications,
-        onOpenSearch: () => handleBottomNavTap(EbtlBottomNav.exploreIndex),
+        onOpenSearch: openSearch,
+        searchQuery: searchQuery,
         onOpenCart: openCart,
         onOpenShop: () => handleBottomNavTap(EbtlBottomNav.exploreIndex),
         onOpenLiveOrder: openOrderDetail,
@@ -728,6 +739,11 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         onOpenNotifications: openNotifications,
         activeOrdersCount: activeOrdersCount,
         onOpenActiveOrders: openActiveOrders,
+        searchQuery: searchQuery,
+        searchActivation: searchActivation,
+        onSearchQueryChanged: (query) => setState(() => searchQuery = query),
+        onSearchCollectionClosed: () =>
+            setState(() => selectedIndex = EbtlBottomNav.homeIndex),
       ),
       CartScreen(
         data: data,
