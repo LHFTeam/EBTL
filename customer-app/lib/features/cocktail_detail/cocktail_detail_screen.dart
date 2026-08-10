@@ -1540,7 +1540,7 @@ class RelatedCocktailCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.manrope(
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: FontWeight.w900,
                             color: EbtlColors.navy,
                           ),
@@ -1552,7 +1552,7 @@ class RelatedCocktailCard extends StatelessWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.manrope(
-                              fontSize: 9,
+                              fontSize: 10,
                               height: 1.28,
                               fontWeight: FontWeight.w600,
                               color: EbtlColors.ink,

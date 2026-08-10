@@ -24,10 +24,10 @@ class HomeScreenVisuals {
     8,
   );
 
-  static const double featuredProductCardNameFontSize = 10;
+  static const double featuredProductCardNameFontSize = 11;
   static const double featuredProductCardNameLineHeight = 1.12;
 
-  static const double featuredProductCardShortDescriptionFontSize = 8;
+  static const double featuredProductCardShortDescriptionFontSize = 9;
   static const double featuredProductCardShortDescriptionLineHeight = 1.1;
 
   // Order It Again Rail (Home v2, live order only)
