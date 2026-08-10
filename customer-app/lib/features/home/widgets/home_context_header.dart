@@ -15,6 +15,7 @@ class HomeContextHeader extends StatelessWidget {
   final int unreadNotificationCount;
   final VoidCallback onOpenNotifications;
   final VoidCallback onOpenSearch;
+  final String searchQuery;
 
   const HomeContextHeader({
     super.key,
@@ -23,6 +24,7 @@ class HomeContextHeader extends StatelessWidget {
     required this.unreadNotificationCount,
     required this.onOpenNotifications,
     required this.onOpenSearch,
+    required this.searchQuery,
   });
 
   @override
@@ -54,7 +56,7 @@ class HomeContextHeader extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              _SearchField(onTap: onOpenSearch),
+              _SearchField(onTap: onOpenSearch, query: searchQuery),
             ],
           ),
         ),
@@ -233,8 +235,9 @@ class _NotificationsButton extends StatelessWidget {
 
 class _SearchField extends StatelessWidget {
   final VoidCallback onTap;
+  final String query;
 
-  const _SearchField({required this.onTap});
+  const _SearchField({required this.onTap, required this.query});
 
   @override
   Widget build(BuildContext context) {
@@ -261,13 +264,17 @@ class _SearchField extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Search cocktails, mixers, snacks',
+                  query.trim().isEmpty
+                      ? 'Search cocktails, mixers, snacks'
+                      : query.trim(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.manrope(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: EbtlColors.muted,
+                    color: query.trim().isEmpty
+                        ? EbtlColors.muted
+                        : EbtlColors.navy,
                   ),
                 ),
               ),

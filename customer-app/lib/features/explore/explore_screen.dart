@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -16,6 +18,7 @@ import '../shop/shop_product_loading.dart';
 import '../shop/widgets/shop_loading_state.dart';
 import '../shop/widgets/shop_product_detail_sheet.dart';
 import '../shop/widgets/shop_product_widgets.dart';
+import 'search_collection_screen.dart';
 import 'widgets/explore_category_badges.dart';
 import 'widgets/explore_hero_banner.dart';
 
@@ -65,6 +68,10 @@ class ExploreScreen extends StatefulWidget {
   final VoidCallback onOpenNotifications;
   final int activeOrdersCount;
   final VoidCallback onOpenActiveOrders;
+  final String searchQuery;
+  final int searchActivation;
+  final ValueChanged<String> onSearchQueryChanged;
+  final VoidCallback onSearchCollectionClosed;
 
   const ExploreScreen({
     super.key,
@@ -76,6 +83,10 @@ class ExploreScreen extends StatefulWidget {
     required this.onOpenNotifications,
     required this.activeOrdersCount,
     required this.onOpenActiveOrders,
+    required this.searchQuery,
+    required this.searchActivation,
+    required this.onSearchQueryChanged,
+    required this.onSearchCollectionClosed,
   });
 
   @override
@@ -84,6 +95,10 @@ class ExploreScreen extends StatefulWidget {
 
 class _ExploreScreenState extends State<ExploreScreen> {
   late Future<_ExplorePayload> exploreFuture;
+  late final TextEditingController searchController;
+  final FocusNode searchFocusNode = FocusNode();
+  Timer? searchDebounce;
+  String appliedQuery = '';
 
   /// Null means the "All" badge is selected.
   String? selectedCategoryId;
@@ -93,8 +108,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
   @override
   void initState() {
     super.initState();
+    searchController = TextEditingController(text: widget.searchQuery);
+    appliedQuery = widget.searchQuery.trim();
     exploreFuture = loadExplore();
     refreshRecentlyViewed();
+    if (widget.searchActivation > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) searchFocusNode.requestFocus();
+      });
+    }
   }
 
   @override
@@ -104,6 +126,40 @@ class _ExploreScreenState extends State<ExploreScreen> {
     if (oldWidget.data.selectedLocationId != widget.data.selectedLocationId) {
       exploreFuture = loadExplore();
     }
+    if (oldWidget.searchActivation != widget.searchActivation) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) searchFocusNode.requestFocus();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    searchDebounce?.cancel();
+    searchController.dispose();
+    searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  void updateSearch(String value) {
+    widget.onSearchQueryChanged(value);
+    searchDebounce?.cancel();
+    searchDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      setState(() => appliedQuery = value.trim());
+      AnalyticsService.logSearch(
+        surface: 'explore',
+        hasQuery: value.trim().isNotEmpty,
+      );
+    });
+  }
+
+  void clearSearch() {
+    searchDebounce?.cancel();
+    searchController.clear();
+    widget.onSearchQueryChanged('');
+    setState(() => appliedQuery = '');
+    searchFocusNode.requestFocus();
   }
 
   Future<_ExplorePayload> loadExplore() async {
@@ -348,6 +404,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   Widget buildContent(_ExplorePayload payload) {
+    if (appliedQuery.isNotEmpty) return buildSearchResults(payload);
     // A category can disappear between reloads; fall back to "All".
     final activeCategoryId = payload.categoryById(selectedCategoryId)?.id;
     final visibleProducts = payload.productsFor(activeCategoryId);
@@ -363,6 +420,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
             onOpenActiveOrders: widget.onOpenActiveOrders,
           ),
         ),
+        SliverToBoxAdapter(child: buildSearchField()),
         SliverToBoxAdapter(
           child: ExploreHeroBanner(onTap: widget.onOpenFinder),
         ),
@@ -444,6 +502,156 @@ class _ExploreScreenState extends State<ExploreScreen> {
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ],
     );
+  }
+
+  Widget buildSearchField() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 12, 22, 10),
+      child: TextField(
+        controller: searchController,
+        focusNode: searchFocusNode,
+        textInputAction: TextInputAction.search,
+        onChanged: updateSearch,
+        decoration: InputDecoration(
+          hintText: 'Search cocktails, mixers, snacks',
+          prefixIcon: const Icon(Icons.search_rounded),
+          suffixIcon: searchController.text.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Clear search',
+                  onPressed: clearSearch,
+                  icon: const Icon(Icons.close_rounded),
+                ),
+          filled: true,
+          fillColor: EbtlColors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: const BorderSide(color: EbtlColors.border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: const BorderSide(color: EbtlColors.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: const BorderSide(color: EbtlColors.coral, width: 1.5),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget buildSearchResults(_ExplorePayload payload) {
+    final query = appliedQuery.toLowerCase();
+    final products = payload.allProducts
+        .where((product) => product.matchesQuery(query))
+        .toList();
+    final categories = payload.categories
+        .where((category) => category.matchesQuery(query))
+        .toList();
+    final tagNames = <String>{};
+    for (final product in payload.allProducts) {
+      for (final tagName in [
+        ...product.tags,
+        ...product.tagDetails.map((tag) => tag.name),
+      ]) {
+        if (tagName.toLowerCase().contains(query)) tagNames.add(tagName);
+      }
+    }
+    final tags = tagNames.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: ExploreHeader(
+            unreadNotificationCount: widget.unreadNotificationCount,
+            onOpenNotifications: widget.onOpenNotifications,
+            activeOrdersCount: widget.activeOrdersCount,
+            onOpenActiveOrders: widget.onOpenActiveOrders,
+          ),
+        ),
+        SliverToBoxAdapter(child: buildSearchField()),
+        if (categories.isNotEmpty || tags.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(22, 4, 22, 14),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ...categories.map(
+                    (category) => ActionChip(
+                      avatar: const Icon(Icons.category_outlined, size: 17),
+                      label: Text(category.name),
+                      onPressed: () => openSearchCollection(
+                        title: category.name,
+                        products: payload.productsFor(category.id),
+                      ),
+                    ),
+                  ),
+                  ...tags.map(
+                    (tag) => ActionChip(
+                      avatar: const Icon(Icons.sell_outlined, size: 17),
+                      label: Text(tag),
+                      onPressed: () => openSearchCollection(
+                        title: tag,
+                        products: payload.allProducts
+                            .where(
+                              (product) => [
+                                ...product.tags,
+                                ...product.tagDetails.map((item) => item.name),
+                              ].any(
+                                (name) =>
+                                    name.toLowerCase() == tag.toLowerCase(),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (products.isEmpty && categories.isEmpty && tags.isEmpty)
+          const SliverToBoxAdapter(
+            child: EmptyStateCard(
+              message: 'No matches found. Try a different search.',
+            ),
+          )
+        else if (products.isNotEmpty)
+          SliverToBoxAdapter(
+            child: ShopProductGridSection(
+              title:
+                  '${products.length} ${products.length == 1 ? 'result' : 'results'}',
+              items: products,
+              initialVisibleCount: products.length,
+              addingProductId: addingProductId,
+              onProductTap: openProduct,
+              onQuickAdd: quickAddProduct,
+            ),
+          ),
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ],
+    );
+  }
+
+  Future<void> openSearchCollection({
+    required String title,
+    required List<ShopProduct> products,
+  }) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SearchCollectionScreen(
+          title: title,
+          products: products,
+          onOpenProduct: openProduct,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    widget.onSearchCollectionClosed();
   }
 }
 

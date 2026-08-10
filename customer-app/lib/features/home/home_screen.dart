@@ -53,6 +53,7 @@ class HomeScreen extends StatefulWidget {
   final int unreadNotificationCount;
   final VoidCallback onOpenNotifications;
   final VoidCallback onOpenSearch;
+  final String searchQuery;
   final VoidCallback onOpenCart;
   final VoidCallback onOpenShop;
   /// Opens the live order's own detail screen. The card tracks one order, so
@@ -76,6 +77,7 @@ class HomeScreen extends StatefulWidget {
     required this.unreadNotificationCount,
     required this.onOpenNotifications,
     required this.onOpenSearch,
+    required this.searchQuery,
     required this.onOpenCart,
     required this.onOpenShop,
     required this.onOpenLiveOrder,
@@ -219,6 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
           unreadNotificationCount: widget.unreadNotificationCount,
           onOpenNotifications: widget.onOpenNotifications,
           onOpenSearch: widget.onOpenSearch,
+          searchQuery: widget.searchQuery,
         ),
         Expanded(
           child: ListView(
