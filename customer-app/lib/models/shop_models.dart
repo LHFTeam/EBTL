@@ -334,17 +334,17 @@ class ShopProduct {
   String get productTypeLabel {
     switch (productType) {
       case 'snack':
-        return 'Snack';
+        return 'Snacks';
       case 'essential':
-        return 'Beach essential';
+        return 'Beach Essentials';
       case 'bundle':
-        return 'Bundle';
+        return 'Bundles';
       case 'add_on':
-        return 'Add-on';
+        return 'Add-ons';
       case 'cocktail':
-        return 'Cocktail kit';
+        return 'Cocktails';
       default:
-        return 'Shop item';
+        return 'Products';
     }
   }
 
