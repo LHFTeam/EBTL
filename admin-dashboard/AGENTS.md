@@ -49,12 +49,13 @@ Everything is EGP, and the business time zone is `Africa/Cairo`
 - **Dependencies are deliberately minimal.** Do not add packages (Redux,
   React Query, Tailwind, axios, an ORM, a test runner, …) unless the task
   calls for it.
-- **There is almost no test suite and no linter config** in this app. The one
-  exception is `server/forecast/`, whose pure statistical functions are covered
-  by `npm test` (Node 22's built-in `node:test` — no extra dependency). CI runs
-  it. Everywhere else, "passing" still means the server boots, `npm run build`
-  succeeds, and the flows you touched work — do not claim tests passed for code
-  outside `server/forecast/`, because there are none.
+- **There is almost no test suite and no linter config** in this app. The
+  exceptions are `server/forecast/`, whose pure statistical functions are
+  covered, and `server/lib/*.test.js` (currently the Golden Hour window keys);
+  both run under `npm test` (Node 22's built-in `node:test` — no extra
+  dependency). CI runs it. Everywhere else, "passing" still means the server
+  boots, `npm run build` succeeds, and the flows you touched work — do not claim
+  tests passed for code outside those two globs, because there are none.
 
 ## Commands
 
@@ -275,7 +276,7 @@ large by design — **follow the local structure**; don't refactor it wholesale.
   modes (`morning`, `afternoon`, `sunset`, `evening`), the eight pill colour
   schemes, Cairo time-window matching, and `loadActiveGoldenHourModal`, which
   `/api/customer/home` calls to resolve **at most one** mode into the
-  `goldenHour` key. Three things are worth knowing before touching it:
+  `goldenHour` key. Four things are worth knowing before touching it:
   - **The modes are a closed vocabulary**, shared with the dashboard tab and
     the app. `goldenHourRoutes.js` offers edit only — no create, no delete —
     and the rows are seeded by the migration. A fifth mode would reach the app
@@ -284,6 +285,14 @@ large by design — **follow the local structure**; don't refactor it wholesale.
     19:00–02:00). Start is inclusive, end exclusive. `isWithinWindow` is the
     only place that logic lives; `windowCoverage` reports gaps and overlaps to
     the tab as warnings rather than the API refusing the save.
+  - **The payload names which run of the window it is** — `occurrence_key`,
+    `'<mode>:<the date the window opened>'` from `windowOccurrenceKey`. The app
+    shows each key at most once and remembers the last eight, which is what
+    makes the card once per window and reset daily rather than once per launch.
+    It is dated by when the window *opened*, not by today, so evening's
+    19:00–02:00 keeps one key across midnight instead of re-showing at 00:30.
+    Cairo dates it for the same reason Cairo picks the mode: the device clock
+    may be set anywhere. `server/lib/goldenHour.test.js` covers it.
   - **Every failure resolves to `null`**, never a throw: a missing table, an
     archived cocktail, a mode switched on and then emptied. The modal is a
     greeting, and it must cost a customer a card at worst, never a home screen.

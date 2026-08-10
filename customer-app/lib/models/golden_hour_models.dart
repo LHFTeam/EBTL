@@ -14,6 +14,20 @@ class GoldenHourModal {
   /// `morning` | `afternoon` | `sunset` | `evening`. Carried for analytics and
   /// debugging; nothing about the layout varies on it.
   final String mode;
+
+  /// Which run of this mode's window the card belongs to — `'sunset:2026-08-10'`
+  /// — written by the backend from Cairo time.
+  ///
+  /// The app shows each key at most once (`ApiService.hasSeenGoldenHour`), which
+  /// is what makes the card once *per window* rather than once per launch:
+  /// re-opening inside the same window is the same key, the next window of the
+  /// day is a new one, and tomorrow's date makes every window new again.
+  ///
+  /// Empty for a payload from a backend older than the key. That degrades to the
+  /// previous behaviour — shown on every launch — rather than to a card that can
+  /// never be shown again.
+  final String occurrenceKey;
+
   final String title;
   final String? subtitle;
   final String? imageUrl;
@@ -30,6 +44,7 @@ class GoldenHourModal {
 
   const GoldenHourModal({
     required this.mode,
+    required this.occurrenceKey,
     required this.title,
     required this.subtitle,
     required this.imageUrl,
@@ -54,6 +69,7 @@ class GoldenHourModal {
 
     return GoldenHourModal(
       mode: readString(json['mode'], fallback: 'morning'),
+      occurrenceKey: readString(json['occurrence_key']).trim(),
       title: title,
       subtitle: nullableString(json['subtitle']),
       imageUrl: nullableString(json['image_url']),

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ebtl_customer_app/core/theme/ebtl_colors.dart';
 import 'package:ebtl_customer_app/features/home/widgets/golden_hour_modal.dart';
 import 'package:ebtl_customer_app/models/golden_hour_models.dart';
+import 'package:ebtl_customer_app/services/api_service.dart';
 
 Map<String, dynamic> goldenHourPayload({
   Object? title = 'Golden hour is calling',
@@ -19,6 +21,7 @@ Map<String, dynamic> goldenHourPayload({
 }) {
   return <String, dynamic>{
     'mode': 'sunset',
+    'occurrence_key': 'sunset:2026-08-10',
     'title': title,
     'subtitle': 'The sun is doing its thing.',
     'image_url': 'https://example.test/sunset.webp',
@@ -30,11 +33,14 @@ Map<String, dynamic> goldenHourPayload({
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('GoldenHourModal.fromJson', () {
     test('reads a full payload', () {
       final modal = GoldenHourModal.fromJson(goldenHourPayload())!;
 
       expect(modal.mode, 'sunset');
+      expect(modal.occurrenceKey, 'sunset:2026-08-10');
       expect(modal.title, 'Golden hour is calling');
       expect(modal.subtitle, 'The sun is doing its thing.');
       expect(modal.imageCaption, 'Served long, over ice');
@@ -65,6 +71,15 @@ void main() {
       );
     });
 
+    // An older backend sends no key. The card falling back to once-a-launch is
+    // the right failure — a card that can never be shown again is not.
+    test('a payload with no occurrence key parses rather than being dropped', () {
+      final payload = goldenHourPayload();
+      payload.remove('occurrence_key');
+
+      expect(GoldenHourModal.fromJson(payload)?.occurrenceKey, '');
+    });
+
     test('pills with no text are dropped', () {
       final modal = GoldenHourModal.fromJson(
         goldenHourPayload(
@@ -76,6 +91,72 @@ void main() {
       )!;
 
       expect(modal.pills.map((pill) => pill.label), ['Ready in 5']);
+    });
+  });
+
+  // The card is shown once per run of a window, not once per launch: reopening
+  // the app inside the same window must not bring it back, the next window of
+  // the day must, and every window is unseen again tomorrow. The backend names
+  // the window run; this is the app's half — remembering which names it has
+  // already shown.
+  group('the once-per-window record', () {
+    setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+
+    test('a window is unseen until its card is shown', () async {
+      expect(await ApiService.hasSeenGoldenHour('afternoon:2026-08-10'), isFalse);
+
+      await ApiService.recordGoldenHourSeen('afternoon:2026-08-10');
+
+      expect(await ApiService.hasSeenGoldenHour('afternoon:2026-08-10'), isTrue);
+    });
+
+    test('the window that follows it is still unseen', () async {
+      await ApiService.recordGoldenHourSeen('afternoon:2026-08-10');
+
+      expect(await ApiService.hasSeenGoldenHour('sunset:2026-08-10'), isFalse);
+    });
+
+    test('the same window tomorrow is unseen again', () async {
+      await ApiService.recordGoldenHourSeen('afternoon:2026-08-10');
+
+      expect(await ApiService.hasSeenGoldenHour('afternoon:2026-08-11'), isFalse);
+    });
+
+    test('recording the same window twice is not a second entry', () async {
+      await ApiService.recordGoldenHourSeen('sunset:2026-08-10');
+      await ApiService.recordGoldenHourSeen('sunset:2026-08-10');
+
+      expect(await ApiService.hasSeenGoldenHour('sunset:2026-08-10'), isTrue);
+    });
+
+    // Four modes a day, so the cap has to hold at least a full day behind it —
+    // otherwise this morning's card would come back by this evening.
+    test('a whole day of windows stays remembered', () async {
+      for (final mode in ['morning', 'afternoon', 'sunset', 'evening']) {
+        await ApiService.recordGoldenHourSeen('$mode:2026-08-10');
+      }
+
+      expect(await ApiService.hasSeenGoldenHour('morning:2026-08-10'), isTrue);
+      expect(await ApiService.hasSeenGoldenHour('evening:2026-08-10'), isTrue);
+    });
+
+    test('a keyless card is never suppressed', () async {
+      await ApiService.recordGoldenHourSeen('   ');
+
+      expect(await ApiService.hasSeenGoldenHour(''), isFalse);
+      expect(await ApiService.hasSeenGoldenHour('   '), isFalse);
+    });
+
+    test('a corrupted record costs one extra showing, not a crash', () async {
+      FlutterSecureStorage.setMockInitialValues({
+        'golden_hour_seen_v1': 'not json at all',
+      });
+
+      expect(await ApiService.hasSeenGoldenHour('sunset:2026-08-10'), isFalse);
+
+      // And it recovers: the next card written is remembered normally.
+      await ApiService.recordGoldenHourSeen('sunset:2026-08-10');
+      expect(await ApiService.hasSeenGoldenHour('sunset:2026-08-10'), isTrue);
     });
   });
 

@@ -36,9 +36,20 @@ class ApiService {
   static const _selectedLocationNameKey = 'selected_location_name';
   static const _onboardingCompletedKey = 'onboarding_completed_v1';
   static const _recentlyViewedKey = 'recently_viewed_slugs_v1';
+  static const _goldenHourSeenKey = 'golden_hour_seen_v1';
 
   /// How many product slugs the "Recently viewed" rail remembers.
   static const int recentlyViewedLimit = 10;
+
+  /// How many Golden Hour windows are remembered as shown.
+  ///
+  /// There are four modes, so eight covers today and yesterday and the oldest
+  /// key falls off on its own. That is the whole of the daily reset: a new day
+  /// writes dates nothing in the list carries, so every window is unseen again
+  /// without a stored "last reset" to compare against — which the app could not
+  /// compare honestly anyway, since the business day is Cairo's and the device
+  /// clock may be set anywhere.
+  static const int _goldenHourSeenLimit = 8;
 
   static const Duration _defaultRequestTimeout = Duration(seconds: 45);
   static const Duration _sessionRequestTimeout = Duration(seconds: 90);
@@ -912,6 +923,58 @@ class ApiService {
 
   static Future<void> clearRecentlyViewed() async {
     await _storage.delete(key: _recentlyViewedKey);
+  }
+
+  /// The Golden Hour windows whose card has already been shown, most recent
+  /// first, as backend occurrence keys (`'sunset:2026-08-10'`).
+  static Future<List<String>> _loadSeenGoldenHourKeys() async {
+    final raw = await _storage.read(key: _goldenHourSeenKey);
+    if (raw == null || raw.trim().isEmpty) return const [];
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const [];
+
+      return decoded
+          .map((value) => value is String ? value.trim() : '')
+          .where((key) => key.isNotEmpty)
+          .take(_goldenHourSeenLimit)
+          .toList();
+    } on FormatException {
+      // A malformed record is not worth surfacing. Dropping it costs one extra
+      // showing of the current card, which is the harmless direction to fail.
+      await _storage.delete(key: _goldenHourSeenKey);
+      return const [];
+    }
+  }
+
+  /// Has the Golden Hour card for this window already been shown?
+  ///
+  /// An empty key answers false: a payload from a backend that predates the key
+  /// carries no window identity, and refusing to show the card at all would be a
+  /// worse answer than showing it once a launch as before.
+  static Future<bool> hasSeenGoldenHour(String occurrenceKey) async {
+    final key = occurrenceKey.trim();
+    if (key.isEmpty) return false;
+
+    return (await _loadSeenGoldenHourKeys()).contains(key);
+  }
+
+  /// Records that this window's card has been shown.
+  ///
+  /// Called when the card opens, not when it is acted on: dismissing it is an
+  /// answer, and asking again an hour later would be asking twice.
+  static Future<void> recordGoldenHourSeen(String occurrenceKey) async {
+    final key = occurrenceKey.trim();
+    if (key.isEmpty) return;
+
+    final existing = await _loadSeenGoldenHourKeys();
+    final updated = <String>[
+      key,
+      ...existing.where((value) => value != key),
+    ].take(_goldenHourSeenLimit).toList();
+
+    await _storage.write(key: _goldenHourSeenKey, value: jsonEncode(updated));
   }
 
   static Future<void> _persistSession(CustomerSession session) async {

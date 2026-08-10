@@ -171,10 +171,24 @@ rather than the loading scaffold.
 
 Three things about it are easy to get wrong:
 
-- **It is once per launch, not once per load.** `_goldenHourHandled` is set on
-  the first load whether or not a card was shown. Every later load — a cart
-  change, a location switch, a pull to refresh — runs the same code path, and
-  without the flag each would reopen the card.
+- **It is once per launch *and* once per window.** Two separate rules, both
+  needed. `_goldenHourHandled` is the per-launch half: set on the first load
+  whether or not a card was shown, because every later load — a cart change, a
+  location switch, a pull to refresh — runs the same code path and would
+  otherwise reopen the card. The per-window half outlives the launch: the
+  payload carries an `occurrence_key` (`'sunset:2026-08-10'`, dated in Cairo by
+  the backend), the app records each key it shows in secure storage
+  (`golden_hour_seen_v1`, via `ApiService.hasSeenGoldenHour` /
+  `recordGoldenHourSeen`), and a key already recorded is never shown again. So
+  opening at 13:00 and again at 14:00 inside one window shows the card once;
+  opening at 17:00 shows that window's card; and tomorrow every window is unseen
+  again because the keys carry the date. The record caps at eight keys — four
+  modes covers today and yesterday, so old ones fall off on their own and there
+  is no stored "last reset" date for the app to get wrong. Evening wraps past
+  midnight, so its key is dated by the day the window *opened*: opening at 00:30
+  is still last night's run, not a fresh one. Nothing here is derived from the
+  device clock. A payload with no `occurrence_key` (an older backend) is shown
+  once a launch as before, rather than never.
 - **The app does not decide which mode shows.** The backend resolves the four
   time-of-day modes against **Cairo** local time and hands over at most one,
   already picked, on `AppData.goldenHour`. Never re-derive that from the device
