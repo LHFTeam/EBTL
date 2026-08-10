@@ -102,12 +102,13 @@ export default function Ingredients() {
   const [costManuallyEdited, setCostManuallyEdited] = useState(false);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('active');
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
 
   const categories = categoriesLoad.data || [];
 
-  const rows = useMemo(() => {
+  const matchingRows = useMemo(() => {
     const searchText = search.trim().toLowerCase();
     return (data || []).filter(row => {
       const matchesSearch = !searchText || [row.name, row.category, row.icon_key, row.base_unit]
@@ -116,6 +117,18 @@ export default function Ingredients() {
       return matchesSearch && matchesCategory;
     });
   }, [data, search, categoryFilter]);
+
+  const statusCounts = useMemo(() => ({
+    active: matchingRows.filter(row => row.is_active).length,
+    archived: matchingRows.filter(row => !row.is_active).length
+  }), [matchingRows]);
+
+  const rows = useMemo(
+    () => matchingRows.filter(row => (statusFilter === 'archived' ? !row.is_active : !!row.is_active)),
+    [matchingRows, statusFilter]
+  );
+
+  const filtersApplied = Boolean(search || categoryFilter);
 
   const baseUnitChanged = editing && original && original.base_unit !== form.base_unit;
   const costPreview = calculatedCostPreview(form);
@@ -222,7 +235,9 @@ export default function Ingredients() {
         method: 'PATCH',
         body: JSON.stringify({ is_active: !row.is_active })
       });
-      setMsg(row.is_active ? 'Ingredient archived.' : 'Ingredient restored.');
+      setMsg(row.is_active
+        ? 'Ingredient archived. Switch to the Archived view to see it.'
+        : 'Ingredient restored. Switch to the Active view to see it.');
       reload();
     } catch (e) {
       setErr(e.message);
@@ -296,6 +311,10 @@ export default function Ingredients() {
     <Section title="Ingredients">
       <div className="filtersBar">
         <input type="search" placeholder="Search by name, category, or unit" value={search} onChange={e => setSearch(e.target.value)}/>
+        <div className="statusFilterButtons" role="group" aria-label="Filter ingredients by status">
+          <button type="button" className={statusFilter === 'active' ? 'active' : ''} aria-pressed={statusFilter === 'active'} onClick={() => setStatusFilter('active')}>Active ({statusCounts.active})</button>
+          <button type="button" className={statusFilter === 'archived' ? 'active' : ''} aria-pressed={statusFilter === 'archived'} onClick={() => setStatusFilter('archived')}>Archived ({statusCounts.archived})</button>
+        </div>
         <div className="categoryFilterButtons" role="group" aria-label="Filter ingredients by category">
           <button type="button" className={!categoryFilter ? 'active' : ''} aria-pressed={!categoryFilter} onClick={() => setCategoryFilter('')}>All categories</button>
           {categories.map(category => (
@@ -310,11 +329,13 @@ export default function Ingredients() {
             </button>
           ))}
         </div>
-        {(search || categoryFilter) && <button onClick={() => { setSearch(''); setCategoryFilter(''); }}>Clear filters</button>}
+        {filtersApplied && <button onClick={() => { setSearch(''); setCategoryFilter(''); }}>Clear filters</button>}
       </div>
       <SimpleTable
         rows={rows}
-        emptyText={(search || categoryFilter) ? 'No ingredients match the current filters.' : 'No records yet.'}
+        emptyText={filtersApplied
+          ? `No ${statusFilter} ingredients match the current filters.`
+          : `No ${statusFilter} ingredients yet.`}
         columns={['name', 'category', 'icon_key', 'base_unit', 'purchase_unit_cost', 'purchase_unit_size', 'cost_per_base_unit', 'is_perishable', 'is_customer_supplied', 'is_active']}
         format={{
           purchase_unit_cost: value => displayNumber(value, 2),
