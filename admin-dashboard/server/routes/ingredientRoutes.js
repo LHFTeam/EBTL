@@ -58,7 +58,8 @@ async function findLinkedProduct(ingredientId) {
     .select('recipe_id')
     .eq('ingredient_id', ingredientId);
 
-  if (recipeItems.error || !recipeItems.data?.length) return recipeItems;
+  if (recipeItems.error) return recipeItems;
+  if (!recipeItems.data?.length) return { data: null };
 
   const recipeIds = [...new Set(recipeItems.data.map((item) => item.recipe_id))];
   const recipes = await supabase
@@ -66,7 +67,8 @@ async function findLinkedProduct(ingredientId) {
     .select('product_id')
     .in('id', recipeIds);
 
-  if (recipes.error || !recipes.data?.length) return recipes;
+  if (recipes.error) return recipes;
+  if (!recipes.data?.length) return { data: null };
 
   const productIds = [...new Set(recipes.data.map((recipe) => recipe.product_id))];
   return supabase
@@ -76,6 +78,35 @@ async function findLinkedProduct(ingredientId) {
     .order('name')
     .limit(1)
     .maybeSingle();
+}
+
+// Every table that keeps a non-nullable foreign key on ingredients(id). Postgres
+// would refuse the delete anyway; checking first turns that into a message that
+// says which record is holding the ingredient. `order_item_removed_ingredients`
+// is deliberately absent: its key is ON DELETE SET NULL next to a name snapshot,
+// so that history survives the delete on its own.
+const ingredientReferences = [
+  ['recipe_items', 'it is used in a product recipe'],
+  ['order_item_inventory_components', 'it appears in past order history'],
+  ['cart_item_removed_ingredients', 'a customer cart still references it'],
+  ['stock_movements', 'it has stock movement history'],
+  ['stock_transfer_items', 'it appears on a stock transfer'],
+  ['purchase_order_items', 'it appears on a purchase order']
+];
+
+async function findIngredientReference(ingredientId) {
+  for (const [table, reason] of ingredientReferences) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('ingredient_id')
+      .eq('ingredient_id', ingredientId)
+      .limit(1);
+
+    if (error) return { error };
+    if (data?.length) return { reason };
+  }
+
+  return {};
 }
 
 const iconKey = z.string()
@@ -228,6 +259,78 @@ ingredientRouter.patch('/ingredients/:id', requireArea('ingredients'), async (re
     .update(clean(payload))
     .eq('id', req.params.id)
     .select()
+    .single();
+
+  if (error) return sendIngredientError(error, res);
+  return res.json(data);
+});
+
+// Permanent delete, archived ingredients only. Archiving stays the normal way to
+// retire an ingredient; this exists for rows that were never really used (typos,
+// duplicates) and should not sit in the Archived view forever.
+ingredientRouter.delete('/ingredients/:id', requireArea('ingredients'), async (req, res) => {
+  const { data: existing, error: readError } = await supabase
+    .from('ingredients')
+    .select('id,name,is_active')
+    .eq('id', req.params.id)
+    .maybeSingle();
+
+  if (readError) return sendIngredientError(readError, res);
+  if (!existing) return res.status(404).json({ error: 'Ingredient not found.' });
+
+  if (existing.is_active) {
+    return res.status(409).json({
+      error: 'Only archived ingredients can be deleted permanently. Archive this ingredient first.'
+    });
+  }
+
+  const linkedProduct = await findLinkedProduct(existing.id);
+  if (linkedProduct.error) return sendIngredientError(linkedProduct.error, res);
+  if (linkedProduct.data) {
+    const productLabel = linkedProduct.data.product_type === 'cocktail' ? 'cocktail' : 'product';
+    return res.status(409).json({
+      error: `"${existing.name}" cannot be deleted because it is linked to the ${productLabel} "${linkedProduct.data.name}". Remove it from the ${productLabel} recipe first.`
+    });
+  }
+
+  const reference = await findIngredientReference(existing.id);
+  if (reference.error) return sendIngredientError(reference.error, res);
+  if (reference.reason) {
+    return res.status(409).json({
+      error: `"${existing.name}" cannot be deleted because ${reference.reason}. It stays archived so those records keep their ingredient.`
+    });
+  }
+
+  // Inventory balances are derived state, not history: the stock movement trigger
+  // maintains them. Anything with real movements was already refused above, so a
+  // surviving row here is an empty leftover and is cleared with the ingredient.
+  const balances = await supabase
+    .from('inventory_balances')
+    .select('quantity_on_hand,reserved_quantity')
+    .eq('ingredient_id', existing.id);
+
+  if (balances.error) return sendIngredientError(balances.error, res);
+
+  const hasStock = (balances.data || []).some(
+    (balance) => Number(balance.quantity_on_hand) !== 0 || Number(balance.reserved_quantity) !== 0
+  );
+
+  if (hasStock) {
+    return res.status(409).json({
+      error: `"${existing.name}" cannot be deleted because it still has stock on hand. Adjust its balances to zero first.`
+    });
+  }
+
+  if (balances.data?.length) {
+    const clearedBalances = await supabase.from('inventory_balances').delete().eq('ingredient_id', existing.id);
+    if (clearedBalances.error) return sendIngredientError(clearedBalances.error, res);
+  }
+
+  const { data, error } = await supabase
+    .from('ingredients')
+    .delete()
+    .eq('id', existing.id)
+    .select('id,name')
     .single();
 
   if (error) return sendIngredientError(error, res);

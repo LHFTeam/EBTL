@@ -244,6 +244,27 @@ export default function Ingredients() {
     }
   }
 
+  async function deleteIngredient(row) {
+    setMsg('');
+    setErr('');
+
+    const confirmed = confirm(
+      `Permanently delete ${row.name}?\n\n` +
+      'This removes the ingredient from the database and cannot be undone. It only works when nothing else ' +
+      'still references it — recipes, stock history, transfers, purchase orders, and past orders all keep it archived instead.'
+    );
+    if (!confirmed) return;
+
+    try {
+      await api(`/api/ingredients/${row.id}`, { method: 'DELETE' });
+      if (editing === row.id) resetForm();
+      setMsg('Ingredient permanently deleted.');
+      reload();
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
+
   if (loading || error || categoriesLoad.loading || categoriesLoad.error) {
     return <Loading error={error || categoriesLoad.error} onRetry={() => { reload(); categoriesLoad.reload(); }} />;
   }
@@ -348,6 +369,7 @@ export default function Ingredients() {
         actions={(row) => <div className="inlineActions">
           <button onClick={() => edit(row)}>Edit</button>
           <button onClick={() => archiveIngredient(row)}>{row.is_active ? 'Archive' : 'Restore'}</button>
+          {!row.is_active && <button className="danger" onClick={() => deleteIngredient(row)}>Delete</button>}
         </div>}
       />
     </Section>
