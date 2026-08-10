@@ -570,7 +570,7 @@ async function loadCartConfigurationContext({ cartItems = [], locationId = null 
         supabase.from('recipes').select('*').in('id', recipeIds),
         supabase
           .from('recipe_items')
-          .select('*, ingredients(id,name,category,base_unit,is_customer_supplied,icon_key)')
+          .select('*, ingredients(id,name,base_unit,is_customer_supplied,icon_key,ingredient_categories(name))')
           .in('recipe_id', recipeIds)
       ])
     : [{ data: [], error: null }, { data: [], error: null }];
@@ -1196,7 +1196,7 @@ function publicCocktailIngredient(recipeItem) {
   return {
     id: ingredient.id,
     name: ingredient.name,
-    category: ingredient.category || null,
+    category: ingredient.ingredient_categories?.name || null,
     icon_key: ingredient.icon_key || null,
     is_optional: Boolean(recipeItem.is_optional),
     is_customer_supplied: Boolean(recipeItem.is_customer_supplied || ingredient.is_customer_supplied)
@@ -2456,7 +2456,7 @@ async function loadCatalog({
   const recipeItems = recipeIds.length
     ? await supabase
         .from('recipe_items')
-        .select('*, ingredients(id,name,category,base_unit,is_customer_supplied,icon_key)')
+        .select('*, ingredients(id,name,base_unit,is_customer_supplied,icon_key,ingredient_categories(name))')
         .in('recipe_id', recipeIds)
     : {
         data: [],
@@ -4831,7 +4831,7 @@ customerRouter.post('/customer/cart/items', async (req, res) => {
   const addonRecipeItemRows = addonRecipeIds.length
     ? await supabase
         .from('recipe_items')
-        .select('*, ingredients(id,name,category,base_unit,is_customer_supplied,icon_key)')
+        .select('*, ingredients(id,name,base_unit,is_customer_supplied,icon_key,ingredient_categories(name))')
         .in('recipe_id', addonRecipeIds)
     : { data: [], error: null };
   if (addonRecipeItemRows.error) return res.status(400).json({ error: addonRecipeItemRows.error.message });
