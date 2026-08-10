@@ -81,9 +81,12 @@ class _ShopProductGridSectionState extends State<ShopProductGridSection> {
             physics: const NeverScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 22),
             itemCount: visibleItems.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 3,
-              mainAxisExtent: 198,
+              mainAxisExtent: ShopProductCardTile.heightFor(
+                compact: true,
+                subtitleMaxLines: 2,
+              ),
               mainAxisSpacing: 12,
               crossAxisSpacing: 10,
             ),
@@ -351,9 +354,12 @@ class ShopProductCardTile extends StatelessWidget {
         _textAreaHeight(compact, subtitleMaxLines);
   }
 
+  /// The text block grows with the name and subtitle type sizes: both are
+  /// fixed-line-count boxes, so a size bump has to be paid for here or the
+  /// column overflows the card.
   static double _textAreaHeight(bool compact, int? subtitleMaxLines) {
-    if (compact) return 94;
-    return (subtitleMaxLines ?? 3) > 2 ? 118 : 96;
+    if (compact) return 100;
+    return (subtitleMaxLines ?? 3) > 2 ? 124 : 102;
   }
 
   @override
@@ -439,7 +445,7 @@ class ShopProductCardTile extends StatelessWidget {
                             maxLines: compact ? 3 : 2,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.manrope(
-                              fontSize: compact ? 9 : 11,
+                              fontSize: compact ? 10 : 12,
                               height: 1.15,
                               fontWeight: FontWeight.w900,
                               color: EbtlColors.navy,
@@ -451,7 +457,7 @@ class ShopProductCardTile extends StatelessWidget {
                             maxLines: effectiveSubtitleMaxLines,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.manrope(
-                              fontSize: compact ? 8 : 10,
+                              fontSize: compact ? 9 : 11,
                               height: 1.22,
                               fontWeight: FontWeight.w700,
                               color: EbtlColors.muted,

@@ -299,13 +299,15 @@ class _SpotlightSheetState extends State<SpotlightSheet> {
                         onAdd: () => quickAddProduct(product),
                       );
                     }, childCount: products.length),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          mainAxisExtent: 198,
-                          mainAxisSpacing: 12,
-                          crossAxisSpacing: 10,
-                        ),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      mainAxisExtent: ShopProductCardTile.heightFor(
+                        compact: true,
+                        subtitleMaxLines: 2,
+                      ),
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 10,
+                    ),
                   ),
                 ),
               SliverToBoxAdapter(

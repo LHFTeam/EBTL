@@ -267,13 +267,14 @@ class _ShopCategoryProductsScreenState
                             : null,
                       );
                     }, childCount: products.length),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          mainAxisExtent: 256,
-                          mainAxisSpacing: 14,
-                          crossAxisSpacing: 14,
-                        ),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisExtent: ShopProductCardTile.heightFor(
+                        compact: false,
+                      ),
+                      mainAxisSpacing: 14,
+                      crossAxisSpacing: 14,
+                    ),
                   ),
                 ),
               if (isLoading && products.isNotEmpty)
