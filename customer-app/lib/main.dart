@@ -479,21 +479,44 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   /// they next open the app. Every later load — a cart change, a location
   /// switch, a pull to refresh — goes through the same code path, and without
   /// this flag each of them would reopen the card.
+  ///
+  /// This is the per-launch half of the rule only. Whether the card has already
+  /// been shown in *this window* outlives the launch and is stored on the
+  /// device — see [_maybeShowGoldenHour].
   bool _goldenHourHandled = false;
 
   /// Opens the Golden Hour card on the first load of a launch, if there is one
-  /// to open and the customer already has a beach cart chosen.
+  /// to open, the customer already has a beach cart chosen, and this window's
+  /// card has not been shown before.
   ///
   /// The beach cart is the condition the whole feature hangs on: the card's one
   /// action is Add to Cart, and the cart needs a location. Someone who has not
   /// chosen one yet is better served by Home's own picker.
-  void _maybeShowGoldenHour(AppData data) {
+  ///
+  /// Once per *window*, not once per launch: the payload names which run of
+  /// which window it belongs to (`GoldenHourModal.occurrenceKey`, dated in Cairo
+  /// by the backend), and a key already recorded is not shown again. So opening
+  /// at 13:00 and again at 14:00 inside one window shows the card once; opening
+  /// at 17:00, when a different window is live, shows that window's card; and
+  /// tomorrow every window is unseen again because the keys carry the date.
+  Future<void> _maybeShowGoldenHour(AppData data) async {
     if (_goldenHourHandled) return;
+    // Claimed before the first await, so a second load landing while the stored
+    // keys are being read cannot open a second card.
     _goldenHourHandled = true;
 
     final modal = data.goldenHour;
     final locationId = data.selectedLocationId?.trim();
     if (modal == null || locationId == null || locationId.isEmpty) return;
+
+    if (await ApiService.hasSeenGoldenHour(modal.occurrenceKey)) return;
+    if (!mounted) return;
+
+    // Recorded as the card goes up rather than when it closes: a customer who
+    // kills the app while it is open has still been shown it, and asking again
+    // an hour later is the thing this is here to prevent.
+    await ApiService.recordGoldenHourSeen(modal.occurrenceKey);
+    if (!mounted) return;
 
     // The card is opened from a post-frame callback so it goes up over a Home
     // that has already painted, rather than on top of the loading scaffold.
@@ -531,7 +554,10 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         appDataError = null;
       });
 
-      _maybeShowGoldenHour(data);
+      // Awaited so the post-frame callback inside is registered before the
+      // `finally` below schedules a frame — otherwise the card would wait on
+      // whatever happens to paint next.
+      await _maybeShowGoldenHour(data);
     } catch (error) {
       if (!mounted) return;
 

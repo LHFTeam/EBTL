@@ -67,6 +67,52 @@ export function minutesToTime(minutes) {
   return `${String(Math.floor(safe / 60)).padStart(2, '0')}:${String(safe % 60).padStart(2, '0')}`;
 }
 
+/** The calendar date, right now, in Cairo, as `YYYY-MM-DD`. */
+export function cairoDateNow(date = new Date()) {
+  // en-CA formats as ISO `YYYY-MM-DD`, which is what the occurrence key wants.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(date);
+}
+
+/** `'2026-08-10'` → `'2026-08-09'`. Plain calendar arithmetic, no time zone. */
+function previousDate(isoDate) {
+  const [year, month, day] = String(isoDate).split('-').map(Number);
+  const stamp = new Date(Date.UTC(year, month - 1, day));
+  stamp.setUTCDate(stamp.getUTCDate() - 1);
+  return stamp.toISOString().slice(0, 10);
+}
+
+/**
+ * A stable name for *this run* of a mode's window: `'<mode>:<start date>'`.
+ *
+ * The app shows a card once per key and remembers the keys it has shown, so the
+ * key is what makes "once per window, reset daily" true — the same window on the
+ * same day is one key however many times the app is opened inside it, and
+ * tomorrow's run of that window is a different key nobody has seen.
+ *
+ * It is dated by when the window *started*, not by today, because evening wraps
+ * past midnight (19:00–02:00 by default). Opening at 00:30 is still the window
+ * that opened at 19:00 yesterday, and dating it today would re-show the card the
+ * customer already dismissed a few hours earlier.
+ *
+ * Computed here rather than in the app for the same reason the mode is: Cairo is
+ * the business time zone, and the device clock may be set anywhere in the world.
+ */
+export function windowOccurrenceKey({ mode, startMinutes, endMinutes, nowMinutes, businessDate }) {
+  const wrapsMidnight = startMinutes != null && endMinutes != null && startMinutes > endMinutes;
+
+  // Inside a wrapping window, `now` is either at/after the start (today's run)
+  // or before it (the tail of the run that started yesterday). There is no third
+  // case: the window only holds `now < start` when `now < end < start`.
+  const isAfterMidnightTail = wrapsMidnight && nowMinutes < startMinutes;
+
+  return `${mode}:${isAfterMidnightTail ? previousDate(businessDate) : businessDate}`;
+}
+
 /** Minutes since midnight, right now, in Cairo. */
 export function cairoMinutesNow(date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -232,7 +278,11 @@ async function loadPrimaryLiquorTypeName(productId) {
  * a home screen, not break one. `/api/customer/home` reads this alongside the
  * rest of its payload for exactly that reason.
  */
-export async function loadActiveGoldenHourModal({ nowMinutes = cairoMinutesNow() } = {}) {
+export async function loadActiveGoldenHourModal({
+  now = new Date(),
+  nowMinutes = cairoMinutesNow(now),
+  businessDate = cairoDateNow(now)
+} = {}) {
   const modes = await supabase
     .from('golden_hour_modes')
     .select('mode, is_active, start_time, end_time, title, subtitle, product_id, image_url, image_caption, spirit_pill_scheme, pills')
@@ -272,6 +322,16 @@ export async function loadActiveGoldenHourModal({ nowMinutes = cairoMinutesNow()
 
   return {
     mode: match.mode,
+    // Which run of this window the card belongs to. The app shows each key once
+    // and forgets nothing else, so this is what keeps a customer who opens the
+    // app twice inside one window from being shown the same card twice.
+    occurrence_key: windowOccurrenceKey({
+      mode: match.mode,
+      startMinutes: timeToMinutes(match.start_time),
+      endMinutes: timeToMinutes(match.end_time),
+      nowMinutes,
+      businessDate
+    }),
     title: String(match.title || '').trim(),
     subtitle: String(match.subtitle || '').trim() || null,
     image_url: String(match.image_url || '').trim() || null,
