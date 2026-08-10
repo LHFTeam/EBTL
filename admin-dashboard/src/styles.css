@@ -4446,7 +4446,7 @@ textarea {
 
 .bannerFields {
   display: grid;
-  grid-template-columns: minmax(160px, 1.6fr) minmax(160px, 2fr) minmax(150px, 1fr) minmax(150px, 1fr) 90px auto;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
   align-items: center;
 }
@@ -4481,6 +4481,13 @@ textarea {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 14px;
+  margin-top: 4px;
+}
+
+/* A markdown-slide banner's copy, in place of .spotlightSelection's product
+   pickers — same full-row span, single column. */
+.spotlightMarkdownField {
+  grid-column: 1 / -1;
   margin-top: 4px;
 }
 
@@ -4623,4 +4630,111 @@ textarea {
   .goldenHourPillLine {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Forecast module (src/forecast/). Uses the same :root variables as everything
+   else; no new colour tokens.
+   --------------------------------------------------------------------------- */
+
+.forecastDays {
+  display: grid;
+  gap: 14px;
+}
+
+.forecastDay {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  background: var(--bg);
+}
+
+.forecastDayHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.forecastDayBadges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.forecastDayStats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.forecastDayStats div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.forecastDayStats span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.forecastDayStats b {
+  font-size: 18px;
+}
+
+/* Confidence is never optional decoration here: it is how a forecast built on
+   two observations is kept visually distinct from one built on two hundred. */
+.forecastConfidence {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.forecastConfidence-low {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.forecastConfidence-medium {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.forecastConfidence-high {
+  color: var(--ok, var(--accent));
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.forecastUplift {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.forecastWarning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
 }

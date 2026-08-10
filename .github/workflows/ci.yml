@@ -53,6 +53,9 @@ jobs:
           cache: npm
           cache-dependency-path: admin-dashboard/package-lock.json
       - run: npm ci
+      # The forecasting model's pure maths, via Node's built-in test runner
+      # (no extra dependency). Needs no database or secrets.
+      - run: npm test
       # The client build (vite) is self-contained and needs no runtime secrets.
       - run: npm run build
 

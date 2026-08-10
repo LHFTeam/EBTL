@@ -49,9 +49,12 @@ Everything is EGP, and the business time zone is `Africa/Cairo`
 - **Dependencies are deliberately minimal.** Do not add packages (Redux,
   React Query, Tailwind, axios, an ORM, a test runner, …) unless the task
   calls for it.
-- **There is no test suite and no linter config** in this app. "Passing"
-  means the server boots, `npm run build` succeeds, and the flows you touched
-  work. Do not claim tests passed — there are none.
+- **There is almost no test suite and no linter config** in this app. The one
+  exception is `server/forecast/`, whose pure statistical functions are covered
+  by `npm test` (Node 22's built-in `node:test` — no extra dependency). CI runs
+  it. Everywhere else, "passing" still means the server boots, `npm run build`
+  succeeds, and the flows you touched work — do not claim tests passed for code
+  outside `server/forecast/`, because there are none.
 
 ## Commands
 
@@ -139,6 +142,10 @@ admin-dashboard/
 
       orderRoutes.js      # admin/cart-operations order management
       customerRoutes.js   # ~5.6k lines: the ENTIRE /api/customer/* + payments API
+    forecast/             # SELF-CONTAINED demand-forecasting module. Owns its own
+                          # routes, scheduler, store and `forecast_*` tables; the
+                          # rest of the server touches it only through index.js.
+                          # See forecast/README.md before changing anything here.
   src/
     main.jsx              # React root + startup-error handling
     App.jsx               # auth gate: /api/me → Login | PasswordChange | Shell
@@ -342,7 +349,15 @@ Extend via its props before copy-pasting.
 
 ## Domain glossary
 
-- **Areas / tabs** — the RBAC + nav unit: `dashboard`, `analytics`, `orders`,
+- **Forecast** — expected units per product per cart per day, refreshed nightly
+  from the previous day's sales by an in-process scheduler. Lives entirely in
+  `server/forecast/` + `src/forecast/` + the `forecast_*` tables. Promotions are
+  modelled explicitly: past campaign days are divided back out of the baseline,
+  scheduled ones raise the forecast in advance. Campaigns are recorded in
+  `forecast_campaigns`, which is **separate from the `promotions` code engine**
+  and grants no discount.
+- **Areas / tabs** — the RBAC + nav unit: `dashboard`, `analytics`, `forecast`,
+  `forecast-campaigns`, `orders`,
   `inventory`, `transfers`, `ingredients`, `cocktails`, `additional-products`,
   `liquors`, `shop`, `promotions`, `referrals`, `banners`, `golden-hour`,
   `locations`, `employees`. Defined once in `roleAccess` (`appConfig.js`) and mirrored in

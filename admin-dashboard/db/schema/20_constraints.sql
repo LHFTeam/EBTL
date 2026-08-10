@@ -197,8 +197,11 @@ ALTER TABLE public.referrals ADD CONSTRAINT referrals_referee_discount_nonnegati
 ALTER TABLE public.referrals ADD CONSTRAINT referrals_referrer_reward_nonnegative_chk CHECK ((referrer_reward_amount >= (0)::numeric));
 ALTER TABLE public.referrals ADD CONSTRAINT referrals_status_chk CHECK ((status = ANY (ARRAY['pending'::text, 'qualified'::text, 'rewarded'::text, 'void'::text])));
 ALTER TABLE public.shop_settings ADD CONSTRAINT shop_settings_singleton CHECK ((id = true));
+ALTER TABLE public.spotlight_banners ADD CONSTRAINT spotlight_banners_content_type_valid CHECK ((content_type = ANY (ARRAY['products'::text, 'markdown'::text])));
 ALTER TABLE public.spotlight_banners ADD CONSTRAINT spotlight_banners_display_order_non_negative CHECK ((display_order >= 0));
 ALTER TABLE public.spotlight_banners ADD CONSTRAINT spotlight_banners_image_url_not_blank CHECK ((length(btrim(image_url)) > 0));
+ALTER TABLE public.spotlight_banners ADD CONSTRAINT spotlight_banners_markdown_body_max_20000 CHECK (((markdown_body IS NULL) OR (char_length(markdown_body) <= 20000)));
+ALTER TABLE public.spotlight_banners ADD CONSTRAINT spotlight_banners_markdown_body_required_when_markdown CHECK (((content_type <> 'markdown'::text) OR (length(btrim(COALESCE(markdown_body, ''::text))) > 0)));
 ALTER TABLE public.spotlight_banners ADD CONSTRAINT spotlight_banners_subtitle_max_200 CHECK (((subtitle IS NULL) OR (char_length(subtitle) <= 200)));
 ALTER TABLE public.spotlight_banners ADD CONSTRAINT spotlight_banners_title_max_80 CHECK ((char_length(title) <= 80));
 ALTER TABLE public.spotlight_banners ADD CONSTRAINT spotlight_banners_title_not_blank CHECK ((length(btrim(title)) > 0));
@@ -308,3 +311,70 @@ ALTER TABLE public.stock_transfers ADD CONSTRAINT stock_transfers_from_location_
 ALTER TABLE public.stock_transfers ADD CONSTRAINT stock_transfers_received_by_fkey FOREIGN KEY (received_by) REFERENCES employees(id);
 ALTER TABLE public.stock_transfers ADD CONSTRAINT stock_transfers_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES employees(id);
 ALTER TABLE public.stock_transfers ADD CONSTRAINT stock_transfers_to_location_id_fkey FOREIGN KEY (to_location_id) REFERENCES locations(id);
+
+-- ---------------------------------------------------------------------------
+-- Demand forecasting module (server/forecast/), migration 20260807171440.
+-- Appended as a block rather than sorted inline; the next full run of
+-- ../tools/dump_schema.sql will re-sort these into place.
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE public.forecast_accuracy_cart ADD CONSTRAINT forecast_accuracy_cart_pkey PRIMARY KEY (location_id, business_date, horizon_days);
+ALTER TABLE public.forecast_accuracy_product ADD CONSTRAINT forecast_accuracy_product_pkey PRIMARY KEY (location_id, business_date, product_id, horizon_days);
+ALTER TABLE public.forecast_campaign_effects ADD CONSTRAINT forecast_campaign_effects_pkey PRIMARY KEY (campaign_type, discount_bucket);
+ALTER TABLE public.forecast_campaign_locations ADD CONSTRAINT forecast_campaign_locations_pkey PRIMARY KEY (campaign_id, location_id);
+ALTER TABLE public.forecast_campaign_observations ADD CONSTRAINT forecast_campaign_observations_pkey PRIMARY KEY (campaign_id, location_id, business_date);
+ALTER TABLE public.forecast_campaign_products ADD CONSTRAINT forecast_campaign_products_pkey PRIMARY KEY (campaign_id, product_id);
+ALTER TABLE public.forecast_campaigns ADD CONSTRAINT forecast_campaigns_pkey PRIMARY KEY (id);
+ALTER TABLE public.forecast_cart_assumptions ADD CONSTRAINT forecast_cart_assumptions_pkey PRIMARY KEY (location_id, day_of_week);
+ALTER TABLE public.forecast_cart_state ADD CONSTRAINT forecast_cart_state_pkey PRIMARY KEY (location_id);
+ALTER TABLE public.forecast_daily_cart ADD CONSTRAINT forecast_daily_cart_pkey PRIMARY KEY (location_id, business_date);
+ALTER TABLE public.forecast_daily_product ADD CONSTRAINT forecast_daily_product_pkey PRIMARY KEY (location_id, business_date, product_id);
+ALTER TABLE public.forecast_demand_daily_cart ADD CONSTRAINT forecast_demand_daily_cart_pkey PRIMARY KEY (location_id, business_date);
+ALTER TABLE public.forecast_demand_daily_product ADD CONSTRAINT forecast_demand_daily_product_pkey PRIMARY KEY (location_id, business_date, product_id);
+ALTER TABLE public.forecast_network_state ADD CONSTRAINT forecast_network_state_pkey PRIMARY KEY (id);
+ALTER TABLE public.forecast_product_state ADD CONSTRAINT forecast_product_state_pkey PRIMARY KEY (location_id, product_id);
+ALTER TABLE public.forecast_runs ADD CONSTRAINT forecast_runs_pkey PRIMARY KEY (id);
+ALTER TABLE public.forecast_campaign_effects ADD CONSTRAINT forecast_campaign_effects_pull_forward_range CHECK (((pull_forward_ratio >= (0)::numeric) AND (pull_forward_ratio <= (1)::numeric)));
+ALTER TABLE public.forecast_campaigns ADD CONSTRAINT forecast_campaigns_dates_ordered CHECK ((ends_on >= starts_on));
+ALTER TABLE public.forecast_campaigns ADD CONSTRAINT forecast_campaigns_scope_valid CHECK ((scope = ANY (ARRAY['network'::text, 'cart'::text, 'product'::text])));
+ALTER TABLE public.forecast_campaigns ADD CONSTRAINT forecast_campaigns_uplift_sane CHECK ((expected_uplift_pct > ('-100'::integer)::numeric));
+ALTER TABLE public.forecast_cart_assumptions ADD CONSTRAINT forecast_cart_assumptions_dow_range CHECK (((day_of_week >= 0) AND (day_of_week <= 6)));
+ALTER TABLE public.forecast_cart_assumptions ADD CONSTRAINT forecast_cart_assumptions_strength_positive CHECK ((prior_strength_days > 0));
+ALTER TABLE public.forecast_cart_assumptions ADD CONSTRAINT forecast_cart_assumptions_units_non_negative CHECK (((expected_units IS NULL) OR (expected_units >= (0)::numeric)));
+ALTER TABLE public.forecast_cart_state ADD CONSTRAINT forecast_cart_state_dow_count_len CHECK ((array_length(dow_obs_count, 1) = 7));
+ALTER TABLE public.forecast_cart_state ADD CONSTRAINT forecast_cart_state_dow_index_len CHECK ((array_length(dow_index, 1) = 7));
+ALTER TABLE public.forecast_daily_cart ADD CONSTRAINT forecast_daily_cart_confidence_valid CHECK ((confidence = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text])));
+ALTER TABLE public.forecast_daily_cart ADD CONSTRAINT forecast_daily_cart_quantiles_ordered CHECK ((p90 >= p50));
+ALTER TABLE public.forecast_daily_product ADD CONSTRAINT forecast_daily_product_confidence_valid CHECK ((confidence = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text])));
+ALTER TABLE public.forecast_daily_product ADD CONSTRAINT forecast_daily_product_quantiles_ordered CHECK ((p90 >= p50));
+ALTER TABLE public.forecast_demand_daily_cart ADD CONSTRAINT forecast_demand_daily_cart_orders_non_negative CHECK ((orders >= 0));
+ALTER TABLE public.forecast_demand_daily_cart ADD CONSTRAINT forecast_demand_daily_cart_units_non_negative CHECK ((units >= 0));
+ALTER TABLE public.forecast_demand_daily_cart ADD CONSTRAINT forecast_demand_daily_cart_uplift_positive CHECK ((applied_uplift > (0)::numeric));
+ALTER TABLE public.forecast_demand_daily_product ADD CONSTRAINT forecast_demand_daily_product_units_non_negative CHECK ((units >= 0));
+ALTER TABLE public.forecast_demand_daily_product ADD CONSTRAINT forecast_demand_daily_product_uplift_positive CHECK ((applied_uplift > (0)::numeric));
+ALTER TABLE public.forecast_network_state ADD CONSTRAINT forecast_network_state_dow_index_len CHECK ((array_length(dow_index, 1) = 7));
+ALTER TABLE public.forecast_network_state ADD CONSTRAINT forecast_network_state_singleton CHECK ((id = true));
+ALTER TABLE public.forecast_product_state ADD CONSTRAINT forecast_product_state_alpha_non_negative CHECK ((alpha >= (0)::numeric));
+ALTER TABLE public.forecast_runs ADD CONSTRAINT forecast_runs_status_valid CHECK ((status = ANY (ARRAY['running'::text, 'ok'::text, 'failed'::text])));
+ALTER TABLE public.forecast_runs ADD CONSTRAINT forecast_runs_trigger_valid CHECK ((trigger = ANY (ARRAY['schedule'::text, 'manual'::text, 'rebuild'::text, 'backtest'::text])));
+ALTER TABLE public.forecast_accuracy_cart ADD CONSTRAINT forecast_accuracy_cart_location_fkey FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_accuracy_product ADD CONSTRAINT forecast_accuracy_product_location_fkey FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_accuracy_product ADD CONSTRAINT forecast_accuracy_product_product_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_campaign_locations ADD CONSTRAINT forecast_campaign_locations_campaign_fkey FOREIGN KEY (campaign_id) REFERENCES forecast_campaigns(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_campaign_locations ADD CONSTRAINT forecast_campaign_locations_location_fkey FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_campaign_observations ADD CONSTRAINT forecast_campaign_observations_campaign_fkey FOREIGN KEY (campaign_id) REFERENCES forecast_campaigns(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_campaign_observations ADD CONSTRAINT forecast_campaign_observations_location_fkey FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_campaign_products ADD CONSTRAINT forecast_campaign_products_campaign_fkey FOREIGN KEY (campaign_id) REFERENCES forecast_campaigns(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_campaign_products ADD CONSTRAINT forecast_campaign_products_product_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_campaigns ADD CONSTRAINT forecast_campaigns_promotion_fkey FOREIGN KEY (promotion_id) REFERENCES promotions(id) ON DELETE SET NULL;
+ALTER TABLE public.forecast_cart_assumptions ADD CONSTRAINT forecast_cart_assumptions_location_fkey FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_cart_assumptions ADD CONSTRAINT forecast_cart_assumptions_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES employees(id) ON DELETE SET NULL;
+ALTER TABLE public.forecast_cart_state ADD CONSTRAINT forecast_cart_state_location_fkey FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_daily_cart ADD CONSTRAINT forecast_daily_cart_location_fkey FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_daily_product ADD CONSTRAINT forecast_daily_product_location_fkey FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_daily_product ADD CONSTRAINT forecast_daily_product_product_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_demand_daily_cart ADD CONSTRAINT forecast_demand_daily_cart_location_fkey FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_demand_daily_product ADD CONSTRAINT forecast_demand_daily_product_location_fkey FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_demand_daily_product ADD CONSTRAINT forecast_demand_daily_product_product_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_product_state ADD CONSTRAINT forecast_product_state_location_fkey FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE;
+ALTER TABLE public.forecast_product_state ADD CONSTRAINT forecast_product_state_product_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;

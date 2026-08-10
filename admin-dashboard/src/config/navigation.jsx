@@ -8,9 +8,11 @@ import {
   LineChart,
   MapPin,
   Martini,
+  Megaphone,
   ShoppingBag,
   Sunrise,
   Ticket,
+  TrendingUp,
   Truck,
   Users,
   Wine
@@ -24,7 +26,8 @@ export const navigationSections = [
     label: 'Overview',
     tabs: [
       { key: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-      { key: 'analytics', label: 'Analytics', icon: LineChart }
+      { key: 'analytics', label: 'Analytics', icon: LineChart },
+      { key: 'forecast', label: 'Forecast', icon: TrendingUp }
     ]
   },
   {
@@ -61,7 +64,10 @@ export const navigationSections = [
       { key: 'promotions', label: 'Promo Codes', icon: Ticket },
       { key: 'referrals', label: 'Referrals', icon: Gift },
       { key: 'banners', label: 'Banners', icon: Images },
-      { key: 'golden-hour', label: 'Golden Hour', icon: Sunrise }
+      { key: 'golden-hour', label: 'Golden Hour', icon: Sunrise },
+      // Sits under Marketing rather than next to Forecast: whoever plans a
+      // campaign already works here.
+      { key: 'forecast-campaigns', label: 'Campaigns', icon: Megaphone }
     ]
   },
   {

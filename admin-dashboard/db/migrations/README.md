@@ -1,17 +1,6 @@
 # Migrations
 
-Every migration applied to the live project, and nothing that has not been —
-with **one current exception**, called out below.
-
-## Pending
-
-- `20260805000000_golden_hour_modes.sql` — **not applied.** It was written in a
-  session with no Supabase credentials, so it carries a placeholder timestamp
-  rather than a ledger version. Apply it, rename it to the version the ledger
-  records, add it to the table below, and refresh `../schema/`. Until then the
-  Marketing → Golden Hour tab has no table to read and the app's launch modal
-  stays inert (`/api/customer/home` answers `goldenHour: null`), so nothing
-  else breaks in the meantime.
+Every migration applied to the live project, and nothing that has not been.
 
 The schema is owned by the Supabase dashboard, so this directory is a record
 rather than a pipeline: **none of these files should be re-run.** They are here
@@ -21,7 +10,7 @@ be read alongside the changes that produced it.
 ## Ledger mapping
 
 Supabase records what it has applied in `supabase_migrations.schema_migrations`.
-All thirteen entries have a file:
+All sixteen entries have a file:
 
 | Ledger version | Name | File |
 | --- | --- | --- |
@@ -38,6 +27,10 @@ All thirteen entries have a file:
 | 20260804083025 | home_hero_banners | `20260804083025_…sql` |
 | 20260804191747 | customer_spirit_profile | `20260804191747_customer_spirit_profile.sql` |
 | 20260804195427 | home_hero_settings | `20260804195427_…sql` |
+| 20260805073530 | golden_hour_modes | `20260805073530_golden_hour_modes.sql` |
+| 20260806211254 | spotlight_banners | `20260806211254_spotlight_banners.sql` |
+| 20260807124610 | spotlight_banner_markdown_slide | `20260807124610_…sql` |
+| 20260807171440 | forecast_module | `20260807171440_forecast_module.sql` |
 
 ## Notes on the applied set
 

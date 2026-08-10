@@ -1,3 +1,31 @@
+/*
+  EBTL landing page styles.
+
+  The mobile layout (<= 520px) is the hand-verified design and is FROZEN:
+  it must render identically pixel for pixel. Every other tier is built to
+  match its composition at a larger scale. Tiers, narrowest to widest:
+
+    max-width: 520px                    mobile   — frozen, do not touch
+    min-width: 521px and max-width: 1023px  tablet only
+    max-width: 1023px                   tablet + mobile, SHARED
+    min-width: 1024px                   desktop (phone steps at 1200/1440)
+
+  Note the shared <= 1023px block reaches mobile, so anything meant for
+  tablets alone belongs in the 521-1023px block, never in the shared one.
+
+  The unprefixed rules hold what the tiers have in common — colour, type,
+  chrome, animation. Hero layout (column widths, heading size, and where
+  each piece of art sits) is owned by the tier blocks at the bottom.
+
+  Every tier keeps the same hero composition:
+    - the four heading lines each stay on one line
+    - the glass sits on the bottom edge, fully visible, left of the phone
+    - the phone sits on the bottom edge, bleeding slightly off it
+    - strawberry, lemon wheel and top leaf cluster in the top-right corner
+    - the lower leaf hovers right of the copy, level with the gap between
+      "We bring" and "the magic."
+    - the shot measure sits in the bottom-right corner where there's room
+*/
 :root {
   --navy: #0E2238;
   --coral: #F35F4B;
@@ -14,8 +42,11 @@
   --shadow: 0 28px 80px rgba(14, 34, 56, 0.20);
   --soft-shadow: 0 18px 44px rgba(14, 34, 56, 0.12);
   --scroll-progress: 0;
+  /* Multiplier on every scroll-driven transform. Reduced motion sets this
+     to 0, which stops the parallax while leaving the static rotations that
+     the art is designed around intact. */
+  --motion: 1;
 }
-
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; background: var(--cream); }
 body {
@@ -31,6 +62,8 @@ button { font: inherit; }
 img { display: block; max-width: 100%; }
 
 .page { min-height: 100vh; position: relative; background: var(--cream); }
+
+/* Navigation */
 .site-nav {
   position: fixed;
   top: 0;
@@ -89,45 +122,35 @@ img { display: block; max-width: 100%; }
   stroke-linecap: round;
 }
 
+/* Hero */
 .hero {
+  --hero-pad-top: clamp(86px, 12vh, 132px);
   position: relative;
   min-height: 100svh;
   overflow: hidden;
   isolation: isolate;
   background: var(--cream);
 }
-.hero-background,
-.hero-wash {
+.hero-background {
   position: absolute;
   inset: 0;
   z-index: -3;
-}
-.hero-background {
-  background-image: url("./images/ebtl-hero-background.webp");
+  background-image: url("./images/ebtl-hero-background-clean.webp");
   background-size: cover;
   background-position: center center;
-  transform: scale(calc(1.02 + (var(--scroll-progress) * 0.045)));
+  transform: scale(calc(1.02 + (var(--scroll-progress) * var(--motion) * 0.045)));
   transform-origin: center;
   filter: saturate(1.04) contrast(1.02);
-}
-.hero-wash {
-  z-index: -2;
-  background:
-    linear-gradient(90deg, rgba(255, 248, 238, 0.97) 0%, rgba(255, 248, 238, 0.86) 42%, rgba(255, 248, 238, 0.56) 72%, rgba(255, 248, 238, 0.34) 100%),
-    radial-gradient(circle at 22% 70%, rgba(243, 95, 75, 0.20), transparent 17rem),
-    radial-gradient(circle at 72% 10%, rgba(231, 189, 104, 0.22), transparent 16rem);
 }
 .hero-content {
   min-height: 100svh;
   width: min(1220px, calc(100% - 40px));
   margin: 0 auto;
-  padding: clamp(86px, 12vh, 132px) 0 74px;
-  display: grid;
-  grid-template-columns: minmax(0, 0.92fr) minmax(360px, 1.08fr);
-  align-items: center;
-  gap: clamp(24px, 5vw, 76px);
+  padding: var(--hero-pad-top) 0 74px;
 }
-.hero-copy { position: relative; z-index: 5; max-width: 620px; }
+/* Hero layout (widths, font sizes, art placement) lives in the tier blocks
+   at the bottom of the file; the rules here are what the tiers share. */
+.hero-copy { position: relative; z-index: 5; }
 .eyebrow,
 .section-kicker {
   margin: 0 0 14px;
@@ -138,12 +161,11 @@ img { display: block; max-width: 100%; }
   text-transform: uppercase;
 }
 .hero h1 {
-  margin: 0;
+  margin: 28px 0 0;
   color: var(--navy);
   font-family: "Playfair Display", Georgia, serif;
-  font-size: clamp(4.9rem, 9.2vw, 8.6rem);
-  line-height: 0.83;
-  letter-spacing: -0.075em;
+  line-height: 0.95;
+  letter-spacing: -0.045em;
 }
 .hero h1 span,
 .hero h1 em { display: block; }
@@ -152,10 +174,9 @@ img { display: block; max-width: 100%; }
   color: var(--coral);
   font-style: italic;
   font-weight: 700;
-  letter-spacing: -0.065em;
+  letter-spacing: -0.035em;
 }
 .hero-subtitle {
-  width: min(100%, 455px);
   margin: 24px 0 0;
   color: #334456;
   font-size: clamp(0.96rem, 1.45vw, 1.15rem);
@@ -198,38 +219,12 @@ img { display: block; max-width: 100%; }
 }
 .primary-cta:hover,
 .secondary-cta:hover { transform: translateY(-2px); }
-.trust-line {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  margin: 22px 0 0;
-  color: #455666;
-  font-size: 0.88rem;
-  line-height: 1.45;
-}
-.trust-icon {
-  width: 31px;
-  height: 31px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: var(--teal);
-  background: rgba(255, 255, 255, 0.55);
-  border: 1px solid rgba(31, 111, 104, 0.16);
-}
 
-.hero-art {
-  position: relative;
-  min-height: 710px;
-  display: grid;
-  place-items: center;
-  z-index: 3;
-}
+/* App phone mockup inside the hero. Both tiers position .hero-art and size
+   the phone; what stays here is the shared chrome and motion. */
 .phone-orbit {
-  position: relative;
-  width: min(58vw, 360px);
   max-width: 100%;
-  transform: translate3d(0, calc(var(--scroll-progress) * -54px), 0) rotate(-10deg);
+  transform: translate3d(0, calc(var(--scroll-progress) * var(--motion) * -54px), 0) rotate(10deg);
   filter: drop-shadow(0 38px 38px rgba(14, 34, 56, 0.28));
   animation: phoneIntro 850ms cubic-bezier(.18,.85,.26,1.08) 120ms both;
   z-index: 8;
@@ -417,6 +412,7 @@ img { display: block; max-width: 100%; }
 }
 .app-tabbar span.active { color: var(--coral); }
 
+/* Decorative floating assets (fruit, leaves, sparkles) around the hero */
 .floating-asset {
   position: absolute;
   z-index: 7;
@@ -424,60 +420,32 @@ img { display: block; max-width: 100%; }
   user-select: none;
   will-change: transform;
 }
+/* Each asset's placement is set per tier; the shared parallax, entrance and
+   idle drift live here. Sizes appear here only where a tier reuses them. */
 .asset-strawberry {
-  width: clamp(76px, 9vw, 136px);
-  right: clamp(0px, 3vw, 46px);
-  top: 42px;
-  transform: translate3d(0, calc(var(--scroll-progress) * -34px), 0) rotate(13deg);
+  transform: translate3d(0, calc(var(--scroll-progress) * var(--motion) * -34px), 0) rotate(13deg);
   animation: floatIn 820ms cubic-bezier(.2,.8,.2,1) 340ms both, driftBerry 6.5s ease-in-out 1.1s infinite;
 }
 .asset-cocktail {
-  width: clamp(212px, 24vw, 410px);
-  left: clamp(-68px, -4vw, -28px);
-  bottom: -14px;
-  transform: translate3d(0, calc(var(--scroll-progress) * 26px), 0) rotate(-10deg);
+  transform: translate3d(0, calc(var(--scroll-progress) * var(--motion) * 26px), 0) rotate(-10deg);
   animation: floatIn 850ms cubic-bezier(.2,.8,.2,1) 520ms both, driftGlass 8s ease-in-out 1.3s infinite;
 }
 .asset-shot {
-  width: clamp(178px, 18vw, 280px);
-  right: clamp(-82px, -5vw, -26px);
-  bottom: 2px;
-  transform: translate3d(0, calc(var(--scroll-progress) * 52px), 0) rotate(-22deg);
+  transform: translate3d(0, calc(var(--scroll-progress) * var(--motion) * 52px), 0) rotate(-22deg);
   animation: floatIn 850ms cubic-bezier(.2,.8,.2,1) 680ms both, driftShot 7.6s ease-in-out 1.5s infinite;
 }
-.lime-slice {
+.lemon-wheel {
   width: 92px;
-  height: 92px;
-  top: 88px;
-  right: 118px;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 50%, rgba(255,255,255,.86) 0 8%, transparent 9%),
-    conic-gradient(from 0deg, rgba(255,255,255,.65) 0 7deg, transparent 8deg 28deg, rgba(255,255,255,.65) 29deg 36deg, transparent 37deg 62deg, rgba(255,255,255,.65) 63deg 70deg, transparent 71deg 96deg, rgba(255,255,255,.65) 97deg 104deg, transparent 105deg 130deg, rgba(255,255,255,.65) 131deg 138deg, transparent 139deg 164deg, rgba(255,255,255,.65) 165deg 172deg, transparent 173deg 198deg, rgba(255,255,255,.65) 199deg 206deg, transparent 207deg 232deg, rgba(255,255,255,.65) 233deg 240deg, transparent 241deg 266deg, rgba(255,255,255,.65) 267deg 274deg, transparent 275deg 300deg, rgba(255,255,255,.65) 301deg 308deg, transparent 309deg 360deg),
-    radial-gradient(circle, #d9ec6b 0 48%, #9fc33d 49% 60%, #f1f7c5 61% 100%);
-  box-shadow: inset 0 0 0 4px rgba(255,255,255,.55), 0 14px 24px rgba(14,34,56,.12);
-  transform: translate3d(0, calc(var(--scroll-progress) * -46px), 0) rotate(12deg);
+  transform: rotate(12deg);
   animation: floatIn 780ms ease 450ms both, driftLime 7s ease-in-out 1.2s infinite;
 }
-.mint-leaf {
-  width: 44px;
-  height: 80px;
-  border-radius: 100% 0 100% 0;
-  background:
-    linear-gradient(45deg, transparent 49%, rgba(255,255,255,.24) 50%, transparent 51%),
-    linear-gradient(135deg, #4d8f2c, #75af42 58%, #2d6c20);
-  box-shadow: 0 12px 18px rgba(14,34,56,.12);
-}
-.leaf-one {
-  top: 182px;
-  left: 10px;
-  transform: translate3d(0, calc(var(--scroll-progress) * -24px), 0) rotate(58deg);
+.leaf-top {
+  z-index: 6;
+  width: 80px;
   animation: floatIn 780ms ease 570ms both, driftLeafOne 5.8s ease-in-out 1.3s infinite;
 }
-.leaf-two {
-  bottom: 188px;
-  left: 28px;
-  transform: translate3d(0, calc(var(--scroll-progress) * 26px), 0) rotate(-26deg) scale(.72);
+.leaf-lower {
+  z-index: 0;
   animation: floatIn 780ms ease 760ms both, driftLeafTwo 6.6s ease-in-out 1.5s infinite;
 }
 .hero-sparkles span {
@@ -521,6 +489,7 @@ img { display: block; max-width: 100%; }
   animation: bounceCue 1.8s ease-in-out infinite;
 }
 
+/* Content sections (cocktail concierge, how it works, download) */
 .section {
   position: relative;
   padding: clamp(68px, 10vw, 108px) 20px;
@@ -645,6 +614,7 @@ img { display: block; max-width: 100%; }
   border-color: rgba(255,255,255,.18);
 }
 
+/* Scroll/load reveal animations, driven by script.js toggling classes */
 .reveal-on-load,
 .reveal-on-scroll {
   opacity: 0;
@@ -659,13 +629,14 @@ img { display: block; max-width: 100%; }
 .is-ready .hero-copy.reveal-on-load { transition-delay: 110ms; }
 .is-ready .phone-orbit.reveal-on-load { transition-delay: 260ms; }
 
+/* Keyframes */
 @keyframes ctaGlow {
   0%, 100% { box-shadow: 0 17px 34px rgba(243, 95, 75, .28); }
   50% { box-shadow: 0 18px 42px rgba(243, 95, 75, .43); }
 }
 @keyframes phoneIntro {
-  from { opacity: 0; transform: translateY(70px) rotate(-15deg) scale(.94); }
-  to { opacity: 1; transform: translateY(0) rotate(-10deg) scale(1); }
+  from { opacity: 0; transform: translateY(70px) rotate(15deg) scale(.94); }
+  to { opacity: 1; transform: translateY(0) rotate(10deg) scale(1); }
 }
 @keyframes floatIn {
   from { opacity: 0; filter: blur(10px); }
@@ -695,6 +666,14 @@ img { display: block; max-width: 100%; }
   0%,100% { margin-bottom: 0; }
   50% { margin-bottom: 12px; }
 }
+@keyframes driftLimeIn {
+  0%,100% { transform: translate3d(0, 0, 0) rotate(12deg); }
+  50% { transform: translate3d(-26px, -12px, 0) rotate(18deg); }
+}
+@keyframes driftLeafFloat {
+  0%,100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(6px, -14px, 0) rotate(-4deg); }
+}
 @keyframes sparkle {
   0%, 100% { transform: scale(.75); opacity: .32; }
   50% { transform: scale(1.6); opacity: .9; }
@@ -703,8 +682,16 @@ img { display: block; max-width: 100%; }
   0%, 100% { transform: rotate(45deg) translate(-2px, -2px); }
   50% { transform: rotate(45deg) translate(2px, 2px); }
 }
-
-@media (max-width: 980px) {
+/*
+  Tablet / phablet + mobile — <= 1023px. This block is shared with the
+  frozen mobile design, so anything that should only affect tablets goes in
+  the 521px-and-up block below it, never here.
+*/
+@media (max-width: 1023px) {
+  .hero {
+    --t-h1: clamp(2.94rem, 5.52vw, 5.16rem);
+    --t-copy-w: 350px;
+  }
   .site-nav { height: 66px; grid-template-columns: 52px 1fr 52px; padding-inline: 12px; }
   .hero-content {
     min-height: 100svh;
@@ -713,22 +700,13 @@ img { display: block; max-width: 100%; }
     padding-top: 86px;
     padding-bottom: 80px;
   }
-  .hero-background { background-position: center center; }
-  .hero-wash {
-    background:
-      linear-gradient(180deg, rgba(255, 248, 238, 0.96) 0%, rgba(255, 248, 238, 0.86) 34%, rgba(255, 248, 238, 0.50) 66%, rgba(255, 248, 238, 0.24) 100%),
-      radial-gradient(circle at 18% 18%, rgba(255, 248, 238, .86), transparent 14rem),
-      radial-gradient(circle at 28% 80%, rgba(243, 95, 75, .16), transparent 14rem);
-  }
-  .hero-copy { max-width: 350px; }
+  .hero-copy { max-width: var(--t-copy-w); }
   .eyebrow { display: none; }
-  .hero h1 { font-size: clamp(3.28rem, 15.5vw, 5.55rem); line-height: .86; }
-  .hero-subtitle { width: min(100%, 275px); margin-top: 18px; font-size: .88rem; line-height: 1.54; }
+  .hero h1 { font-size: var(--t-h1); }
+  .hero-subtitle { width: 60vw; margin-top: 18px; font-size: .88rem; line-height: 1.54; }
   .hero-actions { align-items: stretch; width: min(100%, 318px); }
   .primary-cta, .secondary-cta { min-height: 48px; padding: 0 18px; font-size: .84rem; }
   .secondary-cta { display: none; }
-  .trust-line { max-width: 260px; font-size: .72rem; margin-top: 18px; }
-  .trust-icon { width: 28px; height: 28px; }
   .hero-art {
     position: absolute;
     inset: 0;
@@ -738,10 +716,11 @@ img { display: block; max-width: 100%; }
   }
   .phone-orbit {
     position: absolute;
-    width: min(58vw, 280px);
-    right: max(-24px, calc((100vw - 620px) / 2));
-    bottom: max(58px, env(safe-area-inset-bottom));
-    transform: translate3d(0, calc(var(--scroll-progress) * -42px), 0) rotate(-11deg);
+    width: min(57.6vw, 240px);
+    left: 53%;
+    right: auto;
+    bottom: calc(min(57.6vw, 240px) * -0.154);
+    transform: translateX(-50%) rotate(10deg);
   }
   .phone-shell { border-radius: 42px; padding: 8px; }
   .phone-notch { top: 13px; width: 82px; height: 21px; }
@@ -764,32 +743,68 @@ img { display: block; max-width: 100%; }
   .mini-drink-card p { display: none; }
   .app-tabbar { min-height: 48px; font-size: .48rem; padding-bottom: 8px; }
   .asset-strawberry { width: 74px; right: 48px; top: 114px; }
-  .lime-slice { width: 74px; height: 74px; right: -8px; top: 91px; }
-  .asset-cocktail { width: 216px; left: -78px; bottom: 36px; }
+  .asset-cocktail { width: 432px; left: -78px; bottom: 6px; }
   .asset-shot { width: 178px; right: -74px; bottom: 20px; }
-  .leaf-one { left: 58%; top: 248px; transform: rotate(58deg) scale(.74); }
-  .leaf-two { left: 72px; bottom: 186px; }
+  .lemon-wheel {
+    top: 96px;
+    right: -61px;
+    animation: floatIn 780ms ease 450ms both, driftLimeIn 7s ease-in-out 1.2s infinite;
+  }
+  .leaf-top { top: 30px; right: 54px; }
+  .leaf-lower {
+    bottom: auto;
+    left: 24px;
+    width: 120px;
+    z-index: 6;
+    animation: floatIn 780ms ease 760ms both, driftLeafFloat 6.6s ease-in-out 1.5s infinite;
+  }
   .scroll-cue { width: 42px; height: 42px; bottom: 14px; }
   .steps-grid { grid-template-columns: 1fr; }
 }
 
+/*
+  Tablet only — 521px to 1023px. Deliberately scoped above the mobile
+  breakpoint so none of it can reach the frozen mobile layout. Everything
+  here exists to hold the same composition rules the other tiers follow:
+  the garnishes stay a visible cluster in the top-right corner, and the
+  lower leaf sits beside the heading rather than drifting to the top left.
+*/
+@media (min-width: 521px) and (max-width: 1023px) {
+  .hero {
+    --t-container: min(calc(100% - 32px), 620px);
+    --t-gutter: calc((100% - var(--t-container)) / 2);
+    --t-leaf-w: 120px;
+  }
+  /* 60vw alone overruns the 350px copy column on wide tablets and the text
+     then runs straight across the phone mockup */
+  .hero-subtitle { width: min(60vw, var(--t-copy-w)); }
+  .leaf-top { right: clamp(150px, 26vw, 300px); top: clamp(28px, 4vh, 56px); }
+  .lemon-wheel { right: clamp(86px, 13vw, 170px); top: clamp(58px, 8vh, 106px); }
+  .asset-strawberry { right: clamp(14px, 3.5vw, 50px); top: clamp(96px, 12vh, 140px); }
+
+  /* Copy starts at a fixed 86px padding + the h1's 28px margin, so the gap
+     between "We bring" and "the magic." lands at 114px + 2.93 x --t-h1 */
+  .leaf-lower {
+    width: var(--t-leaf-w);
+    left: calc(var(--t-gutter) + var(--t-copy-w) + 16px - var(--t-leaf-w) * 0.28);
+    right: auto;
+    bottom: auto;
+    top: calc(114px + var(--t-h1) * 2.93 - var(--t-leaf-w) * 0.486);
+  }
+}
+
+/* Mobile phones — <= 520px. This is the verified, hand-designed baseline. */
 @media (max-width: 520px) {
   .site-nav { height: 62px; }
   .nav-icon,
   .wave-mark { width: 38px; height: 38px; background: transparent; backdrop-filter: none; }
   .wordmark { font-size: 1.72rem; }
   .hero-content { width: min(100% - 32px, 390px); padding-top: 86px; }
-  .hero h1 { font-size: clamp(3.08rem, 16vw, 4.5rem); }
-  .hero-subtitle { font-size: .79rem; width: 240px; }
   .hero-actions { margin-top: 20px; width: 205px; }
   .primary-cta { min-height: 46px; }
-  .phone-orbit { width: min(60vw, 232px); right: -28px; bottom: 104px; }
-  .asset-cocktail { width: 196px; left: -82px; bottom: 46px; }
+  .asset-cocktail { width: 500px; left: -98px; bottom: -100px; z-index: 6; }
   .asset-shot { width: 164px; right: -82px; bottom: 14px; }
   .asset-strawberry { width: 66px; right: 50px; top: 124px; }
-  .lime-slice { width: 66px; height: 66px; right: -14px; top: 95px; }
-  .leaf-one { width: 32px; height: 58px; top: 232px; }
-  .leaf-two { width: 30px; height: 54px; left: 64px; bottom: 222px; }
   .section { padding-inline: 16px; }
   .section h2, .download-card h2 { font-size: 2.42rem; }
   .section p, .download-card p { font-size: .96rem; }
@@ -797,16 +812,141 @@ img { display: block; max-width: 100%; }
   .step-card { min-height: auto; }
   .download-section { padding-inline: 16px; }
   .download-card { border-radius: 32px; }
+  .leaf-lower {
+    z-index: 5;
+    width: 140px;
+    bottom: 170px;
+    left: 85px;
+    animation: floatIn 780ms ease 760ms both, driftLeafTwo 6.6s ease-in-out 1.5s infinite;
+  }
 }
 
+/*
+  Desktop — >= 981px. Mirrors the mobile composition at a larger scale: the
+  heading sits in a column on the left while the art is laid over the whole
+  hero, so every piece anchors to the viewport edges rather than to a narrow
+  grid column (which is what used to bury the glass behind the phone and
+  strand the garnishes mid-canvas).
+
+  Sizing hangs off --h1. The four heading lines must each stay on one line;
+  in Playfair Display the widest ("the magic.") measures 4.25x its font
+  size, so the copy column is pinned to 4.42x for ~4% of slack. --h1 is
+  capped against vh as well as vw so the block still clears short laptops.
+
+  The 0.195 / 0.132 / 0.28-style factors below are the transparent margins
+  baked into each .webp, used to line the *visible* art up with an edge.
+*/
+@media (min-width: 1024px) {
+  .hero {
+    --container: min(1220px, calc(100% - 40px));
+    --gutter: calc((100% - var(--container)) / 2);
+    --h1: max(3rem, min(9.2vw, 6.5rem, 11vh));
+    /* 4.42x keeps the longest heading line on one line; the 400px floor
+       stops the two CTAs wrapping to a second row on short viewports,
+       where --h1 (and so the column) is driven down by the vh cap */
+    --copy-w: max(400px, calc(var(--h1) * 4.42));
+    /* The mockup is drawn at 360px and scaled as a unit, so --phone-scale
+       is a plain number (stepped, since CSS can't divide a length down to
+       one) and the phone's own width follows from it */
+    --phone-scale: 0.7;
+    --phone-w: calc(360px * var(--phone-scale));
+    --phone-right: clamp(60px, 9vw, 220px);
+    --glass-w: clamp(340px, 30vw, 560px);
+    --shot-w: clamp(150px, 14vw, 260px);
+    --leaf-w: clamp(96px, 8vw, 150px);
+    --art-gap: clamp(16px, 1.6vw, 30px);
+  }
+  @media (min-width: 1200px) { .hero { --phone-scale: 0.8; } }
+  @media (min-width: 1440px) { .hero { --phone-scale: 0.94; } }
+  .hero-content { display: flex; align-items: center; }
+  .hero-copy { width: var(--copy-w); max-width: none; }
+  .hero h1 { font-size: var(--h1); }
+  /* em-based width keeps the subtitle at a fixed line count as it scales,
+     so the copy block's height (and the leaf offset below) stays predictable */
+  .hero-subtitle { width: min(100%, 22em); }
+  .hero-art {
+    position: absolute;
+    inset: 0;
+    min-height: 0;
+    display: block;
+    z-index: 2;
+  }
+
+  /* Phone and glass both sit on the bottom edge, glass fully clear of the phone */
+  .phone-orbit {
+    position: absolute;
+    left: auto;
+    right: var(--phone-right);
+    bottom: calc(var(--phone-w) * -0.14);
+    width: var(--phone-w);
+    aspect-ratio: 0.49;
+  }
+  .phone-shell {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 360px;
+    transform-origin: 0 0;
+    transform: scale(var(--phone-scale));
+  }
+  .asset-cocktail {
+    left: auto;
+    right: calc(var(--phone-right) + var(--phone-w) + var(--art-gap) - var(--glass-w) * 0.195);
+    bottom: calc(var(--glass-w) * -0.132 - clamp(0px, 1.5vh, 18px));
+    width: var(--glass-w);
+  }
+  .asset-shot {
+    right: calc(var(--shot-w) * -0.16);
+    bottom: calc(var(--shot-w) * -0.203 + clamp(4px, 1vh, 14px));
+    width: var(--shot-w);
+  }
+
+  /* Garnish cluster, top right corner */
+  .asset-strawberry {
+    width: clamp(76px, 7vw, 130px);
+    right: clamp(40px, 6vw, 150px);
+    top: clamp(72px, 10vh, 132px);
+  }
+  .lemon-wheel {
+    width: clamp(70px, 6.5vw, 118px);
+    right: clamp(124px, 13vw, 285px);
+    top: clamp(112px, 15vh, 196px);
+  }
+  .leaf-top {
+    width: clamp(64px, 5.5vw, 100px);
+    right: clamp(152px, 15vw, 330px);
+    top: clamp(48px, 7vh, 104px);
+  }
+
+  /*
+    Lower leaf hovers just right of the copy, level with the gap between
+    "We bring" and "the magic.". The copy block is centred in the hero's
+    padding box, so the leaf is centred the same way and then offset down
+    to the third baseline (3 lines x 0.95em + the em's 0.08em margin).
+  */
+  .leaf-lower {
+    width: var(--leaf-w);
+    left: calc(var(--gutter) + var(--copy-w) + var(--art-gap) - var(--leaf-w) * 0.28);
+    right: auto;
+    bottom: auto;
+    top: calc(
+      var(--hero-pad-top) + (100% - var(--hero-pad-top) - 74px) / 2
+      + var(--h1) * 0.99 - var(--leaf-w) * 0.486 - 75px
+    );
+  }
+}
+
+/*
+  Reduced motion stops things moving, but the phone's 10deg tilt and the
+  angles on the garnishes are static design, not motion — zeroing --motion
+  drops the scroll parallax and leaves those rotations in place. (Blanket
+  `transform: none` here used to flatten the phone and every garnish.)
+*/
 @media (prefers-reduced-motion: reduce) {
+  :root { --motion: 0; }
   *, *::before, *::after {
     animation-duration: .001ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: .001ms !important;
   }
-  .hero-background,
-  .phone-orbit,
-  .floating-asset { transform: none !important; }
 }
