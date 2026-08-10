@@ -294,7 +294,8 @@ CREATE TABLE IF NOT EXISTS public.ingredients (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     icon_key text,
-    name_ar text
+    name_ar text,
+    is_searchable boolean DEFAULT true NOT NULL
 );
 ALTER TABLE public.ingredients ENABLE ROW LEVEL SECURITY;
 

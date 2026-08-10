@@ -191,6 +191,7 @@ const ingredientCreateSchema = z.object({
   shelf_life_days: z.coerce.number().int().nonnegative().nullable().optional(),
   allergen_flags: z.array(z.string()).optional(),
   is_customer_supplied: z.boolean().optional(),
+  is_searchable: z.boolean().optional(),
   is_active: z.boolean().optional()
 });
 

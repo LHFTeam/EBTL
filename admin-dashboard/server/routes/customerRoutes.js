@@ -1429,7 +1429,12 @@ function productCardPayload({
     image_url: product.image_url,
     tags: productTagDetails(product.tags || [], productTagsByName).map((tag) => tag.name),
     tag_details: productTagDetails(product.tags || [], productTagsByName),
+    // Search-only: the app matches products on these and offers them as their
+    // own result rows, so an ingredient flagged out of search is left out here.
+    // The cocktail page builds its ingredient list from the recipe instead, and
+    // still shows every one of them.
     ingredient_names: (recipeItems || [])
+      .filter((item) => item.ingredients?.is_searchable !== false)
       .map((item) => item.ingredients?.name)
       .filter(Boolean),
     prep_time_minutes: product.prep_time_minutes,    
@@ -2459,7 +2464,7 @@ async function loadCatalog({
   const recipeItems = recipeIds.length
     ? await supabase
         .from('recipe_items')
-        .select('*, ingredients(id,name,base_unit,is_customer_supplied,icon_key,ingredient_categories(name))')
+        .select('*, ingredients(id,name,base_unit,is_customer_supplied,is_searchable,icon_key,ingredient_categories(name))')
         .in('recipe_id', recipeIds)
     : {
         data: [],

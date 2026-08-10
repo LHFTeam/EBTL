@@ -20,6 +20,7 @@ COMMENT ON COLUMN public.home_hero_banners.display_order IS 'Ascending carousel 
 COMMENT ON TABLE public.home_hero_settings IS 'Singleton config for the customer app home hero carousel.';
 COMMENT ON COLUMN public.home_hero_settings.rotation_seconds IS 'How long each slide dwells before the carousel advances itself. The app falls back to 5 when this cannot be read.';
 COMMENT ON COLUMN public.ingredients.icon_key IS 'Customer-app ingredient icon key. Flutter maps this key to a bundled local SVG/vector icon. Example: lime, grapefruit, syrup, salt, mint, mixer.';
+COMMENT ON COLUMN public.ingredients.is_searchable IS 'Whether the customer app search bar may surface this ingredient: as its own result row, and as a term its products match on. Off hides it from search only — recipes, the cocktail ingredient list, and inventory are unaffected.';
 COMMENT ON COLUMN public.ingredients.name_ar IS 'Arabic display name (optional); falls back to name when null. Used by the KDS.';
 COMMENT ON TABLE public.location_opening_hours IS 'Weekly opening hours for beach carts. day_of_week follows JavaScript getDay(): 0=Sunday, 1=Monday, ... 6=Saturday.';
 COMMENT ON COLUMN public.locations.banner_image_url IS 'Public WebP banner image URL for customer app location/cart cards.';

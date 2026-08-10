@@ -20,6 +20,7 @@ const blank = {
   shelf_life_days: '',
   allergen_flags: '',
   is_customer_supplied: false,
+  is_searchable: true,
   is_active: true
 };
 
@@ -160,6 +161,7 @@ export default function Ingredients() {
       shelf_life_days: optionalInteger(form.shelf_life_days),
       allergen_flags: splitTags(form.allergen_flags),
       is_customer_supplied: toBool(form.is_customer_supplied),
+      is_searchable: toBool(form.is_searchable),
       is_active: toBool(form.is_active)
     };
 
@@ -334,6 +336,7 @@ export default function Ingredients() {
         <input placeholder="Allergens, comma separated" value={form.allergen_flags || ''} onChange={e => setForm({ ...form, allergen_flags: e.target.value })}/>
         <label><input type="checkbox" checked={toBool(form.is_perishable)} onChange={e => setForm({ ...form, is_perishable: e.target.checked })}/> Perishable</label>
         <label><input type="checkbox" checked={toBool(form.is_customer_supplied)} onChange={e => setForm({ ...form, is_customer_supplied: e.target.checked })}/> Customer supplied</label>
+        <label title="Unchecked keeps this ingredient out of the customer app search bar. It stays in recipes and on the cocktail page either way."><input type="checkbox" checked={toBool(form.is_searchable)} onChange={e => setForm({ ...form, is_searchable: e.target.checked })}/> Show in search</label>
         <label><input type="checkbox" checked={toBool(form.is_active)} onChange={e => setForm({ ...form, is_active: e.target.checked })}/> Active</label>
 
         {baseUnitChanged && <div className="warning full">
@@ -378,13 +381,14 @@ export default function Ingredients() {
         emptyText={filtersApplied
           ? `No ${statusFilter} ingredients match the current filters.`
           : `No ${statusFilter} ingredients yet.`}
-        columns={['name', 'category', 'icon_key', 'base_unit', 'purchase_unit_cost', 'purchase_unit_size', 'cost_per_base_unit', 'is_perishable', 'is_customer_supplied', 'is_active']}
+        columns={['name', 'category', 'icon_key', 'base_unit', 'purchase_unit_cost', 'purchase_unit_size', 'cost_per_base_unit', 'is_perishable', 'is_customer_supplied', 'is_searchable', 'is_active']}
         format={{
           purchase_unit_cost: value => displayNumber(value, 2),
           purchase_unit_size: value => displayNumber(value, 3),
           cost_per_base_unit: value => displayNumber(value, 6),
           is_perishable: yesNo,
           is_customer_supplied: yesNo,
+          is_searchable: yesNo,
           is_active: yesNo
         }}
         actions={(row) => <div className="inlineActions">
