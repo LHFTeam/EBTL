@@ -87,7 +87,7 @@ const iconKey = z.string()
 const ingredientCreateSchema = z.object({
   name: z.string().min(1),
   name_ar: z.string().nullable().optional(),
-  category: z.string().nullable().optional(),
+  category_id: z.string().uuid().nullable().optional(),
   icon_key: iconKey,
   base_unit: z.string().min(1),
   purchase_unit_name: z.string().nullable().optional(),
@@ -106,8 +106,50 @@ const ingredientUpdateSchema = ingredientCreateSchema.partial().extend({
 });
 
 ingredientRouter.get('/ingredients', requireArea('ingredients'), async (_req, res) => {
-  const data = await sb(supabase.from('ingredients').select('*').order('name'), res);
+  const data = await sb(supabase.from('ingredients').select('*, ingredient_categories(name)').order('name'), res);
+  if (data) res.json(data.map(({ ingredient_categories, ...ingredient }) => ({
+    ...ingredient,
+    category: ingredient_categories?.name || null
+  })));
+});
+
+const ingredientCategorySchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  is_active: z.boolean().optional()
+});
+
+function sendCategoryError(error, res) {
+  console.error(error);
+  if (error?.code === '23505') return res.status(409).json({ error: 'An ingredient category with this name already exists.' });
+  return res.status(400).json({ error: error?.message || 'Ingredient category request failed' });
+}
+
+ingredientRouter.get('/ingredient-categories', requireArea('ingredients'), async (_req, res) => {
+  const data = await sb(supabase.from('ingredient_categories').select('*').order('name'), res);
   if (data) res.json(data);
+});
+
+ingredientRouter.post('/ingredient-categories', requireArea('ingredients'), async (req, res) => {
+  const parsed = ingredientCategorySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid ingredient category' });
+  const { data, error } = await supabase.from('ingredient_categories').insert(parsed.data).select().single();
+  if (error) return sendCategoryError(error, res);
+  return res.json(data);
+});
+
+ingredientRouter.patch('/ingredient-categories/:id', requireArea('ingredients'), async (req, res) => {
+  const parsed = ingredientCategorySchema.partial().safeParse(req.body);
+  if (!parsed.success || !Object.keys(parsed.data).length) return res.status(400).json({ error: 'Invalid ingredient category update' });
+
+  if (parsed.data.is_active === false) {
+    const linked = await supabase.from('ingredients').select('id').eq('category_id', req.params.id).eq('is_active', true).limit(1);
+    if (linked.error) return sendCategoryError(linked.error, res);
+    if (linked.data?.length) return res.status(409).json({ error: 'This category cannot be archived while it is assigned to an active ingredient.' });
+  }
+
+  const { data, error } = await supabase.from('ingredient_categories').update(parsed.data).eq('id', req.params.id).select().single();
+  if (error) return sendCategoryError(error, res);
+  return res.json(data);
 });
 
 ingredientRouter.post('/ingredients', requireArea('ingredients'), async (req, res) => {

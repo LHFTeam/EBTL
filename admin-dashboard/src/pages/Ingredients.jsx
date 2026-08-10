@@ -8,7 +8,7 @@ import { splitTags, toBool, yesNo } from '../utils/format.js';
 const blank = {
   name: '',
   name_ar: '',
-  category: '',
+  category_id: '',
   icon_key: '',
   base_unit: 'ml',
   purchase_unit_name: '',
@@ -94,6 +94,8 @@ function calculatedCostPreview(form) {
 
 export default function Ingredients() {
   const { data, loading, error, reload } = useLoad(() => api('/api/ingredients'));
+  const categoriesLoad = useLoad(() => api('/api/ingredient-categories'));
+  const [tab, setTab] = useState('ingredients');
   const [form, setForm] = useState(blank);
   const [editing, setEditing] = useState(null);
   const [original, setOriginal] = useState(null);
@@ -103,16 +105,14 @@ export default function Ingredients() {
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
 
-  const categories = useMemo(() => {
-    return [...new Set((data || []).map(row => row.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  }, [data]);
+  const categories = categoriesLoad.data || [];
 
   const rows = useMemo(() => {
     const searchText = search.trim().toLowerCase();
     return (data || []).filter(row => {
       const matchesSearch = !searchText || [row.name, row.category, row.icon_key, row.base_unit]
         .some(value => String(value || '').toLowerCase().includes(searchText));
-      const matchesCategory = !categoryFilter || row.category === categoryFilter;
+      const matchesCategory = !categoryFilter || row.category_id === categoryFilter;
       return matchesSearch && matchesCategory;
     });
   }, [data, search, categoryFilter]);
@@ -131,7 +131,7 @@ export default function Ingredients() {
     const payload = {
       name: form.name.trim(),
       name_ar: optionalText(form.name_ar),
-      category: optionalText(form.category),
+      category_id: optionalText(form.category_id),
       icon_key: optionalIconKey(form.icon_key),
       base_unit: form.base_unit,
       purchase_unit_name: optionalText(form.purchase_unit_name),
@@ -193,7 +193,7 @@ export default function Ingredients() {
       ...blank,
       ...row,
       name_ar: row.name_ar || '',
-      category: row.category || '',
+      category_id: row.category_id || '',
       icon_key: row.icon_key || '',
       purchase_unit_name: row.purchase_unit_name || '',    
       purchase_unit_size: row.purchase_unit_size ?? '',
@@ -229,14 +229,24 @@ export default function Ingredients() {
     }
   }
 
-  if (loading || error) return <Loading error={error} onRetry={reload} />;
+  if (loading || error || categoriesLoad.loading || categoriesLoad.error) {
+    return <Loading error={error || categoriesLoad.error} onRetry={() => { reload(); categoriesLoad.reload(); }} />;
+  }
 
   return <div className="grid">
+    <div className="ingredientTabs" role="tablist" aria-label="Ingredient management">
+      <button type="button" role="tab" aria-selected={tab === 'ingredients'} className={tab === 'ingredients' ? 'active' : ''} onClick={() => setTab('ingredients')}>Ingredients</button>
+      <button type="button" role="tab" aria-selected={tab === 'categories'} className={tab === 'categories' ? 'active' : ''} onClick={() => setTab('categories')}>Ingredient Categories</button>
+    </div>
+    {tab === 'categories' ? <IngredientCategories categories={categories} reload={categoriesLoad.reload} /> : <>
     <Section title={editing ? 'Edit Ingredient' : 'Add Ingredient'} action={editing && <button onClick={resetForm}>Cancel edit</button>}>
       <form className="miniForm formGrid" onSubmit={save}>
         <input required placeholder="Name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/>
         <input placeholder="Name (Arabic)" dir="rtl" lang="ar" value={form.name_ar || ''} onChange={e => setForm({ ...form, name_ar: e.target.value })}/>
-        <input placeholder="Category" value={form.category || ''} onChange={e => setForm({ ...form, category: e.target.value })}/>
+        <select value={form.category_id || ''} onChange={e => setForm({ ...form, category_id: e.target.value })}>
+          <option value="">No category</option>
+          {categories.filter(category => category.is_active || category.id === form.category_id).map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
+        </select>
         <input
           list="ingredient-icon-key-options"
           placeholder="Icon key e.g. lime, syrup, salt"
@@ -288,7 +298,7 @@ export default function Ingredients() {
         <input type="search" placeholder="Search by name, category, or unit" value={search} onChange={e => setSearch(e.target.value)}/>
         <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
           <option value="">All categories</option>
-          {categories.map(category => <option key={category} value={category}>{category}</option>)}
+          {categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
         </select>
         {(search || categoryFilter) && <button onClick={() => { setSearch(''); setCategoryFilter(''); }}>Clear filters</button>}
       </div>
@@ -310,5 +320,68 @@ export default function Ingredients() {
         </div>}
       />
     </Section>
+    </>}
   </div>;
+}
+
+function IngredientCategories({ categories, reload }) {
+  const [name, setName] = useState('');
+  const [editing, setEditing] = useState(null);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  async function save(e) {
+    e.preventDefault();
+    setMsg('');
+    setErr('');
+    try {
+      await api(editing ? `/api/ingredient-categories/${editing}` : '/api/ingredient-categories', {
+        method: editing ? 'PATCH' : 'POST',
+        body: JSON.stringify({ name: name.trim() })
+      });
+      setName('');
+      setEditing(null);
+      setMsg('Ingredient category saved.');
+      reload();
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
+
+  async function toggle(category) {
+    setMsg('');
+    setErr('');
+    try {
+      await api(`/api/ingredient-categories/${category.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_active: !category.is_active })
+      });
+      setMsg(category.is_active ? 'Ingredient category archived.' : 'Ingredient category restored.');
+      reload();
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
+
+  return <>
+    <Section title={editing ? 'Edit Ingredient Category' : 'Add Ingredient Category'} action={editing && <button onClick={() => { setEditing(null); setName(''); }}>Cancel edit</button>}>
+      <form className="miniForm" onSubmit={save}>
+        <input required maxLength="80" placeholder="Category name" value={name} onChange={e => setName(e.target.value)} />
+        <button className="primary">{editing ? 'Save Changes' : 'Add Category'}</button>
+      </form>
+      <Message text={msg}/>
+      <Message text={err} type="error"/>
+    </Section>
+    <Section title="Ingredient Categories">
+      <SimpleTable
+        rows={categories}
+        columns={['name', 'is_active']}
+        format={{ is_active: yesNo }}
+        actions={category => <div className="inlineActions">
+          <button onClick={() => { setEditing(category.id); setName(category.name); }}>{'Edit'}</button>
+          <button onClick={() => toggle(category)}>{category.is_active ? 'Archive' : 'Restore'}</button>
+        </div>}
+      />
+    </Section>
+  </>;
 }
