@@ -52,6 +52,32 @@ function sendIngredientError(error, res) {
   return res.status(400).json({ error: error?.message || 'Ingredient request failed' });
 }
 
+async function findLinkedCocktail(ingredientId) {
+  const recipeItems = await supabase
+    .from('recipe_items')
+    .select('recipe_id')
+    .eq('ingredient_id', ingredientId);
+
+  if (recipeItems.error || !recipeItems.data?.length) return recipeItems;
+
+  const recipeIds = [...new Set(recipeItems.data.map((item) => item.recipe_id))];
+  const recipes = await supabase
+    .from('recipes')
+    .select('product_id')
+    .in('id', recipeIds);
+
+  if (recipes.error || !recipes.data?.length) return recipes;
+
+  const productIds = [...new Set(recipes.data.map((recipe) => recipe.product_id))];
+  return supabase
+    .from('products')
+    .select('id,name')
+    .in('id', productIds)
+    .eq('product_type', 'cocktail')
+    .limit(1)
+    .maybeSingle();
+}
+
 const iconKey = z.string()
   .trim()
   .regex(/^[a-z0-9]+([_-][a-z0-9]+)*$/, 'Icon key must use lowercase letters, numbers, underscores, or hyphens.')
@@ -117,6 +143,16 @@ ingredientRouter.patch('/ingredients/:id', requireArea('ingredients'), async (re
     .single();
 
   if (readError) return sendIngredientError(readError, res);
+
+  if (existing.is_active && payload.is_active === false) {
+    const linkedCocktail = await findLinkedCocktail(existing.id);
+    if (linkedCocktail.error) return sendIngredientError(linkedCocktail.error, res);
+    if (linkedCocktail.data) {
+      return res.status(409).json({
+        error: `This ingredient cannot be archived because it is linked to the cocktail "${linkedCocktail.data.name}". Remove it from the cocktail recipe first.`
+      });
+    }
+  }
 
   if (
     hasOwn(payload, 'base_unit') &&
