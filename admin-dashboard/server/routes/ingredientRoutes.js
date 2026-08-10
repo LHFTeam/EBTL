@@ -109,6 +109,97 @@ async function findIngredientReference(ingredientId) {
   return {};
 }
 
+function isNewerRecipe(recipe, other) {
+  if (!other) return true;
+  if (recipe.version !== other.version) return recipe.version > other.version;
+  return String(recipe.created_at) > String(other.created_at);
+}
+
+// The products whose recipes call for this ingredient. An ingredient can sit in
+// an older recipe version that the product no longer serves, and that still
+// blocks archiving and deleting, so those rows are listed too and marked as not
+// current rather than hidden.
+async function loadProductsUsingIngredient(ingredientId) {
+  const recipeItems = await supabase
+    .from('recipe_items')
+    .select('recipe_id,quantity,unit,is_optional,is_customer_supplied')
+    .eq('ingredient_id', ingredientId);
+
+  if (recipeItems.error) return recipeItems;
+  if (!recipeItems.data.length) return { data: [] };
+
+  const usageByRecipeId = new Map(recipeItems.data.map((item) => [item.recipe_id, item]));
+  const usedRecipes = await supabase
+    .from('recipes')
+    .select('id,product_id,version,status,yield_servings,created_at')
+    .in('id', [...usageByRecipeId.keys()]);
+
+  if (usedRecipes.error) return usedRecipes;
+  if (!usedRecipes.data.length) return { data: [] };
+
+  const productIds = [...new Set(usedRecipes.data.map((recipe) => recipe.product_id).filter(Boolean))];
+  if (!productIds.length) return { data: [] };
+
+  const [products, allRecipes] = await Promise.all([
+    supabase
+      .from('products')
+      .select('id,name,name_ar,product_type,status,image_url,short_description')
+      .in('id', productIds)
+      .order('name'),
+    supabase
+      .from('recipes')
+      .select('id,product_id,version,created_at')
+      .in('product_id', productIds)
+  ]);
+
+  if (products.error) return products;
+  if (allRecipes.error) return allRecipes;
+
+  // The product's live recipe is its highest version, newest first on a tie —
+  // the same ordering the catalog uses to pick a product's current recipe.
+  const currentRecipeIdByProduct = new Map();
+  const newestRecipeByProduct = new Map();
+  for (const recipe of allRecipes.data) {
+    if (isNewerRecipe(recipe, newestRecipeByProduct.get(recipe.product_id))) {
+      newestRecipeByProduct.set(recipe.product_id, recipe);
+      currentRecipeIdByProduct.set(recipe.product_id, recipe.id);
+    }
+  }
+
+  // One row per product: the current recipe when it uses the ingredient,
+  // otherwise the newest version that does.
+  const recipeByProduct = new Map();
+  for (const recipe of usedRecipes.data) {
+    const chosen = recipeByProduct.get(recipe.product_id);
+    const isCurrent = currentRecipeIdByProduct.get(recipe.product_id) === recipe.id;
+    if (!chosen || isCurrent || (!chosen.isCurrent && isNewerRecipe(recipe, chosen.recipe))) {
+      recipeByProduct.set(recipe.product_id, { recipe, isCurrent });
+    }
+  }
+
+  const rows = products.data
+    .filter((product) => recipeByProduct.has(product.id))
+    .map((product) => {
+      const { recipe, isCurrent } = recipeByProduct.get(product.id);
+      const usage = usageByRecipeId.get(recipe.id) || {};
+
+      return {
+        ...product,
+        quantity: usage.quantity ?? null,
+        unit: usage.unit || null,
+        is_optional: Boolean(usage.is_optional),
+        is_customer_supplied: Boolean(usage.is_customer_supplied),
+        recipe_id: recipe.id,
+        recipe_version: recipe.version,
+        recipe_status: recipe.status,
+        yield_servings: recipe.yield_servings,
+        is_current_recipe: isCurrent
+      };
+    });
+
+  return { data: rows };
+}
+
 const iconKey = z.string()
   .trim()
   .regex(/^[a-z0-9]+([_-][a-z0-9]+)*$/, 'Icon key must use lowercase letters, numbers, underscores, or hyphens.')
@@ -263,6 +354,22 @@ ingredientRouter.patch('/ingredients/:id', requireArea('ingredients'), async (re
 
   if (error) return sendIngredientError(error, res);
   return res.json(data);
+});
+
+ingredientRouter.get('/ingredients/:id/products', requireArea('ingredients'), async (req, res) => {
+  const ingredient = await supabase
+    .from('ingredients')
+    .select('id,name,name_ar,base_unit,is_active')
+    .eq('id', req.params.id)
+    .maybeSingle();
+
+  if (ingredient.error) return sendIngredientError(ingredient.error, res);
+  if (!ingredient.data) return res.status(404).json({ error: 'Ingredient not found.' });
+
+  const products = await loadProductsUsingIngredient(ingredient.data.id);
+  if (products.error) return sendIngredientError(products.error, res);
+
+  return res.json({ ingredient: ingredient.data, products: products.data });
 });
 
 // Permanent delete, archived ingredients only. Archiving stays the normal way to

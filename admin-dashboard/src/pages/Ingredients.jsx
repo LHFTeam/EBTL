@@ -4,6 +4,7 @@ import { baseUnits } from '../config/constants.js';
 import { Loading, Message, Section, SimpleTable } from '../components/ui.jsx';
 import { useLoad } from '../hooks/useLoad.js';
 import { splitTags, toBool, yesNo } from '../utils/format.js';
+import IngredientProducts from './IngredientProducts.jsx';
 
 const blank = {
   name: '',
@@ -103,6 +104,7 @@ export default function Ingredients() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('active');
+  const [productsFor, setProductsFor] = useState(null);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
 
@@ -265,8 +267,21 @@ export default function Ingredients() {
     }
   }
 
+  function showProducts(row) {
+    setProductsFor({ id: row.id, name: row.name });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   if (loading || error || categoriesLoad.loading || categoriesLoad.error) {
     return <Loading error={error || categoriesLoad.error} onRetry={() => { reload(); categoriesLoad.reload(); }} />;
+  }
+
+  if (productsFor) {
+    return <IngredientProducts
+      ingredientId={productsFor.id}
+      ingredientName={productsFor.name}
+      onBack={() => setProductsFor(null)}
+    />;
   }
 
   return <div className="grid">
@@ -368,6 +383,7 @@ export default function Ingredients() {
         }}
         actions={(row) => <div className="inlineActions">
           <button onClick={() => edit(row)}>Edit</button>
+          <button onClick={() => showProducts(row)}>Products</button>
           <button onClick={() => archiveIngredient(row)}>{row.is_active ? 'Archive' : 'Restore'}</button>
           {!row.is_active && <button className="danger" onClick={() => deleteIngredient(row)}>Delete</button>}
         </div>}
