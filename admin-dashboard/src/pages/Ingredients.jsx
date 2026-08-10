@@ -296,10 +296,20 @@ export default function Ingredients() {
     <Section title="Ingredients">
       <div className="filtersBar">
         <input type="search" placeholder="Search by name, category, or unit" value={search} onChange={e => setSearch(e.target.value)}/>
-        <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
-          <option value="">All categories</option>
-          {categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
-        </select>
+        <div className="categoryFilterButtons" role="group" aria-label="Filter ingredients by category">
+          <button type="button" className={!categoryFilter ? 'active' : ''} aria-pressed={!categoryFilter} onClick={() => setCategoryFilter('')}>All categories</button>
+          {categories.map(category => (
+            <button
+              type="button"
+              key={category.id}
+              className={categoryFilter === category.id ? 'active' : ''}
+              aria-pressed={categoryFilter === category.id}
+              onClick={() => setCategoryFilter(category.id)}
+            >
+              {category.name}
+            </button>
+          ))}
+        </div>
         {(search || categoryFilter) && <button onClick={() => { setSearch(''); setCategoryFilter(''); }}>Clear filters</button>}
       </div>
       <SimpleTable

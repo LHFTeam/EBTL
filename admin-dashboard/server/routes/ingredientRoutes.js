@@ -52,7 +52,7 @@ function sendIngredientError(error, res) {
   return res.status(400).json({ error: error?.message || 'Ingredient request failed' });
 }
 
-async function findLinkedCocktail(ingredientId) {
+async function findLinkedProduct(ingredientId) {
   const recipeItems = await supabase
     .from('recipe_items')
     .select('recipe_id')
@@ -71,9 +71,9 @@ async function findLinkedCocktail(ingredientId) {
   const productIds = [...new Set(recipes.data.map((recipe) => recipe.product_id))];
   return supabase
     .from('products')
-    .select('id,name')
+    .select('id,name,product_type')
     .in('id', productIds)
-    .eq('product_type', 'cocktail')
+    .order('name')
     .limit(1)
     .maybeSingle();
 }
@@ -187,11 +187,12 @@ ingredientRouter.patch('/ingredients/:id', requireArea('ingredients'), async (re
   if (readError) return sendIngredientError(readError, res);
 
   if (existing.is_active && payload.is_active === false) {
-    const linkedCocktail = await findLinkedCocktail(existing.id);
-    if (linkedCocktail.error) return sendIngredientError(linkedCocktail.error, res);
-    if (linkedCocktail.data) {
+    const linkedProduct = await findLinkedProduct(existing.id);
+    if (linkedProduct.error) return sendIngredientError(linkedProduct.error, res);
+    if (linkedProduct.data) {
+      const productLabel = linkedProduct.data.product_type === 'cocktail' ? 'cocktail' : 'product';
       return res.status(409).json({
-        error: `This ingredient cannot be archived because it is linked to the cocktail "${linkedCocktail.data.name}". Remove it from the cocktail recipe first.`
+        error: `This ingredient cannot be archived because it is linked to the ${productLabel} "${linkedProduct.data.name}". Remove it from the ${productLabel} recipe first.`
       });
     }
   }
