@@ -133,21 +133,27 @@ jobs:
           # Keep the default keychains searchable; xcodebuild looks across the
           # whole user search list.
           security list-keychains -d user -s "$keychain_path" $(security list-keychains -d user | tr -d '"')
+          # No `-t`: it restricts the import to one item type, and `-t cert`
+          # imports the certificate while silently dropping the private key,
+          # leaving a keychain that holds no signing identity at all.
           security import "$p12_path" -k "$keychain_path" -P "$IOS_DIST_CERTIFICATE_PASSWORD" \
-            -t cert -f pkcs12 -T /usr/bin/codesign -T /usr/bin/security
-          # Without this, codesign blocks on a GUI prompt for keychain access.
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path" > /dev/null
+            -f pkcs12 -T /usr/bin/codesign -T /usr/bin/security
           rm -f "$p12_path"
 
-          # `find-identity` prints `  1) <sha1> "Apple Distribution: … (TEAM)"`,
-          # and a trailing "0 valid identities found" line when the .p12 held no
-          # usable key — hence matching on the quoted name rather than head -1.
+          # Checked before set-key-partition-list, which fails with an opaque
+          # "SecItemCopyMatching: The specified item could not be found in the
+          # keychain" when there is no private key to attach a partition list
+          # to. `find-identity` lists only complete cert+key pairs, so an empty
+          # result here names the actual problem.
           identity="$(security find-identity -v -p codesigning "$keychain_path" | grep -o '"[^"]*"' | head -1 | tr -d '"' || true)"
           if [ -z "$identity" ]; then
-            echo "::error::No codesigning identity found in the imported .p12. Export the certificate together with its private key."
+            echo "::error::No codesigning identity in the imported .p12 — it has no private key. Re-export from Keychain Access by selecting the certificate *and* the key under it, or expanding the certificate and exporting the pair."
             exit 1
           fi
           echo "Using signing identity: $identity"
+
+          # Without this, codesign blocks on a GUI prompt for keychain access.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path" > /dev/null
 
           {
             echo "KEYCHAIN_PATH=$keychain_path"
