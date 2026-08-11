@@ -209,14 +209,16 @@ jobs:
           echo "Installed provisioning profile: $name ($uuid)"
           echo "PROVISIONING_PROFILE_NAME=$name" >> "$GITHUB_ENV"
 
+      # xcodeproj ships with the runner's CocoaPods install; only pay for a gem
+      # install if that ever stops being true.
+      - name: Ensure the xcodeproj gem is available
+        run: ruby -e "require 'xcodeproj'" 2> /dev/null || sudo gem install xcodeproj --no-document
+
       - name: Add GoogleService-Info.plist
         if: env.GOOGLE_SERVICE_INFO_PLIST_BASE64 != ''
         run: |
           set -euo pipefail
           echo "$GOOGLE_SERVICE_INFO_PLIST_BASE64" | base64 --decode > ios/Runner/GoogleService-Info.plist
-          # xcodeproj ships with the runner's CocoaPods install; only pay for a
-          # gem install if that ever stops being true.
-          ruby -e "require 'xcodeproj'" 2> /dev/null || sudo gem install xcodeproj --no-document
           ruby ios/scripts/add_google_service_info.rb
 
       # Generates Flutter/Generated.xcconfig (version, dart-defines) and
@@ -235,10 +237,13 @@ jobs:
           if [ -n "${API_BASE_URL:-}" ]; then args+=(--dart-define=API_BASE_URL="$API_BASE_URL"); fi
           flutter build ios "${args[@]}"
 
-      # Signing settings are passed on the command line rather than committed to
-      # the Xcode project: they win over every project-level setting, and the
-      # checked-in project stays usable with automatic signing on a developer's
-      # Mac.
+      # Onto the Runner target, not the xcodebuild command line: command-line
+      # settings reach every Swift Package target too, and packages refuse a
+      # manually specified provisioning profile. The edit lives in the CI
+      # checkout only, so the committed project keeps automatic signing.
+      - name: Apply signing settings to the Runner target
+        run: ruby ios/scripts/set_signing.rb
+
       - name: Archive
         run: |
           set -euo pipefail
@@ -248,10 +253,6 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_NAME" \
             OTHER_CODE_SIGN_FLAGS="--keychain=$KEYCHAIN_PATH"
 
       - name: Export IPA
