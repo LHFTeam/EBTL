@@ -8,6 +8,12 @@ COMMENT ON COLUMN public.customer_top_liquor_types.rank IS 'Which of the two kep
 COMMENT ON COLUMN public.customers.referral_attributed_at IS 'When this customer was attributed to a referrer (first successful code apply).';
 COMMENT ON COLUMN public.customers.referral_code IS 'The customer''s own shareable referral code (e.g. EBTL-XXXXX). Lazily generated.';
 COMMENT ON COLUMN public.customers.referred_by_customer_id IS 'The customer who referred this customer, if they applied a referral code.';
+COMMENT ON TABLE public.forecast_campaign_effects IS 'Pooled log-uplift per campaign type and discount bucket. The empirical-Bayes prior a new campaign starts from.';
+COMMENT ON TABLE public.forecast_campaigns IS 'Forecast-side campaign calendar. Decoupled from the promotions code engine: a campaign here changes forecasts only and grants no discount.';
+COMMENT ON TABLE public.forecast_cart_state IS 'Holt-Winters multiplicative state per cart. dow_index is renormalised to mean 1 on every update; dow_obs_count drives shrinkage toward the pooled network profile.';
+COMMENT ON COLUMN public.forecast_daily_cart.p90 IS 'Stocking quantile (newsvendor critical fractile). Quantiles do not add: this is computed from the cart-level negative binomial, never by summing product p90s.';
+COMMENT ON TABLE public.forecast_demand_daily_cart IS 'Per-cart per-day demand facts. baseline_units is units with campaign uplift divided out, and is what the model smooths.';
+COMMENT ON TABLE public.forecast_product_state IS 'Dirichlet pseudo-counts for the product mix per cart, with exponential forgetting.';
 COMMENT ON TABLE public.golden_hour_modes IS 'The four time-of-day variants of the customer app''s launch modal ("Golden Hour"). Exactly four rows, seeded and edited from Marketing → Golden Hour; never created or deleted through the API.';
 COMMENT ON COLUMN public.golden_hour_modes.end_time IS 'Exclusive end of the window this mode covers, in Africa/Cairo.';
 COMMENT ON COLUMN public.golden_hour_modes.pills IS 'Pills shown after the leading spirit pill, in order: [{"label": "…", "scheme": "…"}]. Up to four; the array length is the count.';
@@ -20,6 +26,7 @@ COMMENT ON COLUMN public.home_hero_banners.display_order IS 'Ascending carousel 
 COMMENT ON TABLE public.home_hero_settings IS 'Singleton config for the customer app home hero carousel.';
 COMMENT ON COLUMN public.home_hero_settings.rotation_seconds IS 'How long each slide dwells before the carousel advances itself. The app falls back to 5 when this cannot be read.';
 COMMENT ON COLUMN public.ingredients.icon_key IS 'Customer-app ingredient icon key. Flutter maps this key to a bundled local SVG/vector icon. Example: lime, grapefruit, syrup, salt, mint, mixer.';
+COMMENT ON COLUMN public.ingredients.is_searchable IS 'Whether the customer app search bar may surface this ingredient: as its own result row, and as a term its products match on. Off hides it from search only — recipes, the cocktail ingredient list, and inventory are unaffected.';
 COMMENT ON COLUMN public.ingredients.name_ar IS 'Arabic display name (optional); falls back to name when null. Used by the KDS.';
 COMMENT ON TABLE public.location_opening_hours IS 'Weekly opening hours for beach carts. day_of_week follows JavaScript getDay(): 0=Sunday, 1=Monday, ... 6=Saturday.';
 COMMENT ON COLUMN public.locations.banner_image_url IS 'Public WebP banner image URL for customer app location/cart cards.';
@@ -59,16 +66,3 @@ COMMENT ON COLUMN public.spotlight_banners.display_order IS 'Ascending position 
 COMMENT ON COLUMN public.spotlight_banners.markdown_body IS 'Markdown copy for a content_type = ''markdown'' banner''s slide. Supports headings (its first heading takes the place of the sheet title), images, and ordered/unordered lists. Unused and ignored when content_type = ''products''.';
 COMMENT ON COLUMN public.spotlight_banners.subtitle IS 'Optional line under the sheet title.';
 COMMENT ON COLUMN public.spotlight_banners.title IS 'Heading of the sheet the banner opens. Required — a sheet with no title has no heading to show.';
-
--- ---------------------------------------------------------------------------
--- Demand forecasting module (server/forecast/), migration 20260807171440.
--- Appended as a block rather than sorted inline; the next full run of
--- ../tools/dump_schema.sql will re-sort these into place.
--- ---------------------------------------------------------------------------
-
-COMMENT ON TABLE public.forecast_demand_daily_cart IS 'Per-cart per-day demand facts. baseline_units is units with campaign uplift divided out, and is what the model smooths.';
-COMMENT ON TABLE public.forecast_cart_state IS 'Holt-Winters multiplicative state per cart. dow_index is renormalised to mean 1 on every update; dow_obs_count drives shrinkage toward the pooled network profile.';
-COMMENT ON TABLE public.forecast_product_state IS 'Dirichlet pseudo-counts for the product mix per cart, with exponential forgetting.';
-COMMENT ON TABLE public.forecast_campaigns IS 'Forecast-side campaign calendar. Decoupled from the promotions code engine: a campaign here changes forecasts only and grants no discount.';
-COMMENT ON TABLE public.forecast_campaign_effects IS 'Pooled log-uplift per campaign type and discount bucket. The empirical-Bayes prior a new campaign starts from.';
-COMMENT ON COLUMN public.forecast_daily_cart.p90 IS 'Stocking quantile (newsvendor critical fractile). Quantiles do not add: this is computed from the cart-level negative binomial, never by summing product p90s.';

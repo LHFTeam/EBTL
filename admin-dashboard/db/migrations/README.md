@@ -10,7 +10,7 @@ be read alongside the changes that produced it.
 ## Ledger mapping
 
 Supabase records what it has applied in `supabase_migrations.schema_migrations`.
-All eighteen entries have a file:
+All twenty entries have a file:
 
 | Ledger version | Name | File |
 | --- | --- | --- |
@@ -33,6 +33,7 @@ All eighteen entries have a file:
 | 20260807171440 | forecast_module | `20260807171440_forecast_module.sql` |
 | 20260810132333 | normalize_ingredient_categories | `20260810120000_normalize_ingredient_categories.sql` |
 | 20260810174101 | cascade_ingredient_delete | `20260810174101_cascade_ingredient_delete.sql` |
+| 20260810221934 | ingredient_search_visibility | `20260810221934_ingredient_search_visibility.sql` |
 
 ## Notes on the applied set
 

@@ -2,6 +2,27 @@
 -- Constraint-backed PK/unique indexes live in 20_constraints.sql; recreating
 -- them here would fail on a fresh apply.
 
+CREATE INDEX customer_credit_ledger_customer_idx ON public.customer_credit_ledger USING btree (customer_id);
+CREATE INDEX customer_credit_ledger_order_idx ON public.customer_credit_ledger USING btree (order_id) WHERE (order_id IS NOT NULL);
+CREATE UNIQUE INDEX customer_credit_ledger_order_redemption_uidx ON public.customer_credit_ledger USING btree (order_id) WHERE ((reason = 'order_redemption'::text) AND (order_id IS NOT NULL));
+CREATE INDEX customer_credit_ledger_referral_idx ON public.customer_credit_ledger USING btree (referral_id) WHERE (referral_id IS NOT NULL);
+CREATE UNIQUE INDEX customer_credit_ledger_referral_reward_uidx ON public.customer_credit_ledger USING btree (referral_id) WHERE ((reason = 'referral_reward'::text) AND (referral_id IS NOT NULL));
+CREATE INDEX customer_favorite_liquor_types_customer_created_at_idx ON public.customer_favorite_liquor_types USING btree (customer_id, created_at DESC);
+CREATE INDEX customer_favorite_liquor_types_liquor_type_idx ON public.customer_favorite_liquor_types USING btree (liquor_type_id);
+CREATE INDEX customer_top_liquor_types_liquor_type_idx ON public.customer_top_liquor_types USING btree (liquor_type_id);
+CREATE UNIQUE INDEX customers_referral_code_lower_uidx ON public.customers USING btree (lower(referral_code)) WHERE (referral_code IS NOT NULL);
+CREATE INDEX customers_referred_by_customer_idx ON public.customers USING btree (referred_by_customer_id) WHERE (referred_by_customer_id IS NOT NULL);
+CREATE INDEX forecast_accuracy_cart_date_idx ON public.forecast_accuracy_cart USING btree (business_date);
+CREATE INDEX forecast_accuracy_product_date_idx ON public.forecast_accuracy_product USING btree (business_date);
+CREATE INDEX forecast_campaigns_promotion_idx ON public.forecast_campaigns USING btree (promotion_id) WHERE (promotion_id IS NOT NULL);
+CREATE INDEX forecast_campaigns_window_idx ON public.forecast_campaigns USING btree (starts_on, ends_on) WHERE is_active;
+CREATE INDEX forecast_daily_cart_date_idx ON public.forecast_daily_cart USING btree (business_date);
+CREATE INDEX forecast_daily_product_date_idx ON public.forecast_daily_product USING btree (business_date);
+CREATE INDEX forecast_daily_product_lookup_idx ON public.forecast_daily_product USING btree (location_id, business_date, expected_units DESC);
+CREATE INDEX forecast_demand_daily_cart_date_idx ON public.forecast_demand_daily_cart USING btree (business_date);
+CREATE INDEX forecast_demand_daily_product_date_idx ON public.forecast_demand_daily_product USING btree (business_date);
+CREATE INDEX forecast_demand_daily_product_product_idx ON public.forecast_demand_daily_product USING btree (product_id, business_date);
+CREATE INDEX forecast_runs_started_idx ON public.forecast_runs USING btree (started_at DESC);
 CREATE INDEX idx_app_events_customer_created ON public.app_events USING btree (customer_id, created_at DESC);
 CREATE INDEX idx_app_events_metadata_gin ON public.app_events USING gin (metadata);
 CREATE INDEX idx_app_events_type_created ON public.app_events USING btree (event_type, created_at DESC);
@@ -14,11 +35,6 @@ CREATE INDEX idx_cart_items_cart_customization ON public.cart_items USING btree 
 CREATE INDEX idx_carts_customer_status ON public.carts USING btree (customer_id, status, created_at DESC);
 CREATE INDEX idx_carts_customer_status_expires ON public.carts USING btree (customer_id, status, expires_at);
 CREATE INDEX idx_customer_addresses_customer ON public.customer_addresses USING btree (customer_id);
-CREATE INDEX customer_credit_ledger_customer_idx ON public.customer_credit_ledger USING btree (customer_id);
-CREATE INDEX customer_credit_ledger_order_idx ON public.customer_credit_ledger USING btree (order_id) WHERE (order_id IS NOT NULL);
-CREATE UNIQUE INDEX customer_credit_ledger_order_redemption_uidx ON public.customer_credit_ledger USING btree (order_id) WHERE ((reason = 'order_redemption'::text) AND (order_id IS NOT NULL));
-CREATE INDEX customer_credit_ledger_referral_idx ON public.customer_credit_ledger USING btree (referral_id) WHERE (referral_id IS NOT NULL);
-CREATE UNIQUE INDEX customer_credit_ledger_referral_reward_uidx ON public.customer_credit_ledger USING btree (referral_id) WHERE ((reason = 'referral_reward'::text) AND (referral_id IS NOT NULL));
 CREATE INDEX idx_customer_favorite_products_customer_created ON public.customer_favorite_products USING btree (customer_id, created_at DESC);
 CREATE INDEX idx_customer_favorite_products_product ON public.customer_favorite_products USING btree (product_id);
 CREATE INDEX idx_customer_notifications_customer_created ON public.customer_notifications USING btree (customer_id, created_at DESC);
@@ -28,18 +44,13 @@ CREATE INDEX idx_customer_payment_methods_customer ON public.customer_payment_me
 CREATE INDEX idx_customer_payment_methods_default ON public.customer_payment_methods USING btree (customer_id, is_default) WHERE (is_default = true);
 CREATE INDEX idx_customer_push_tokens_customer_active ON public.customer_push_tokens USING btree (customer_id, is_active, last_registered_at DESC);
 CREATE INDEX idx_customer_push_tokens_token_hash ON public.customer_push_tokens USING btree (token_hash);
-CREATE INDEX customer_favorite_liquor_types_customer_created_at_idx ON public.customer_favorite_liquor_types USING btree (customer_id, created_at DESC);
-CREATE INDEX customer_favorite_liquor_types_liquor_type_idx ON public.customer_favorite_liquor_types USING btree (liquor_type_id);
-CREATE INDEX customer_top_liquor_types_liquor_type_idx ON public.customer_top_liquor_types USING btree (liquor_type_id);
-CREATE UNIQUE INDEX customers_referral_code_lower_uidx ON public.customers USING btree (lower(referral_code)) WHERE (referral_code IS NOT NULL);
-CREATE INDEX customers_referred_by_customer_idx ON public.customers USING btree (referred_by_customer_id) WHERE (referred_by_customer_id IS NOT NULL);
 CREATE INDEX idx_customers_auth_user_id ON public.customers USING btree (auth_user_id);
 CREATE INDEX idx_customers_gender ON public.customers USING btree (gender) WHERE (gender IS NOT NULL);
 CREATE INDEX idx_employee_credentials_username ON public.employee_credentials USING btree (username);
 CREATE INDEX idx_employees_auth_user_id ON public.employees USING btree (auth_user_id);
 CREATE INDEX idx_employees_location_role ON public.employees USING btree (default_location_id, role, is_active);
 CREATE INDEX idx_home_hero_banners_active_order ON public.home_hero_banners USING btree (is_active, display_order, created_at);
-CREATE INDEX idx_ingredients_active_category ON public.ingredients USING btree (is_active, category);
+CREATE INDEX idx_ingredients_active_category_id ON public.ingredients USING btree (is_active, category_id);
 CREATE INDEX idx_ingredients_icon_key ON public.ingredients USING btree (icon_key) WHERE (icon_key IS NOT NULL);
 CREATE INDEX idx_inventory_balances_location ON public.inventory_balances USING btree (location_id);
 CREATE INDEX idx_liquor_types_active_order ON public.liquor_types USING btree (is_active, display_order, name);
@@ -56,59 +67,42 @@ CREATE INDEX idx_order_item_removed_ingredient ON public.order_item_removed_ingr
 CREATE INDEX idx_order_item_removed_order_item ON public.order_item_removed_ingredients USING btree (order_item_id);
 CREATE INDEX idx_order_items_order ON public.order_items USING btree (order_id);
 CREATE INDEX idx_order_items_prep_status ON public.order_items USING btree (prep_status, created_at);
-CREATE INDEX idx_prep_tasks_employee ON public.order_prep_tasks USING btree (assigned_employee_id, status);
-CREATE INDEX idx_prep_tasks_status ON public.order_prep_tasks USING btree (status, created_at);
 CREATE INDEX idx_orders_customer_created ON public.orders USING btree (customer_id, created_at DESC);
 CREATE INDEX idx_orders_customer_phone_snapshot ON public.orders USING btree (customer_phone_snapshot);
 CREATE INDEX idx_orders_location_created ON public.orders USING btree (location_id, created_at DESC);
 CREATE INDEX idx_orders_status_created ON public.orders USING btree (status, created_at DESC);
-CREATE INDEX orders_referral_id_idx ON public.orders USING btree (referral_id) WHERE (referral_id IS NOT NULL);
 CREATE INDEX idx_payments_order ON public.payments USING btree (order_id);
 CREATE INDEX idx_payments_provider_payment ON public.payments USING btree (provider, provider_payment_id);
 CREATE INDEX idx_prep_stations_location_active ON public.prep_stations USING btree (location_id, is_active);
+CREATE INDEX idx_prep_tasks_employee ON public.order_prep_tasks USING btree (assigned_employee_id, status);
+CREATE INDEX idx_prep_tasks_status ON public.order_prep_tasks USING btree (status, created_at);
 CREATE INDEX idx_product_categories_active_order ON public.product_categories USING btree (is_active, sort_order, name);
 CREATE UNIQUE INDEX idx_product_categories_slug_unique ON public.product_categories USING btree (slug) WHERE (slug IS NOT NULL);
 CREATE INDEX idx_product_tags_active_order ON public.product_tags USING btree (is_active, display_order, name);
-CREATE UNIQUE INDEX product_tags_name_key ON public.product_tags USING btree (name);
 CREATE INDEX idx_product_variants_product_active ON public.product_variants USING btree (product_id, is_active);
 CREATE INDEX idx_products_status_featured ON public.products USING btree (status, is_featured, display_order);
 CREATE INDEX idx_products_tags_gin ON public.products USING gin (tags);
 CREATE INDEX idx_products_type_status_order ON public.products USING btree (product_type, status, display_order);
 CREATE INDEX idx_promotion_redemptions_customer ON public.promotion_redemptions USING btree (customer_id, created_at DESC);
-CREATE INDEX promotion_redemptions_customer_idx ON public.promotion_redemptions USING btree (promotion_id, customer_id);
-CREATE INDEX promotion_redemptions_promotion_id_idx ON public.promotion_redemptions USING btree (promotion_id);
 CREATE INDEX idx_promotions_code_active ON public.promotions USING btree (code, is_active);
-CREATE INDEX promotions_code_lower_idx ON public.promotions USING btree (lower(code));
 CREATE INDEX idx_purchase_orders_location_status ON public.purchase_orders USING btree (location_id, status, created_at DESC);
 CREATE INDEX idx_recipe_items_recipe ON public.recipe_items USING btree (recipe_id);
 CREATE INDEX idx_recipes_product_status ON public.recipes USING btree (product_id, status);
 CREATE INDEX idx_spotlight_banner_categories_category ON public.spotlight_banner_categories USING btree (category_id);
 CREATE INDEX idx_spotlight_banner_products_product ON public.spotlight_banner_products USING btree (product_id);
 CREATE INDEX idx_spotlight_banners_active_order ON public.spotlight_banners USING btree (is_active, display_order, created_at);
-CREATE INDEX referrals_created_at_idx ON public.referrals USING btree (created_at DESC);
-CREATE INDEX referrals_qualifying_order_idx ON public.referrals USING btree (qualifying_order_id) WHERE (qualifying_order_id IS NOT NULL);
-CREATE INDEX referrals_referrer_idx ON public.referrals USING btree (referrer_customer_id);
-CREATE INDEX referrals_status_created_at_idx ON public.referrals USING btree (status, created_at DESC);
 CREATE INDEX idx_stock_movements_ingredient_created ON public.stock_movements USING btree (ingredient_id, created_at DESC);
 CREATE INDEX idx_stock_movements_location_created ON public.stock_movements USING btree (location_id, created_at DESC);
 CREATE INDEX idx_stock_transfer_items_transfer ON public.stock_transfer_items USING btree (transfer_id);
 CREATE INDEX idx_stock_transfers_locations ON public.stock_transfers USING btree (from_location_id, to_location_id);
 CREATE INDEX idx_stock_transfers_status_requested ON public.stock_transfers USING btree (status, requested_at DESC);
-
--- ---------------------------------------------------------------------------
--- Demand forecasting module (server/forecast/), migration 20260807171440.
--- Appended as a block rather than sorted inline; the next full run of
--- ../tools/dump_schema.sql will re-sort these into place.
--- ---------------------------------------------------------------------------
-
-CREATE INDEX forecast_accuracy_cart_date_idx ON public.forecast_accuracy_cart USING btree (business_date);
-CREATE INDEX forecast_accuracy_product_date_idx ON public.forecast_accuracy_product USING btree (business_date);
-CREATE INDEX forecast_campaigns_promotion_idx ON public.forecast_campaigns USING btree (promotion_id) WHERE (promotion_id IS NOT NULL);
-CREATE INDEX forecast_campaigns_window_idx ON public.forecast_campaigns USING btree (starts_on, ends_on) WHERE is_active;
-CREATE INDEX forecast_daily_cart_date_idx ON public.forecast_daily_cart USING btree (business_date);
-CREATE INDEX forecast_daily_product_date_idx ON public.forecast_daily_product USING btree (business_date);
-CREATE INDEX forecast_daily_product_lookup_idx ON public.forecast_daily_product USING btree (location_id, business_date, expected_units DESC);
-CREATE INDEX forecast_demand_daily_cart_date_idx ON public.forecast_demand_daily_cart USING btree (business_date);
-CREATE INDEX forecast_demand_daily_product_date_idx ON public.forecast_demand_daily_product USING btree (business_date);
-CREATE INDEX forecast_demand_daily_product_product_idx ON public.forecast_demand_daily_product USING btree (product_id, business_date);
-CREATE INDEX forecast_runs_started_idx ON public.forecast_runs USING btree (started_at DESC);
+CREATE UNIQUE INDEX ingredient_categories_name_lower_key ON public.ingredient_categories USING btree (lower(name));
+CREATE INDEX orders_referral_id_idx ON public.orders USING btree (referral_id) WHERE (referral_id IS NOT NULL);
+CREATE UNIQUE INDEX product_tags_name_key ON public.product_tags USING btree (name);
+CREATE INDEX promotion_redemptions_customer_idx ON public.promotion_redemptions USING btree (promotion_id, customer_id);
+CREATE INDEX promotion_redemptions_promotion_id_idx ON public.promotion_redemptions USING btree (promotion_id);
+CREATE INDEX promotions_code_lower_idx ON public.promotions USING btree (lower(code));
+CREATE INDEX referrals_created_at_idx ON public.referrals USING btree (created_at DESC);
+CREATE INDEX referrals_qualifying_order_idx ON public.referrals USING btree (qualifying_order_id) WHERE (qualifying_order_id IS NOT NULL);
+CREATE INDEX referrals_referrer_idx ON public.referrals USING btree (referrer_customer_id);
+CREATE INDEX referrals_status_created_at_idx ON public.referrals USING btree (status, created_at DESC);

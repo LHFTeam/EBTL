@@ -8,9 +8,12 @@ CREATE TRIGGER trg_customer_push_tokens_updated_at BEFORE UPDATE ON public.custo
 CREATE TRIGGER trg_customers_updated_at BEFORE UPDATE ON public.customers FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_employee_credentials_updated_at BEFORE UPDATE ON public.employee_credentials FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_employees_updated_at BEFORE UPDATE ON public.employees FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER set_forecast_campaigns_updated_at BEFORE UPDATE ON public.forecast_campaigns FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER set_forecast_cart_assumptions_updated_at BEFORE UPDATE ON public.forecast_cart_assumptions FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_golden_hour_modes_updated_at BEFORE UPDATE ON public.golden_hour_modes FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_home_hero_banners_updated_at BEFORE UPDATE ON public.home_hero_banners FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_home_hero_settings_updated_at BEFORE UPDATE ON public.home_hero_settings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_ingredient_categories_updated_at BEFORE UPDATE ON public.ingredient_categories FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_ingredients_updated_at BEFORE UPDATE ON public.ingredients FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_liquor_types_updated_at BEFORE UPDATE ON public.liquor_types FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_location_opening_hours_updated_at BEFORE UPDATE ON public.location_opening_hours FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -39,12 +42,3 @@ CREATE TRIGGER trg_generate_transfer_number BEFORE INSERT ON public.stock_transf
 CREATE TRIGGER trg_post_stock_transfer_movements AFTER UPDATE OF status ON public.stock_transfers FOR EACH ROW EXECUTE FUNCTION post_stock_transfer_movements();
 CREATE TRIGGER trg_stock_transfers_updated_at BEFORE UPDATE ON public.stock_transfers FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_suppliers_updated_at BEFORE UPDATE ON public.suppliers FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-
--- ---------------------------------------------------------------------------
--- Demand forecasting module (server/forecast/), migration 20260807171440.
--- Appended as a block rather than sorted inline; the next full run of
--- ../tools/dump_schema.sql will re-sort these into place.
--- ---------------------------------------------------------------------------
-
-CREATE TRIGGER set_forecast_campaigns_updated_at BEFORE UPDATE ON public.forecast_campaigns FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-CREATE TRIGGER set_forecast_cart_assumptions_updated_at BEFORE UPDATE ON public.forecast_cart_assumptions FOR EACH ROW EXECUTE FUNCTION set_updated_at();

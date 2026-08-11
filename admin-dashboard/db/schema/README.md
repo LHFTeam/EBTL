@@ -16,20 +16,21 @@ Captured from project `pfcncajijvtvsdwgwbjl` ("EBTL 1", eu-west-1, Postgres 17).
 | --- | --- |
 | `00_extensions_and_types.sql` | 4 extensions, 11 enum types, 2 sequences |
 | `05_private_schema.sql` | the `private` schema and its one SECURITY DEFINER function |
-| `10_tables.sql` | 73 tables — columns, defaults, generated/identity columns, RLS enablement |
-| `20_constraints.sql` | 338 constraints — 73 PK, 30 unique, 119 check, 116 FK |
-| `30_indexes.sql` | 100 indexes (the constraint-backed ones live in `20_`) |
+| `10_tables.sql` | 78 tables — columns, defaults, generated/identity columns, RLS enablement |
+| `20_constraints.sql` | 365 constraints — 78 PK, 30 unique, 135 check, 122 FK |
+| `30_indexes.sql` | 104 indexes (the constraint-backed ones live in `20_`) |
 | `40_views.sql` | 8 views |
-| `50_functions.sql` | 13 functions in `public` |
-| `60_triggers.sql` | 38 triggers |
-| `70_rls_policies.sql` | 123 RLS policies |
-| `80_comments.sql` | 51 table and column comments |
+| `50_functions.sql` | 14 functions in `public` |
+| `60_triggers.sql` | 41 triggers |
+| `70_rls_policies.sql` | 135 RLS policies |
+| `80_comments.sql` | 66 table and column comments |
 
-These counts are what the files contain, and they match the live catalogs as of
-2026-08-07 — the forecasting module (migration 20260807171440) brought 16
-`forecast_*` tables in, appended as a labelled block at the end of each file
-rather than sorted inline; the next full `../tools/dump_schema.sql` run will
-re-sort them, which is a formatting diff rather than a schema change.
+These counts are what the files contain, and every object in them was compared
+against the live catalogs on 2026-08-11, object by object. The forecasting
+module (migration 20260807171440) was appended as a labelled block at the end of
+each file rather than sorted inline; that block is now sorted into place, which
+is why the diff that refreshed these counts is larger than the schema change
+behind it.
 
 Earlier counts matched as of
 2026-08-04 — the spirit-profile and home-hero-banner work landed together and
@@ -43,6 +44,14 @@ and triggers that use them.
 
 `../tools/dump_schema.sql` regenerates all of it — one query per file — so the
 capture is refreshed rather than hand-edited.
+
+Two things the capture normalises, so a refresh is a diff of the schema rather
+than of Postgres' formatting: function bodies are stored with LF endings where
+the live definitions carry CRLF and end `$function$;` rather than `$function$`
+on its own line, and a policy's `USING` / `WITH CHECK` expression is flattened
+onto one line where the deparser wraps it. Neither changes what the statement
+says. Sequences are in `00_` for the same practical reason and against the tool:
+`dump_schema.sql` has no section for them.
 
 ## Scope
 
@@ -63,8 +72,9 @@ rather than a tested bootstrap.
 
 ## RLS, and why it is not what protects the API
 
-Row-level security is enabled on all 57 captured tables, with 91 policies keyed off
-`auth.uid()` and the `is_staff()` / `is_manager_or_admin()` helpers.
+Row-level security is enabled on all 78 captured tables, with 135 policies: 98
+keyed off the `is_staff()` / `is_manager_or_admin()` helpers, 24 off
+`auth.uid()`, and the rest open reads of published catalog rows.
 
 The Express server connects with the **service-role key**
 (`server/lib/supabase.js`), which bypasses RLS entirely. So these policies
@@ -72,7 +82,7 @@ govern direct PostgREST access only — every authorization decision the custome
 and admin APIs actually make is in application code. Do not read the policy list
 as a description of how the APIs are secured.
 
-Nine tables have RLS enabled and no policy at all, making them deny-all for
+Eight tables have RLS enabled and no policy at all, making them deny-all for
 `anon` and `authenticated` (reachable only via the service-role key):
 `customer_credit_ledger`, `customer_favorite_liquor_types`,
 `customer_top_liquor_types`, `order_inventory_consumptions`,

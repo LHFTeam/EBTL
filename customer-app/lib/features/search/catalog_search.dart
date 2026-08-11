@@ -109,9 +109,11 @@ class SearchCatalog {
           ],
         ),
       ),
+      // Rows only for the ingredients admins left searchable. A product still
+      // matches on the hidden ones through [ShopProduct.matchesQuery].
       ingredients: _matchingValues(
         clean,
-        allProducts.expand((product) => product.ingredientNames),
+        allProducts.expand((product) => product.searchableIngredientNames),
       ),
     );
   }

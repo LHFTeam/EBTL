@@ -10,8 +10,10 @@
 --
 -- Tables with RLS enabled and no policy below are deny-all for anon and
 -- authenticated: app_events (insert only), customer_credit_ledger,
+-- customer_favorite_liquor_types, customer_top_liquor_types,
 -- order_inventory_consumptions, order_number_counters, referral_settings,
--- referrals, stock_transfer_movement_events.
+-- referrals, stock_transfer_movement_events. Enabling RLS is part of each
+-- table's definition and lives in 10_tables.sql, not here.
 
 CREATE POLICY "Authenticated users can insert app events" ON public.app_events AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (((customer_id IS NULL) OR (customer_id IN ( SELECT customers.id FROM customers WHERE (customers.auth_user_id = ( SELECT auth.uid() AS uid))))));
 CREATE POLICY "Staff can manage cart_daily_closings" ON public.cart_daily_closings AS PERMISSIVE FOR ALL TO authenticated USING (is_staff()) WITH CHECK (is_staff());
@@ -40,6 +42,38 @@ CREATE POLICY "Customers can update own customer record" ON public.customers AS 
 CREATE POLICY "Managers can read employee credentials metadata" ON public.employee_credentials AS PERMISSIVE FOR SELECT TO public USING (is_manager_or_admin());
 CREATE POLICY "Managers can manage employees" ON public.employees AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
 CREATE POLICY "Staff can read employee records" ON public.employees AS PERMISSIVE FOR SELECT TO authenticated USING (((auth_user_id = ( SELECT auth.uid() AS uid)) OR is_manager_or_admin()));
+CREATE POLICY "Managers can manage forecast_accuracy_cart" ON public.forecast_accuracy_cart AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Staff can read forecast_accuracy_cart" ON public.forecast_accuracy_cart AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
+CREATE POLICY "Managers can manage forecast_accuracy_product" ON public.forecast_accuracy_product AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Staff can read forecast_accuracy_product" ON public.forecast_accuracy_product AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
+CREATE POLICY "Managers can manage forecast_campaign_effects" ON public.forecast_campaign_effects AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Staff can read forecast_campaign_effects" ON public.forecast_campaign_effects AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
+CREATE POLICY "Managers can manage forecast_campaign_locations" ON public.forecast_campaign_locations AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Staff can read forecast_campaign_locations" ON public.forecast_campaign_locations AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
+CREATE POLICY "Managers can manage forecast_campaign_observations" ON public.forecast_campaign_observations AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Staff can read forecast_campaign_observations" ON public.forecast_campaign_observations AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
+CREATE POLICY "Managers can manage forecast_campaign_products" ON public.forecast_campaign_products AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Staff can read forecast_campaign_products" ON public.forecast_campaign_products AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
+CREATE POLICY "Managers can manage forecast_campaigns" ON public.forecast_campaigns AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Staff can read forecast_campaigns" ON public.forecast_campaigns AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
+CREATE POLICY "Managers can manage forecast_cart_assumptions" ON public.forecast_cart_assumptions AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Staff can read forecast_cart_assumptions" ON public.forecast_cart_assumptions AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
+CREATE POLICY "Managers can manage forecast_cart_state" ON public.forecast_cart_state AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Staff can read forecast_cart_state" ON public.forecast_cart_state AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
+CREATE POLICY "Managers can manage forecast_daily_cart" ON public.forecast_daily_cart AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Staff can read forecast_daily_cart" ON public.forecast_daily_cart AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
+CREATE POLICY "Managers can manage forecast_daily_product" ON public.forecast_daily_product AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Staff can read forecast_daily_product" ON public.forecast_daily_product AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
+CREATE POLICY "Managers can manage forecast_demand_daily_cart" ON public.forecast_demand_daily_cart AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Staff can read forecast_demand_daily_cart" ON public.forecast_demand_daily_cart AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
+CREATE POLICY "Managers can manage forecast_demand_daily_product" ON public.forecast_demand_daily_product AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Staff can read forecast_demand_daily_product" ON public.forecast_demand_daily_product AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
+CREATE POLICY "Managers can manage forecast_network_state" ON public.forecast_network_state AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Staff can read forecast_network_state" ON public.forecast_network_state AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
+CREATE POLICY "Managers can manage forecast_product_state" ON public.forecast_product_state AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Staff can read forecast_product_state" ON public.forecast_product_state AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
+CREATE POLICY "Managers can manage forecast_runs" ON public.forecast_runs AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Staff can read forecast_runs" ON public.forecast_runs AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
 CREATE POLICY "Managers can manage golden hour modes" ON public.golden_hour_modes AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
 CREATE POLICY "Public can read active golden hour modes" ON public.golden_hour_modes AS PERMISSIVE FOR SELECT TO anon, authenticated USING ((is_active = true));
 CREATE POLICY "Staff can read golden hour modes" ON public.golden_hour_modes AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
@@ -48,6 +82,8 @@ CREATE POLICY "Public can read active home hero banners" ON public.home_hero_ban
 CREATE POLICY "Staff can read home hero banners" ON public.home_hero_banners AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
 CREATE POLICY "Managers can manage home hero settings" ON public.home_hero_settings AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
 CREATE POLICY "Public can read home hero settings" ON public.home_hero_settings AS PERMISSIVE FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Managers can manage ingredient categories" ON public.ingredient_categories AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+CREATE POLICY "Staff can read ingredient categories" ON public.ingredient_categories AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
 CREATE POLICY "Managers can manage ingredients" ON public.ingredients AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
 CREATE POLICY "Staff can read ingredients" ON public.ingredients AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
 CREATE POLICY "Staff can read inventory_balances" ON public.inventory_balances AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
@@ -114,58 +150,3 @@ CREATE POLICY "Staff can manage stock_movements" ON public.stock_movements AS PE
 CREATE POLICY "Staff can manage stock_transfer_items" ON public.stock_transfer_items AS PERMISSIVE FOR ALL TO authenticated USING (is_staff()) WITH CHECK (is_staff());
 CREATE POLICY "Staff can manage stock_transfers" ON public.stock_transfers AS PERMISSIVE FOR ALL TO authenticated USING (is_staff()) WITH CHECK (is_staff());
 CREATE POLICY "Managers can manage suppliers" ON public.suppliers AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
-
--- ---------------------------------------------------------------------------
--- Demand forecasting module (server/forecast/), migration 20260807171440.
--- Appended as a block rather than sorted inline; the next full run of
--- ../tools/dump_schema.sql will re-sort these into place.
--- ---------------------------------------------------------------------------
-
-ALTER TABLE public.forecast_accuracy_cart ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Managers can manage forecast_accuracy_cart" ON public.forecast_accuracy_cart AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
-CREATE POLICY "Staff can read forecast_accuracy_cart" ON public.forecast_accuracy_cart AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
-ALTER TABLE public.forecast_accuracy_product ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Managers can manage forecast_accuracy_product" ON public.forecast_accuracy_product AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
-CREATE POLICY "Staff can read forecast_accuracy_product" ON public.forecast_accuracy_product AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
-ALTER TABLE public.forecast_campaign_effects ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Managers can manage forecast_campaign_effects" ON public.forecast_campaign_effects AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
-CREATE POLICY "Staff can read forecast_campaign_effects" ON public.forecast_campaign_effects AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
-ALTER TABLE public.forecast_campaign_locations ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Managers can manage forecast_campaign_locations" ON public.forecast_campaign_locations AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
-CREATE POLICY "Staff can read forecast_campaign_locations" ON public.forecast_campaign_locations AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
-ALTER TABLE public.forecast_campaign_observations ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Managers can manage forecast_campaign_observations" ON public.forecast_campaign_observations AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
-CREATE POLICY "Staff can read forecast_campaign_observations" ON public.forecast_campaign_observations AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
-ALTER TABLE public.forecast_campaign_products ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Managers can manage forecast_campaign_products" ON public.forecast_campaign_products AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
-CREATE POLICY "Staff can read forecast_campaign_products" ON public.forecast_campaign_products AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
-ALTER TABLE public.forecast_campaigns ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Managers can manage forecast_campaigns" ON public.forecast_campaigns AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
-CREATE POLICY "Staff can read forecast_campaigns" ON public.forecast_campaigns AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
-ALTER TABLE public.forecast_cart_assumptions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Managers can manage forecast_cart_assumptions" ON public.forecast_cart_assumptions AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
-CREATE POLICY "Staff can read forecast_cart_assumptions" ON public.forecast_cart_assumptions AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
-ALTER TABLE public.forecast_cart_state ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Managers can manage forecast_cart_state" ON public.forecast_cart_state AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
-CREATE POLICY "Staff can read forecast_cart_state" ON public.forecast_cart_state AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
-ALTER TABLE public.forecast_daily_cart ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Managers can manage forecast_daily_cart" ON public.forecast_daily_cart AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
-CREATE POLICY "Staff can read forecast_daily_cart" ON public.forecast_daily_cart AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
-ALTER TABLE public.forecast_daily_product ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Managers can manage forecast_daily_product" ON public.forecast_daily_product AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
-CREATE POLICY "Staff can read forecast_daily_product" ON public.forecast_daily_product AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
-ALTER TABLE public.forecast_demand_daily_cart ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Managers can manage forecast_demand_daily_cart" ON public.forecast_demand_daily_cart AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
-CREATE POLICY "Staff can read forecast_demand_daily_cart" ON public.forecast_demand_daily_cart AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
-ALTER TABLE public.forecast_demand_daily_product ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Managers can manage forecast_demand_daily_product" ON public.forecast_demand_daily_product AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
-CREATE POLICY "Staff can read forecast_demand_daily_product" ON public.forecast_demand_daily_product AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
-ALTER TABLE public.forecast_network_state ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Managers can manage forecast_network_state" ON public.forecast_network_state AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
-CREATE POLICY "Staff can read forecast_network_state" ON public.forecast_network_state AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
-ALTER TABLE public.forecast_product_state ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Managers can manage forecast_product_state" ON public.forecast_product_state AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
-CREATE POLICY "Staff can read forecast_product_state" ON public.forecast_product_state AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
-ALTER TABLE public.forecast_runs ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Managers can manage forecast_runs" ON public.forecast_runs AS PERMISSIVE FOR ALL TO authenticated USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
-CREATE POLICY "Staff can read forecast_runs" ON public.forecast_runs AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
