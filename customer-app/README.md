@@ -61,10 +61,17 @@ One-time setup — add these repository secrets under
 | `IOS_DIST_CERTIFICATE_P12_BASE64` | Apple Distribution certificate **with its private key**, exported from Keychain Access as `.p12`, then `base64 -i cert.p12 \| pbcopy` |
 | `IOS_DIST_CERTIFICATE_PASSWORD` | the password you set during that export |
 | `IOS_PROVISIONING_PROFILE_BASE64` | App Store provisioning profile for `wtf.ebtl.app` (Push Notifications capability enabled), base64-encoded |
-| `APP_STORE_CONNECT_API_KEY_ID` | App Store Connect → Users and Access → Integrations → Keys |
-| `APP_STORE_CONNECT_API_ISSUER_ID` | same page (a UUID) |
-| `APP_STORE_CONNECT_API_KEY` | contents of the downloaded `AuthKey_*.p8`, BEGIN/END lines included — downloadable only once |
+| `APP_STORE_CONNECT_API_KEY_ID` | the key's **Key ID**, ~10 characters (e.g. `2X9R4HXF34`) |
+| `APP_STORE_CONNECT_API_ISSUER_ID` | the **Issuer ID**, a UUID shown once at the top of the Keys page; the same for every key on the team |
+| `APP_STORE_CONNECT_API_KEY` | the whole `AuthKey_<KeyID>.p8` file, `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` included. Paste it as-is: multi-line is fine, do not base64 it |
 | `IOS_GOOGLE_SERVICE_INFO_PLIST_BASE64` | optional; base64 of `GoogleService-Info.plist` from Firebase project `ebtl-37ddb` |
+
+The three App Store Connect values come from one key, created under
+*App Store Connect → Users and Access → Integrations → App Store Connect API →
+Team Keys*. Give it the **App Manager** role. The `.p8` downloads exactly once
+and cannot be re-fetched — losing it means revoking the key and issuing a new
+one. The Key ID secret must match the key the `.p8` came from, because `altool`
+finds the file by the `AuthKey_<KeyID>.p8` name the workflow writes it to.
 
 You also need the app record for `wtf.ebtl.app` to exist in App Store Connect
 before the first upload. Every upload needs a build number higher than the last
