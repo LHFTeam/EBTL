@@ -147,7 +147,21 @@ jobs:
           # result here names the actual problem.
           identity="$(security find-identity -v -p codesigning "$keychain_path" | grep -o '"[^"]*"' | head -1 | tr -d '"' || true)"
           if [ -z "$identity" ]; then
-            echo "::error::No codesigning identity in the imported .p12 — it has no private key. Re-export from Keychain Access by selecting the certificate *and* the key under it, or expanding the certificate and exporting the pair."
+            # An identity is a certificate plus its matching private key. Which
+            # half is missing decides the fix, so report what actually landed
+            # rather than guessing.
+            certificates="$(security find-certificate -a -p "$keychain_path" 2> /dev/null | grep -c 'BEGIN CERTIFICATE' || true)"
+            echo "Imported $certificates certificate(s); no complete signing identity."
+            echo "Certificates in the keychain:"
+            security find-certificate -a "$keychain_path" 2> /dev/null | grep '"labl"' || echo "  (none)"
+            echo "Identities, including any macOS considers invalid:"
+            security find-identity -p codesigning "$keychain_path" 2> /dev/null || true
+
+            if [ "$certificates" -eq 0 ]; then
+              echo "::error::The .p12 holds a private key but no certificate. Apple issues a .cer, never a .p12 — combine the .cer with the key you made the CSR from: openssl x509 -inform DER -in dist.cer -out cert.pem, then openssl pkcs12 -export -inkey key.pem -in cert.pem -out ios_distribution.p12"
+            else
+              echo "::error::The .p12 holds a certificate but no matching private key. Re-export it from the machine that generated the CSR, selecting the certificate together with the key nested under it."
+            fi
             exit 1
           fi
           echo "Using signing identity: $identity"
