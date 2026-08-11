@@ -34,6 +34,14 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<!-- Export compliance: the app only uses encryption exempt from US export
+	     regulations (HTTPS to the backend and Stripe, Keychain via
+	     flutter_secure_storage) — all provided by the OS, none custom or
+	     proprietary. Declaring it here answers the question at upload time;
+	     without the key every TestFlight build parks in "Missing Compliance"
+	     and cannot go to testers until answered by hand. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

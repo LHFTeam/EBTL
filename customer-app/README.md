@@ -71,6 +71,19 @@ before the first upload. Every upload needs a build number higher than the last
 one accepted for that version — bump `version:` in `pubspec.yaml`, or pass a
 one-off override to the workflow.
 
+The build lands in App Store Connect the same way whether it is destined for
+TestFlight or the App Store; the difference is only what you do with it after
+processing (5–15 minutes). Internal testers get it immediately. The first build
+you send to an *external* group goes through Beta App Review, which wants test
+notes and a contact email filled in first. `ITSAppUsesNonExemptEncryption` is
+declared in `Info.plist`, so builds are not held in "Missing Compliance";
+revisit that declaration if the app ever adds non-standard cryptography.
+
+TestFlight builds are signed for **production** APNs (Xcode swaps
+`aps-environment` at export). Push that works in a debug build will still be
+silent in TestFlight until the APNs auth key is uploaded to the Firebase
+console and `IOS_GOOGLE_SERVICE_INFO_PLIST_BASE64` is set.
+
 The Firebase plist is gitignored, so it cannot be a permanent reference in the
 Xcode project (a missing build input breaks the build for everyone without it).
 CI decodes it from the secret and runs `ios/scripts/add_google_service_info.rb`
