@@ -218,7 +218,24 @@ jobs:
         if: env.GOOGLE_SERVICE_INFO_PLIST_BASE64 != ''
         run: |
           set -euo pipefail
-          echo "$GOOGLE_SERVICE_INFO_PLIST_BASE64" | base64 --decode > ios/Runner/GoogleService-Info.plist
+          plist=ios/Runner/GoogleService-Info.plist
+          printf '%s' "$GOOGLE_SERVICE_INFO_PLIST_BASE64" | base64 --decode > "$plist" 2> /dev/null || true
+
+          # macOS base64 skips characters outside its alphabet instead of
+          # failing, so a secret holding the plist itself decodes to garbage
+          # and only surfaces later as an opaque CopyPlistFile error mid-archive.
+          # Lint here, and accept the plist verbatim as well as base64 of it.
+          if ! plutil -lint "$plist" > /dev/null 2>&1; then
+            printf '%s\n' "$GOOGLE_SERVICE_INFO_PLIST_BASE64" > "$plist"
+            if plutil -lint "$plist" > /dev/null 2>&1; then
+              echo "::notice::IOS_GOOGLE_SERVICE_INFO_PLIST_BASE64 held the plist verbatim rather than base64 of it; used as-is."
+            else
+              rm -f "$plist"
+              echo "::error::IOS_GOOGLE_SERVICE_INFO_PLIST_BASE64 is neither base64 of GoogleService-Info.plist nor the plist itself. Re-encode the file Firebase gave you, bytes and all: [Convert]::ToBase64String([IO.File]::ReadAllBytes('GoogleService-Info.plist')) | Set-Clipboard"
+              exit 1
+            fi
+          fi
+
           ruby ios/scripts/add_google_service_info.rb
 
       # Generates Flutter/Generated.xcconfig (version, dart-defines) and
