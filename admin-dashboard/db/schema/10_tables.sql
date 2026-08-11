@@ -239,6 +239,222 @@ CREATE TABLE IF NOT EXISTS public.employees (
 );
 ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
 
+CREATE TABLE IF NOT EXISTS public.forecast_accuracy_cart (
+    location_id uuid NOT NULL,
+    business_date date NOT NULL,
+    horizon_days integer DEFAULT 1 NOT NULL,
+    forecast_p50 integer DEFAULT 0 NOT NULL,
+    forecast_p90 integer DEFAULT 0 NOT NULL,
+    expected_units numeric(12,4) DEFAULT 0 NOT NULL,
+    actual_units integer DEFAULT 0 NOT NULL,
+    abs_error numeric(12,4) DEFAULT 0 NOT NULL,
+    naive_forecast numeric(12,4),
+    naive_abs_error numeric(12,4),
+    pinball_loss numeric(12,4) DEFAULT 0 NOT NULL,
+    within_p90 boolean DEFAULT true NOT NULL,
+    scored_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.forecast_accuracy_cart ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.forecast_accuracy_product (
+    location_id uuid NOT NULL,
+    business_date date NOT NULL,
+    product_id uuid NOT NULL,
+    horizon_days integer DEFAULT 1 NOT NULL,
+    forecast_p50 integer DEFAULT 0 NOT NULL,
+    forecast_p90 integer DEFAULT 0 NOT NULL,
+    expected_units numeric(12,4) DEFAULT 0 NOT NULL,
+    actual_units integer DEFAULT 0 NOT NULL,
+    abs_error numeric(12,4) DEFAULT 0 NOT NULL,
+    naive_forecast numeric(12,4),
+    naive_abs_error numeric(12,4),
+    pinball_loss numeric(12,4) DEFAULT 0 NOT NULL,
+    within_p90 boolean DEFAULT true NOT NULL,
+    scored_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.forecast_accuracy_product ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.forecast_campaign_effects (
+    campaign_type text NOT NULL,
+    discount_bucket text NOT NULL,
+    log_uplift_mean numeric(10,6) DEFAULT 0 NOT NULL,
+    observations integer DEFAULT 0 NOT NULL,
+    pull_forward_ratio numeric(6,4) DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.forecast_campaign_effects ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.forecast_campaign_locations (
+    campaign_id uuid NOT NULL,
+    location_id uuid NOT NULL
+);
+ALTER TABLE public.forecast_campaign_locations ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.forecast_campaign_observations (
+    campaign_id uuid NOT NULL,
+    location_id uuid NOT NULL,
+    business_date date NOT NULL,
+    actual_units integer DEFAULT 0 NOT NULL,
+    baseline_forecast numeric(12,4) DEFAULT 0 NOT NULL,
+    ratio numeric(10,5),
+    promo_order_share numeric(6,4) DEFAULT 0 NOT NULL,
+    recorded_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.forecast_campaign_observations ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.forecast_campaign_products (
+    campaign_id uuid NOT NULL,
+    product_id uuid NOT NULL
+);
+ALTER TABLE public.forecast_campaign_products ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.forecast_campaigns (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    campaign_type text DEFAULT 'promo_code'::text NOT NULL,
+    scope text DEFAULT 'network'::text NOT NULL,
+    starts_on date NOT NULL,
+    ends_on date NOT NULL,
+    promotion_id uuid,
+    discount_pct numeric(6,3),
+    expected_uplift_pct numeric(8,3) DEFAULT 0 NOT NULL,
+    expected_promo_order_share numeric(6,4),
+    learned_log_uplift numeric(10,6),
+    learned_observations integer DEFAULT 0 NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    notes text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.forecast_campaigns ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.forecast_cart_assumptions (
+    location_id uuid NOT NULL,
+    day_of_week integer NOT NULL,
+    expected_units numeric(10,2),
+    expected_orders numeric(10,2),
+    prior_strength_days integer DEFAULT 14 NOT NULL,
+    notes text,
+    updated_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.forecast_cart_assumptions ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.forecast_cart_state (
+    location_id uuid NOT NULL,
+    level numeric(12,4) DEFAULT 0 NOT NULL,
+    dispersion numeric(10,5) DEFAULT 0 NOT NULL,
+    dow_index numeric(8,5)[] DEFAULT ARRAY[(1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5)] NOT NULL,
+    dow_obs_count integer[] DEFAULT ARRAY[0, 0, 0, 0, 0, 0, 0] NOT NULL,
+    observations integer DEFAULT 0 NOT NULL,
+    residual_sum_sq numeric(16,5) DEFAULT 0 NOT NULL,
+    residual_count integer DEFAULT 0 NOT NULL,
+    last_business_date date,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.forecast_cart_state ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.forecast_daily_cart (
+    location_id uuid NOT NULL,
+    business_date date NOT NULL,
+    horizon_days integer DEFAULT 0 NOT NULL,
+    expected_units numeric(12,4) DEFAULT 0 NOT NULL,
+    p50 integer DEFAULT 0 NOT NULL,
+    p90 integer DEFAULT 0 NOT NULL,
+    expected_orders numeric(12,4) DEFAULT 0 NOT NULL,
+    expected_revenue numeric(12,2) DEFAULT 0 NOT NULL,
+    campaign_uplift numeric(8,4) DEFAULT 1 NOT NULL,
+    campaign_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    confidence text DEFAULT 'low'::text NOT NULL,
+    sample_size integer DEFAULT 0 NOT NULL,
+    model_version text NOT NULL,
+    generated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.forecast_daily_cart ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.forecast_daily_product (
+    location_id uuid NOT NULL,
+    business_date date NOT NULL,
+    product_id uuid NOT NULL,
+    horizon_days integer DEFAULT 0 NOT NULL,
+    mix_share numeric(8,6) DEFAULT 0 NOT NULL,
+    expected_units numeric(12,4) DEFAULT 0 NOT NULL,
+    p50 integer DEFAULT 0 NOT NULL,
+    p90 integer DEFAULT 0 NOT NULL,
+    expected_revenue numeric(12,2) DEFAULT 0 NOT NULL,
+    campaign_uplift numeric(8,4) DEFAULT 1 NOT NULL,
+    confidence text DEFAULT 'low'::text NOT NULL,
+    sample_size integer DEFAULT 0 NOT NULL,
+    model_version text NOT NULL,
+    generated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.forecast_daily_product ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.forecast_demand_daily_cart (
+    location_id uuid NOT NULL,
+    business_date date NOT NULL,
+    units integer DEFAULT 0 NOT NULL,
+    orders integer DEFAULT 0 NOT NULL,
+    revenue numeric(12,2) DEFAULT 0 NOT NULL,
+    traded boolean DEFAULT true NOT NULL,
+    promo_orders integer DEFAULT 0 NOT NULL,
+    promo_order_share numeric(6,4) DEFAULT 0 NOT NULL,
+    mean_discount_pct numeric(7,3) DEFAULT 0 NOT NULL,
+    applied_uplift numeric(8,4) DEFAULT 1 NOT NULL,
+    baseline_units numeric(12,3) DEFAULT 0 NOT NULL,
+    ingested_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.forecast_demand_daily_cart ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.forecast_demand_daily_product (
+    location_id uuid NOT NULL,
+    business_date date NOT NULL,
+    product_id uuid NOT NULL,
+    units integer DEFAULT 0 NOT NULL,
+    revenue numeric(12,2) DEFAULT 0 NOT NULL,
+    applied_uplift numeric(8,4) DEFAULT 1 NOT NULL,
+    baseline_units numeric(12,3) DEFAULT 0 NOT NULL,
+    ingested_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.forecast_demand_daily_product ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.forecast_network_state (
+    id boolean DEFAULT true NOT NULL,
+    dow_index numeric(8,5)[] DEFAULT ARRAY[(1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5)] NOT NULL,
+    dow_obs_count integer[] DEFAULT ARRAY[0, 0, 0, 0, 0, 0, 0] NOT NULL,
+    mean_level numeric(12,4) DEFAULT 0 NOT NULL,
+    dispersion numeric(10,5) DEFAULT 0 NOT NULL,
+    product_mix jsonb DEFAULT '{}'::jsonb NOT NULL,
+    observations integer DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.forecast_network_state ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.forecast_product_state (
+    location_id uuid NOT NULL,
+    product_id uuid NOT NULL,
+    alpha numeric(12,5) DEFAULT 0 NOT NULL,
+    units_ewma numeric(12,5) DEFAULT 0 NOT NULL,
+    observations integer DEFAULT 0 NOT NULL,
+    last_sold_date date,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.forecast_product_state ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.forecast_runs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    finished_at timestamp with time zone,
+    trigger text DEFAULT 'schedule'::text NOT NULL,
+    through_date date,
+    dates_processed integer DEFAULT 0 NOT NULL,
+    forecasts_written integer DEFAULT 0 NOT NULL,
+    status text DEFAULT 'running'::text NOT NULL,
+    error text,
+    model_version text
+);
+ALTER TABLE public.forecast_runs ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS public.golden_hour_modes (
     mode text NOT NULL,
     is_active boolean DEFAULT false NOT NULL,
@@ -277,10 +493,18 @@ CREATE TABLE IF NOT EXISTS public.home_hero_settings (
 );
 ALTER TABLE public.home_hero_settings ENABLE ROW LEVEL SECURITY;
 
+CREATE TABLE IF NOT EXISTS public.ingredient_categories (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.ingredient_categories ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS public.ingredients (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     name text NOT NULL,
-    category text,
     base_unit text NOT NULL,
     purchase_unit_name text,
     purchase_unit_size numeric(12,3),
@@ -295,6 +519,7 @@ CREATE TABLE IF NOT EXISTS public.ingredients (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     icon_key text,
     name_ar text,
+    category_id uuid,
     is_searchable boolean DEFAULT true NOT NULL
 );
 ALTER TABLE public.ingredients ENABLE ROW LEVEL SECURITY;
@@ -799,225 +1024,3 @@ CREATE TABLE IF NOT EXISTS public.suppliers (
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
-
--- ---------------------------------------------------------------------------
--- Demand forecasting module (server/forecast/), migration 20260807171440.
--- Appended as a block rather than sorted inline; the next full run of
--- ../tools/dump_schema.sql will re-sort these into place.
--- ---------------------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS public.forecast_accuracy_cart (
-    location_id uuid NOT NULL,
-    business_date date NOT NULL,
-    horizon_days integer DEFAULT 1 NOT NULL,
-    forecast_p50 integer DEFAULT 0 NOT NULL,
-    forecast_p90 integer DEFAULT 0 NOT NULL,
-    expected_units numeric(12,4) DEFAULT 0 NOT NULL,
-    actual_units integer DEFAULT 0 NOT NULL,
-    abs_error numeric(12,4) DEFAULT 0 NOT NULL,
-    naive_forecast numeric(12,4),
-    naive_abs_error numeric(12,4),
-    pinball_loss numeric(12,4) DEFAULT 0 NOT NULL,
-    within_p90 boolean DEFAULT true NOT NULL,
-    scored_at timestamp with time zone DEFAULT now() NOT NULL
-);
-ALTER TABLE public.forecast_accuracy_cart ENABLE ROW LEVEL SECURITY;
-
-CREATE TABLE IF NOT EXISTS public.forecast_accuracy_product (
-    location_id uuid NOT NULL,
-    business_date date NOT NULL,
-    product_id uuid NOT NULL,
-    horizon_days integer DEFAULT 1 NOT NULL,
-    forecast_p50 integer DEFAULT 0 NOT NULL,
-    forecast_p90 integer DEFAULT 0 NOT NULL,
-    expected_units numeric(12,4) DEFAULT 0 NOT NULL,
-    actual_units integer DEFAULT 0 NOT NULL,
-    abs_error numeric(12,4) DEFAULT 0 NOT NULL,
-    naive_forecast numeric(12,4),
-    naive_abs_error numeric(12,4),
-    pinball_loss numeric(12,4) DEFAULT 0 NOT NULL,
-    within_p90 boolean DEFAULT true NOT NULL,
-    scored_at timestamp with time zone DEFAULT now() NOT NULL
-);
-ALTER TABLE public.forecast_accuracy_product ENABLE ROW LEVEL SECURITY;
-
-CREATE TABLE IF NOT EXISTS public.forecast_campaign_effects (
-    campaign_type text NOT NULL,
-    discount_bucket text NOT NULL,
-    log_uplift_mean numeric(10,6) DEFAULT 0 NOT NULL,
-    observations integer DEFAULT 0 NOT NULL,
-    pull_forward_ratio numeric(6,4) DEFAULT 0 NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-ALTER TABLE public.forecast_campaign_effects ENABLE ROW LEVEL SECURITY;
-
-CREATE TABLE IF NOT EXISTS public.forecast_campaign_locations (
-    campaign_id uuid NOT NULL,
-    location_id uuid NOT NULL
-);
-ALTER TABLE public.forecast_campaign_locations ENABLE ROW LEVEL SECURITY;
-
-CREATE TABLE IF NOT EXISTS public.forecast_campaign_observations (
-    campaign_id uuid NOT NULL,
-    location_id uuid NOT NULL,
-    business_date date NOT NULL,
-    actual_units integer DEFAULT 0 NOT NULL,
-    baseline_forecast numeric(12,4) DEFAULT 0 NOT NULL,
-    ratio numeric(10,5),
-    promo_order_share numeric(6,4) DEFAULT 0 NOT NULL,
-    recorded_at timestamp with time zone DEFAULT now() NOT NULL
-);
-ALTER TABLE public.forecast_campaign_observations ENABLE ROW LEVEL SECURITY;
-
-CREATE TABLE IF NOT EXISTS public.forecast_campaign_products (
-    campaign_id uuid NOT NULL,
-    product_id uuid NOT NULL
-);
-ALTER TABLE public.forecast_campaign_products ENABLE ROW LEVEL SECURITY;
-
-CREATE TABLE IF NOT EXISTS public.forecast_campaigns (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    name text NOT NULL,
-    campaign_type text DEFAULT 'promo_code'::text NOT NULL,
-    scope text DEFAULT 'network'::text NOT NULL,
-    starts_on date NOT NULL,
-    ends_on date NOT NULL,
-    promotion_id uuid,
-    discount_pct numeric(6,3),
-    expected_uplift_pct numeric(8,3) DEFAULT 0 NOT NULL,
-    expected_promo_order_share numeric(6,4),
-    learned_log_uplift numeric(10,6),
-    learned_observations integer DEFAULT 0 NOT NULL,
-    is_active boolean DEFAULT true NOT NULL,
-    notes text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-ALTER TABLE public.forecast_campaigns ENABLE ROW LEVEL SECURITY;
-
-CREATE TABLE IF NOT EXISTS public.forecast_cart_assumptions (
-    location_id uuid NOT NULL,
-    day_of_week integer NOT NULL,
-    expected_units numeric(10,2),
-    expected_orders numeric(10,2),
-    prior_strength_days integer DEFAULT 14 NOT NULL,
-    notes text,
-    updated_by uuid,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-ALTER TABLE public.forecast_cart_assumptions ENABLE ROW LEVEL SECURITY;
-
-CREATE TABLE IF NOT EXISTS public.forecast_cart_state (
-    location_id uuid NOT NULL,
-    level numeric(12,4) DEFAULT 0 NOT NULL,
-    dispersion numeric(10,5) DEFAULT 0 NOT NULL,
-    dow_index numeric(8,5)[] DEFAULT ARRAY[(1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5)] NOT NULL,
-    dow_obs_count integer[] DEFAULT ARRAY[0, 0, 0, 0, 0, 0, 0] NOT NULL,
-    observations integer DEFAULT 0 NOT NULL,
-    residual_sum_sq numeric(16,5) DEFAULT 0 NOT NULL,
-    residual_count integer DEFAULT 0 NOT NULL,
-    last_business_date date,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-ALTER TABLE public.forecast_cart_state ENABLE ROW LEVEL SECURITY;
-
-CREATE TABLE IF NOT EXISTS public.forecast_daily_cart (
-    location_id uuid NOT NULL,
-    business_date date NOT NULL,
-    horizon_days integer DEFAULT 0 NOT NULL,
-    expected_units numeric(12,4) DEFAULT 0 NOT NULL,
-    p50 integer DEFAULT 0 NOT NULL,
-    p90 integer DEFAULT 0 NOT NULL,
-    expected_orders numeric(12,4) DEFAULT 0 NOT NULL,
-    expected_revenue numeric(12,2) DEFAULT 0 NOT NULL,
-    campaign_uplift numeric(8,4) DEFAULT 1 NOT NULL,
-    campaign_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
-    confidence text DEFAULT 'low'::text NOT NULL,
-    sample_size integer DEFAULT 0 NOT NULL,
-    model_version text NOT NULL,
-    generated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-ALTER TABLE public.forecast_daily_cart ENABLE ROW LEVEL SECURITY;
-
-CREATE TABLE IF NOT EXISTS public.forecast_daily_product (
-    location_id uuid NOT NULL,
-    business_date date NOT NULL,
-    product_id uuid NOT NULL,
-    horizon_days integer DEFAULT 0 NOT NULL,
-    mix_share numeric(8,6) DEFAULT 0 NOT NULL,
-    expected_units numeric(12,4) DEFAULT 0 NOT NULL,
-    p50 integer DEFAULT 0 NOT NULL,
-    p90 integer DEFAULT 0 NOT NULL,
-    expected_revenue numeric(12,2) DEFAULT 0 NOT NULL,
-    campaign_uplift numeric(8,4) DEFAULT 1 NOT NULL,
-    confidence text DEFAULT 'low'::text NOT NULL,
-    sample_size integer DEFAULT 0 NOT NULL,
-    model_version text NOT NULL,
-    generated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-ALTER TABLE public.forecast_daily_product ENABLE ROW LEVEL SECURITY;
-
-CREATE TABLE IF NOT EXISTS public.forecast_demand_daily_cart (
-    location_id uuid NOT NULL,
-    business_date date NOT NULL,
-    units integer DEFAULT 0 NOT NULL,
-    orders integer DEFAULT 0 NOT NULL,
-    revenue numeric(12,2) DEFAULT 0 NOT NULL,
-    traded boolean DEFAULT true NOT NULL,
-    promo_orders integer DEFAULT 0 NOT NULL,
-    promo_order_share numeric(6,4) DEFAULT 0 NOT NULL,
-    mean_discount_pct numeric(7,3) DEFAULT 0 NOT NULL,
-    applied_uplift numeric(8,4) DEFAULT 1 NOT NULL,
-    baseline_units numeric(12,3) DEFAULT 0 NOT NULL,
-    ingested_at timestamp with time zone DEFAULT now() NOT NULL
-);
-ALTER TABLE public.forecast_demand_daily_cart ENABLE ROW LEVEL SECURITY;
-
-CREATE TABLE IF NOT EXISTS public.forecast_demand_daily_product (
-    location_id uuid NOT NULL,
-    business_date date NOT NULL,
-    product_id uuid NOT NULL,
-    units integer DEFAULT 0 NOT NULL,
-    revenue numeric(12,2) DEFAULT 0 NOT NULL,
-    applied_uplift numeric(8,4) DEFAULT 1 NOT NULL,
-    baseline_units numeric(12,3) DEFAULT 0 NOT NULL,
-    ingested_at timestamp with time zone DEFAULT now() NOT NULL
-);
-ALTER TABLE public.forecast_demand_daily_product ENABLE ROW LEVEL SECURITY;
-
-CREATE TABLE IF NOT EXISTS public.forecast_network_state (
-    id boolean DEFAULT true NOT NULL,
-    dow_index numeric(8,5)[] DEFAULT ARRAY[(1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5), (1)::numeric(8,5)] NOT NULL,
-    dow_obs_count integer[] DEFAULT ARRAY[0, 0, 0, 0, 0, 0, 0] NOT NULL,
-    mean_level numeric(12,4) DEFAULT 0 NOT NULL,
-    dispersion numeric(10,5) DEFAULT 0 NOT NULL,
-    product_mix jsonb DEFAULT '{}'::jsonb NOT NULL,
-    observations integer DEFAULT 0 NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-ALTER TABLE public.forecast_network_state ENABLE ROW LEVEL SECURITY;
-
-CREATE TABLE IF NOT EXISTS public.forecast_product_state (
-    location_id uuid NOT NULL,
-    product_id uuid NOT NULL,
-    alpha numeric(12,5) DEFAULT 0 NOT NULL,
-    units_ewma numeric(12,5) DEFAULT 0 NOT NULL,
-    observations integer DEFAULT 0 NOT NULL,
-    last_sold_date date,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-ALTER TABLE public.forecast_product_state ENABLE ROW LEVEL SECURITY;
-
-CREATE TABLE IF NOT EXISTS public.forecast_runs (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    started_at timestamp with time zone DEFAULT now() NOT NULL,
-    finished_at timestamp with time zone,
-    trigger text DEFAULT 'schedule'::text NOT NULL,
-    through_date date,
-    dates_processed integer DEFAULT 0 NOT NULL,
-    forecasts_written integer DEFAULT 0 NOT NULL,
-    status text DEFAULT 'running'::text NOT NULL,
-    error text,
-    model_version text
-);
-ALTER TABLE public.forecast_runs ENABLE ROW LEVEL SECURITY;
