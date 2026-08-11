@@ -44,8 +44,50 @@ without any of them:
 Payments use Stripe's native Payment Sheet; the backend delivers the
 per-checkout Stripe keys. See the root [`STRIPE_SETUP.md`](../STRIPE_SETUP.md).
 
+## iOS releases from GitHub Actions
+
+`.github/workflows/ios-release.yml` builds a signed App Store IPA on a macOS
+runner and ships it to TestFlight, so cutting a build needs no Mac. Run it from
+the **Actions** tab (optional version / build-number / backend overrides, and an
+"upload" toggle if you only want the IPA as an artifact), or push an `ios-v*`
+tag. It is deliberately not part of PR CI: macOS minutes bill at 10x and an
+archive takes roughly 20 minutes.
+
+One-time setup — add these repository secrets under
+*Settings → Secrets and variables → Actions*:
+
+| Secret | Where it comes from |
+| --- | --- |
+| `IOS_DIST_CERTIFICATE_P12_BASE64` | Apple Distribution certificate **with its private key**, exported from Keychain Access as `.p12`, then `base64 -i cert.p12 \| pbcopy` |
+| `IOS_DIST_CERTIFICATE_PASSWORD` | the password you set during that export |
+| `IOS_PROVISIONING_PROFILE_BASE64` | App Store provisioning profile for `wtf.ebtl.app` (Push Notifications capability enabled), base64-encoded |
+| `APP_STORE_CONNECT_API_KEY_ID` | App Store Connect → Users and Access → Integrations → Keys |
+| `APP_STORE_CONNECT_API_ISSUER_ID` | same page (a UUID) |
+| `APP_STORE_CONNECT_API_KEY` | contents of the downloaded `AuthKey_*.p8`, BEGIN/END lines included — downloadable only once |
+| `IOS_GOOGLE_SERVICE_INFO_PLIST_BASE64` | optional; base64 of `GoogleService-Info.plist` from Firebase project `ebtl-37ddb` |
+
+You also need the app record for `wtf.ebtl.app` to exist in App Store Connect
+before the first upload. Every upload needs a build number higher than the last
+one accepted for that version — bump `version:` in `pubspec.yaml`, or pass a
+one-off override to the workflow.
+
+The Firebase plist is gitignored, so it cannot be a permanent reference in the
+Xcode project (a missing build input breaks the build for everyone without it).
+CI decodes it from the secret and runs `ios/scripts/add_google_service_info.rb`
+to attach it to the Runner target for that build. Locally, drag the plist into
+the Runner group in Xcode once, with the Runner target ticked. Without it the
+build still succeeds — Firebase push, Crashlytics, and Analytics just stay off,
+silently, because `FirebaseBootstrap` swallows the initialization failure.
+
+Signing settings (team, identity, profile) are passed to `xcodebuild` on the
+command line instead of being committed to the Xcode project, so a developer's
+Mac keeps working with automatic signing.
+
 ## Notes for release
 
+- The iOS deployment target is **15.0** — the floor imposed by the Firebase
+  plugins, which are linked through Swift Package Manager (there is no
+  `Podfile`). Lowering it breaks package resolution.
 - **Android release signing** is wired up but needs your keystore: create
   `android/key.properties` from `android/key.properties.example` and point it
   at your upload keystore (or set the `ANDROID_KEYSTORE_*` env vars in CI).
