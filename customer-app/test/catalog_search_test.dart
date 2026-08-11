@@ -34,6 +34,7 @@ ShopProduct product({
   String productType = 'cocktail',
   List<String> tags = const [],
   List<String> ingredients = const [],
+  List<String>? searchableIngredients,
 }) {
   return ShopProduct.fromJson({
     'id': id,
@@ -42,6 +43,7 @@ ShopProduct product({
     'product_type': productType,
     'tags': tags,
     'ingredient_names': ingredients,
+    'searchable_ingredient_names': ?searchableIngredients,
   });
 }
 
@@ -129,6 +131,29 @@ void main() {
 
     test('a miss reports empty rather than falling back to everything', () {
       expect(_catalog.search('absinthe').isEmpty, isTrue);
+    });
+
+    test('an ingredient hidden from search loses its row, not its product', () {
+      final soda = product(
+        id: 'p4',
+        name: 'Highball',
+        ingredients: const ['Lime', 'Soda water'],
+        searchableIngredients: const ['Lime'],
+      );
+      final catalog = catalogWith(
+        productsByCategory: {
+          'c1': [soda],
+        },
+      );
+
+      final results = catalog.search('soda');
+
+      expect(results.ingredients, isEmpty);
+      expect(results.products.map((p) => p.name), ['Highball']);
+    });
+
+    test('every ingredient is searchable when the API sends no subset', () {
+      expect(_catalog.search('mint').ingredients, ['Mint']);
     });
   });
 

@@ -1429,11 +1429,14 @@ function productCardPayload({
     image_url: product.image_url,
     tags: productTagDetails(product.tags || [], productTagsByName).map((tag) => tag.name),
     tag_details: productTagDetails(product.tags || [], productTagsByName),
-    // Search-only: the app matches products on these and offers them as their
-    // own result rows, so an ingredient flagged out of search is left out here.
-    // The cocktail page builds its ingredient list from the recipe instead, and
-    // still shows every one of them.
+    // Search-only, and two lists rather than one: a query matches a product on
+    // every ingredient it is made with, but only the searchable ones may become
+    // a search row of their own. The cocktail page builds its ingredient list
+    // from the recipe instead, and shows every one of them either way.
     ingredient_names: (recipeItems || [])
+      .map((item) => item.ingredients?.name)
+      .filter(Boolean),
+    searchable_ingredient_names: (recipeItems || [])
       .filter((item) => item.ingredients?.is_searchable !== false)
       .map((item) => item.ingredients?.name)
       .filter(Boolean),
