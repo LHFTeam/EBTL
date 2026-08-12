@@ -42,6 +42,13 @@
 	     and cannot go to testers until answered by hand. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Required by App Store Connect (ITMS-90683) even though no EBTL code
+	     opens the camera: Stripe's Payment Sheet links STPCardScanner, and
+	     Apple demands a purpose string for any referenced camera API. With the
+	     key present, the Payment Sheet offers card scanning at checkout, which
+	     is what this string describes. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Scan your payment card with the camera at checkout instead of typing the number in.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
