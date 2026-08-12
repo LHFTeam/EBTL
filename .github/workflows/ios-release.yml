@@ -64,7 +64,12 @@ jobs:
     name: build & upload IPA
     # Pinned rather than macos-latest: the release path depends on the Xcode
     # version (export methods, altool), so it should not move under us.
-    runs-on: macos-15
+    #
+    # macos-26, not macos-15: App Store Connect rejects anything built with an
+    # SDK older than iOS 26 ("SDK version issue … must be built with the iOS 26
+    # SDK or later"), and macos-15 still selects Xcode 16.4 / iOS 18.5 by
+    # default. This image defaults to Xcode 26.6 / iOS 26.5.
+    runs-on: macos-26
     timeout-minutes: 90
     defaults:
       run:
@@ -108,7 +113,13 @@ jobs:
           channel: stable
           cache: true
 
-      - run: flutter --version
+      # Recorded because Apple validates the SDK the app was built against, and
+      # a rejection at upload names an SDK version rather than an Xcode one.
+      - name: Record toolchain versions
+        run: |
+          flutter --version
+          xcodebuild -version
+          xcodebuild -showsdks | grep iphoneos
 
       - run: flutter pub get
 
