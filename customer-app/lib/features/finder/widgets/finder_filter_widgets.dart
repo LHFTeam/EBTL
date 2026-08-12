@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/ebtl_colors.dart';
 import '../../../core/theme/ebtl_text_styles.dart';
+import '../../../core/utils/keyboard.dart';
 import '../../../core/utils/model_sorters.dart';
 import '../../../models/common_models.dart';
 import '../../../models/finder_models.dart';
@@ -294,9 +295,7 @@ class FinderSearchBox extends StatelessWidget {
         controller: controller,
         textInputAction: TextInputAction.search,
         onSubmitted: onSubmitted,
-        // iOS keeps the keyboard up on a touch outside the field, so tapping
-        // the results below it has to put the keyboard away by hand.
-        onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+        onTapOutside: dismissKeyboard,
         decoration: InputDecoration(
           hintText: 'Search cocktails, flavors, tags...',
           prefixIcon: const Icon(Icons.search, color: EbtlColors.muted),

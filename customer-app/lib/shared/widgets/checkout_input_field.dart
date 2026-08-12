@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme/ebtl_colors.dart';
+import '../../core/utils/keyboard.dart';
 
 class CheckoutInputField extends StatelessWidget {
   final TextEditingController controller;
@@ -38,6 +39,7 @@ class CheckoutInputField extends StatelessWidget {
       maxLength: maxLength,
       maxLines: maxLines,
       onChanged: onChanged,
+      onTapOutside: dismissKeyboard,
       style: GoogleFonts.manrope(
         fontSize: 14,
         fontWeight: FontWeight.w700,

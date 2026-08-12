@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme/ebtl_colors.dart';
+import '../../core/utils/keyboard.dart';
 import '../../models/shop_models.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import 'widgets/shop_product_widgets.dart';
@@ -77,6 +78,7 @@ class _ShopSearchScreenState extends State<ShopSearchScreen> {
                   controller: searchController,
                   autofocus: true,
                   onChanged: (_) => setState(() {}),
+                  onTapOutside: dismissKeyboard,
                   decoration: InputDecoration(
                     hintText: 'Search the shop',
                     prefixIcon: const Icon(Icons.search),

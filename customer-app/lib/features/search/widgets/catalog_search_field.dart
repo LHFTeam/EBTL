@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/ebtl_colors.dart';
+import '../../../core/utils/keyboard.dart';
 
 /// Ties a search field to the results dropdown hanging off it, for the sake of
 /// taps: a tap on either belongs to the search, and a tap anywhere else puts
@@ -95,12 +96,10 @@ class CatalogSearchField extends StatelessWidget {
             child: TextField(
               controller: controller,
               focusNode: focusNode,
+              // "Outside" is the whole tap group: the pill and the results
+              // dropdown hanging off it.
               groupId: tapGroup ?? EditableText,
-              // iOS keeps the keyboard up on a touch outside the field, so it
-              // is put away by hand. "Outside" is the whole tap group: the
-              // pill and the results dropdown hanging off it.
-              onTapOutside: (_) =>
-                  FocusManager.instance.primaryFocus?.unfocus(),
+              onTapOutside: dismissKeyboard,
               textInputAction: TextInputAction.search,
               textAlignVertical: TextAlignVertical.center,
               cursorColor: EbtlColors.coral,

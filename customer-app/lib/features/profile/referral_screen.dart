@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/network/api_exception.dart';
 import '../../core/theme/ebtl_colors.dart';
+import '../../core/utils/keyboard.dart';
 import '../../models/referral_models.dart';
 import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
@@ -431,6 +432,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
           TextField(
             controller: codeController,
             textCapitalization: TextCapitalization.characters,
+            onTapOutside: dismissKeyboard,
             decoration: InputDecoration(
               hintText: 'EBTL-XXXXX',
               filled: true,
