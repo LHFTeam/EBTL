@@ -5,6 +5,7 @@ import '../../../core/theme/ebtl_colors.dart';
 import '../../../models/shop_models.dart';
 import '../../../shared/widgets/network_or_asset_image.dart';
 import '../catalog_search.dart';
+import 'catalog_search_field.dart';
 
 /// The floating card the search results hang in, under the field they belong
 /// to. Solid white with a shadow — it sits over whatever the screen was
@@ -106,14 +107,30 @@ class SearchResultsDropdown extends StatelessWidget {
   final LayerLink link;
   final Widget child;
 
+  /// The same group the field was given: reading and tapping the results is
+  /// part of searching, so neither may put the keyboard away.
+  final SearchTapGroup? tapGroup;
+
   const SearchResultsDropdown({
     super.key,
     required this.link,
     required this.child,
+    this.tapGroup,
   });
 
   @override
   Widget build(BuildContext context) {
+    final group = tapGroup;
+
+    Widget card = SizedBox(
+      width: MediaQuery.sizeOf(context).width - _pageGutter * 2,
+      child: child,
+    );
+
+    if (group != null) {
+      card = TapRegion(groupId: group, child: card);
+    }
+
     return Positioned(
       left: 0,
       top: 0,
@@ -123,10 +140,7 @@ class SearchResultsDropdown extends StatelessWidget {
         targetAnchor: Alignment.bottomLeft,
         followerAnchor: Alignment.topLeft,
         offset: const Offset(0, _gap),
-        child: SizedBox(
-          width: MediaQuery.sizeOf(context).width - _pageGutter * 2,
-          child: child,
-        ),
+        child: card,
       ),
     );
   }
