@@ -8,6 +8,7 @@ import '../../models/app_data.dart';
 import '../../models/cocktail_models.dart';
 import '../../models/common_models.dart';
 import '../../models/profile_models.dart';
+import '../../models/recently_viewed.dart';
 import '../../models/shop_models.dart';
 import '../../models/spotlight_models.dart';
 import '../../services/analytics_service.dart';
@@ -57,6 +58,11 @@ class HomeScreen extends StatefulWidget {
   /// Finished orders, newest first, behind the "Order It Again" rail.
   final List<ProfileOrder> pastOrders;
 
+  /// Whether Home is the visible tab. The shell keeps every visited tab
+  /// mounted, so this is how Home learns to re-read the "Recently viewed" list
+  /// after a product was opened from Explore or from search.
+  final bool isActive;
+
   final int unreadNotificationCount;
   final VoidCallback onOpenNotifications;
 
@@ -73,7 +79,11 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onOpenFinder;
   final ValueChanged<LiquorType> onOpenFinderWithBottle;
   final Future<void> Function(Cocktail cocktail) onOpenCocktail;
-  final ValueChanged<Category> onOpenCategory;
+
+  /// Opens a cocktail the screen only knows the slug of — the "Recently
+  /// viewed" rail, which is drawn from an on-device snapshot rather than from
+  /// a loaded catalog.
+  final Future<void> Function(String slug) onOpenCocktailBySlug;
   /// Follows a hero banner's deep link. Only called for banners that carry one.
   final ValueChanged<HomeHeroBanner> onOpenHeroBanner;
   final ValueChanged<ServiceLocation> onLocationSelected;
@@ -84,6 +94,7 @@ class HomeScreen extends StatefulWidget {
     required this.data,
     required this.liveOrder,
     required this.pastOrders,
+    this.isActive = true,
     required this.unreadNotificationCount,
     required this.onOpenNotifications,
     required this.searchQuery,
@@ -95,7 +106,7 @@ class HomeScreen extends StatefulWidget {
     required this.onOpenFinder,
     required this.onOpenFinderWithBottle,
     required this.onOpenCocktail,
-    required this.onOpenCategory,
+    required this.onOpenCocktailBySlug,
     required this.onOpenHeroBanner,
     required this.onLocationSelected,
     required this.onCartChanged,
@@ -109,10 +120,11 @@ class _HomeScreenState extends State<HomeScreen> {
   /// How many past orders the "Order It Again" rail offers.
   static const int _orderAgainLimit = 6;
 
-  String? selectedCategoryId;
-
   /// The order whose "add again" request is in flight, if any.
   String? reorderingOrderId;
+
+  /// What the customer opened last, newest first, as stored on-device.
+  List<RecentlyViewedProduct> recentlyViewed = const [];
 
   late final TextEditingController searchController;
   final FocusNode searchFocusNode = FocusNode();
@@ -144,11 +156,27 @@ class _HomeScreenState extends State<HomeScreen> {
     searchController = TextEditingController(text: widget.searchQuery);
     appliedQuery = widget.searchQuery.trim();
     if (appliedQuery.isNotEmpty) ensureCatalog();
+    refreshRecentlyViewed();
+  }
+
+  /// Re-reads the on-device "Recently viewed" list. Cheap — no network — so it
+  /// runs whenever a product screen this tab opened comes back.
+  Future<void> refreshRecentlyViewed() async {
+    final products = await ApiService.loadRecentlyViewed();
+    if (!mounted) return;
+
+    setState(() => recentlyViewed = products);
   }
 
   @override
   void didUpdateWidget(covariant HomeScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    // Coming back to Home: a cocktail opened from another tab belongs on the
+    // rail. Only on the transition — this runs on every shell rebuild.
+    if (widget.isActive && !oldWidget.isActive) {
+      refreshRecentlyViewed();
+    }
 
     // A beach cart carries its own prices and availability, so the catalog is
     // re-fetched rather than reused across carts.
@@ -235,14 +263,17 @@ class _HomeScreenState extends State<HomeScreen> {
     openSearchCollection(query, products);
   }
 
-  Future<void> openSearchProduct(ShopProduct product) {
-    return openCatalogProduct(
+  Future<void> openSearchProduct(ShopProduct product) async {
+    await openCatalogProduct(
       context,
       product: product,
       locationId: widget.data.selectedLocationId,
       onCartChanged: widget.onCartChanged,
       onOpenCocktail: widget.onOpenCocktail,
     );
+
+    if (!mounted) return;
+    await refreshRecentlyViewed();
   }
 
   void openSearchCollection(String title, List<ShopProduct> products) {
@@ -279,11 +310,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (location == null) return;
     widget.onLocationSelected(location);
-  }
-
-  void selectCategory(Category category) {
-    setState(() => selectedCategoryId = category.id);
-    widget.onOpenCategory(category);
   }
 
   /// Puts a previous order's kit back in the cart.
@@ -472,8 +498,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ],
       if (currentMode == HomeMode.liveOrder) ...buildOrderAgain(),
       ...buildSpotlight(),
+      ...buildRecentlyViewed(),
       ...buildBottleRail(),
-      ...buildCategoryChips(),
       ...buildFeaturedRail(),
       if (currentMode == HomeMode.firstRun)
         HomeNoBottlePanel(onTap: widget.onOpenShop),
@@ -558,6 +584,54 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// The "Recently viewed" rail, moved here from Explore so it sits directly
+  /// under the Spotlight.
+  ///
+  /// Only cocktails are offered: a card opens its product again, and the
+  /// cocktail detail screen loads from a slug alone, while the sheet the other
+  /// shop products use is built from a catalog entry Home does not hold.
+  List<Widget> buildRecentlyViewed() {
+    final recents = recentlyViewed
+        .where((product) => product.isCocktail)
+        .toList(growable: false);
+
+    if (recents.isEmpty) return const [];
+
+    return [
+      const HomeSectionHeader(title: 'Recently viewed'),
+      SizedBox(
+        height: HomeScreenVisuals.recentlyViewedRailHeight,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(22, 0, 22, 4),
+          itemCount: recents.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 12),
+          itemBuilder: (context, index) {
+            final product = recents[index];
+
+            return HomeRecentlyViewedCard(
+              product: product,
+              onTap: () => openRecentlyViewed(product),
+            );
+          },
+        ),
+      ),
+      const SizedBox(height: 26),
+    ];
+  }
+
+  Future<void> openRecentlyViewed(RecentlyViewedProduct product) async {
+    await widget.onOpenCocktailBySlug(product.slug);
+    if (!mounted) return;
+    await refreshRecentlyViewed();
+  }
+
+  Future<void> openFeaturedCocktail(Cocktail cocktail) async {
+    await widget.onOpenCocktail(cocktail);
+    if (!mounted) return;
+    await refreshRecentlyViewed();
+  }
+
   List<Widget> buildBottleRail() {
     final liquorTypes = widget.data.liquorTypes;
     // No bottles, no section — the header would promise a rail that isn't
@@ -596,22 +670,6 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
   }
 
-  List<Widget> buildCategoryChips() {
-    final categories = widget.data.categories;
-    if (categories.isEmpty) return const [];
-
-    return [
-      HomeCategoryChips(
-        categories: categories,
-        selectedCategoryId: selectedCategoryId ?? categories.first.id,
-        onSelect: selectCategory,
-      ),
-      // The featured section below carries 22 of the 26pt module gutter in
-      // SectionBlock's own top padding.
-      const SizedBox(height: 4),
-    ];
-  }
-
   /// The featured rail, carried over unchanged from the previous Home: the
   /// shared [SectionBlock] header over a rail of [CocktailSmallCard]s.
   List<Widget> buildFeaturedRail() {
@@ -619,7 +677,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return [
       SectionBlock(
-        icon: Icons.local_bar_outlined,
         title: 'Featured Cocktails',
         actionText: 'View all',
         onAction: widget.onOpenFinder,
@@ -637,7 +694,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   itemBuilder: (context, index) {
                     return CocktailSmallCard(
                       cocktail: featured[index],
-                      onTap: () => widget.onOpenCocktail(featured[index]),
+                      onTap: () => openFeaturedCocktail(featured[index]),
                     );
                   },
                 ),

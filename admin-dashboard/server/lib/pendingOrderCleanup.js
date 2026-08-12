@@ -22,7 +22,7 @@ export const PENDING_ORDER_SWEEP_INTERVAL_MINUTES = Number(process.env.PENDING_O
 
 // Payment states that mean "no money reached us". Listed explicitly rather than
 // filtering on `!= paid`, so an unexpected state is never assumed to be unpaid.
-const UNPAID_PAYMENT_STATUSES = ['unpaid', 'pending', 'failed'];
+export const UNPAID_PAYMENT_STATUSES = ['unpaid', 'pending', 'failed'];
 
 const STRIPE_PROVIDER = 'stripe';
 
@@ -64,7 +64,10 @@ async function recordIntentCancellation(payment, outcome) {
 
 // Shuts the gateway's payment window for one order. Returns false only when the
 // money is already in flight, which means the order must be left alone.
-async function closePaymentWindow(payments) {
+//
+// Exported because a customer cancelling an unpaid order themselves has to shut
+// the same window the sweep would have shut for them half an hour later.
+export async function closePaymentWindow(payments) {
   for (const payment of payments) {
     if (payment.provider !== STRIPE_PROVIDER || !payment.provider_payment_id) continue;
 

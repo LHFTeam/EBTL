@@ -40,11 +40,28 @@ class CocktailGridCard extends StatelessWidget {
   final Cocktail cocktail;
   final VoidCallback? onTap;
 
-  const CocktailGridCard({super.key, required this.cocktail, this.onTap});
+  /// Set on the shop grid, where the card's corner action adds the cocktail to
+  /// the cart instead of showing whether it is a favorite.
+  final VoidCallback? onAdd;
+  final bool isAdding;
+
+  const CocktailGridCard({
+    super.key,
+    required this.cocktail,
+    this.onTap,
+    this.onAdd,
+    this.isAdding = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return CocktailCardShell(cocktail: cocktail, showUsing: true, onTap: onTap);
+    return CocktailCardShell(
+      cocktail: cocktail,
+      showUsing: true,
+      onTap: onTap,
+      onAdd: onAdd,
+      isAdding: isAdding,
+    );
   }
 }
 
@@ -52,6 +69,11 @@ class CocktailCardShell extends StatelessWidget {
   final Cocktail cocktail;
   final bool showUsing;
   final VoidCallback? onTap;
+
+  /// When set, the corner of the card carries an add-to-cart button instead of
+  /// the favorite heart.
+  final VoidCallback? onAdd;
+  final bool isAdding;
 
   final bool showPrice;
   final double? imageHeight;
@@ -66,6 +88,8 @@ class CocktailCardShell extends StatelessWidget {
     required this.cocktail,
     required this.showUsing,
     this.onTap,
+    this.onAdd,
+    this.isAdding = false,
     this.showPrice = true,
     this.imageHeight,
     this.textPadding = const EdgeInsets.fromLTRB(12, 10, 10, 9),
@@ -227,15 +251,22 @@ class CocktailCardShell extends StatelessWidget {
                             else
                               const Spacer(),
                             const SizedBox(width: 8),
-                            Icon(
-                              cocktail.isFavorite
-                                  ? Icons.favorite
-                                  : Icons.favorite_border,
-                              size: 20,
-                              color: cocktail.isFavorite
-                                  ? EbtlColors.coral
-                                  : EbtlColors.navy,
-                            ),
+                            if (onAdd != null)
+                              CocktailCardAddButton(
+                                isAdding: isAdding,
+                                isOrderable: orderable,
+                                onTap: onAdd,
+                              )
+                            else
+                              Icon(
+                                cocktail.isFavorite
+                                    ? Icons.favorite
+                                    : Icons.favorite_border,
+                                size: 20,
+                                color: cocktail.isFavorite
+                                    ? EbtlColors.coral
+                                    : EbtlColors.navy,
+                              ),
                           ],
                         ),
                       ],
@@ -244,6 +275,55 @@ class CocktailCardShell extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The add-to-cart button in the corner of a shop cocktail card — the same
+/// circular plus the shop product tiles carry.
+class CocktailCardAddButton extends StatelessWidget {
+  final bool isAdding;
+  final bool isOrderable;
+  final VoidCallback? onTap;
+
+  const CocktailCardAddButton({
+    super.key,
+    required this.isAdding,
+    required this.isOrderable,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 30,
+      height: 30,
+      child: Material(
+        color: isOrderable
+            ? EbtlColors.blush.withValues(alpha: 0.65)
+            : EbtlColors.sand,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: isAdding ? null : onTap,
+          child: Center(
+            child: isAdding
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: EbtlColors.coral,
+                    ),
+                  )
+                : Icon(
+                    Icons.add,
+                    size: 18,
+                    color: isOrderable ? EbtlColors.coral : EbtlColors.muted,
+                  ),
           ),
         ),
       ),

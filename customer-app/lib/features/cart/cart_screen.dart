@@ -506,7 +506,7 @@ class CartScreenHeader extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Review your cocktail kits before checkout.',
+            'Review the products in your cart before checkout.',
             style: GoogleFonts.manrope(
               fontSize: 15,
               height: 1.35,
@@ -538,9 +538,9 @@ class CartFulfillmentToggle extends StatelessWidget {
     ];
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 10, 22, 8),
+      padding: const EdgeInsets.fromLTRB(22, 4, 22, 4),
       child: Container(
-        padding: const EdgeInsets.all(6),
+        padding: const EdgeInsets.all(5),
         decoration: BoxDecoration(
           color: EbtlColors.white.withValues(alpha: 0.78),
           borderRadius: BorderRadius.circular(22),
@@ -563,7 +563,7 @@ class CartFulfillmentToggle extends StatelessWidget {
                   opacity: disabled ? 0.52 : 1,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     decoration: BoxDecoration(
                       color: selected ? EbtlColors.coral : Colors.transparent,
                       borderRadius: BorderRadius.circular(18),
@@ -615,6 +615,25 @@ class CartFulfillmentToggle extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Splits a beach cart's status label into the lines the cart card shows it on.
+///
+/// The backend sends the state and the hours as one string — "Open now ·
+/// Closes at 11:00 PM" — and the card reads better with the state above the
+/// hours. A label with no separator ("Closed now", "Hours unavailable") is one
+/// line, as it always was.
+List<String> beachCartStatusLines(String? label) {
+  final clean = label?.trim() ?? '';
+  if (clean.isEmpty) return const ['Hours unavailable'];
+
+  final lines = clean
+      .split('·')
+      .map((part) => part.trim())
+      .where((part) => part.isNotEmpty)
+      .toList();
+
+  return lines.isEmpty ? const ['Hours unavailable'] : lines;
 }
 
 class CartLocationCard extends StatelessWidget {
@@ -698,10 +717,9 @@ class CartLocationCard extends StatelessWidget {
         ? selectedLocation!.subtitle.trim()
         : 'Selected location';
 
-    final statusLabel =
-        selectedLocation?.currentStatus.label.trim().isNotEmpty == true
-        ? selectedLocation!.currentStatus.label.trim()
-        : 'Hours unavailable';
+    final statusLines = beachCartStatusLines(
+      selectedLocation?.currentStatus.label,
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(22, 12, 22, 8),
@@ -711,7 +729,8 @@ class CartLocationCard extends StatelessWidget {
           onTap: onChooseLocation,
           borderRadius: BorderRadius.circular(18),
           child: Ink(
-            height: 92,
+            // Fits the name, the location subtitle and the two status lines.
+            height: 100,
             decoration: BoxDecoration(
               color: EbtlColors.white.withValues(alpha: 0.94),
               borderRadius: BorderRadius.circular(18),
@@ -766,17 +785,21 @@ class CartLocationCard extends StatelessWidget {
                                     color: EbtlColors.muted,
                                   ),
                                 ),
-                                const SizedBox(height: 5),
-                                Text(
-                                  statusLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.manrope(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
-                                    color: EbtlColors.teal,
+                                const SizedBox(height: 4),
+                                for (final line in statusLines)
+                                  Text(
+                                    line,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.manrope(
+                                      fontSize: 11,
+                                      // Tight enough to read as one block, not
+                                      // two unrelated lines.
+                                      height: 1.25,
+                                      fontWeight: FontWeight.w800,
+                                      color: EbtlColors.teal,
+                                    ),
                                   ),
-                                ),
                               ],
                             ),
                           ),

@@ -80,6 +80,18 @@ class OrderDetail {
   );
 
   bool get isDelivery => fulfillmentType == 'delivery_to_unit';
+
+  /// The order was placed but never paid for, and the backend has not expired
+  /// or cancelled it yet — so the customer can still pay it, or drop it.
+  ///
+  /// Both halves are checked: a payment status the app does not recognise is
+  /// never assumed to be unpaid.
+  bool get awaitsPayment {
+    const unpaidStatuses = {'unpaid', 'pending', 'failed'};
+
+    return status.trim().toLowerCase() == 'pending_payment' &&
+        unpaidStatuses.contains(paymentStatus.trim().toLowerCase());
+  }
 }
 
 class OrderDetailLocation {

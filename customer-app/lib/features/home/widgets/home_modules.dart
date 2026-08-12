@@ -3,8 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/ebtl_colors.dart';
 import '../../../core/theme/home_screen_visuals.dart';
-import '../../../models/common_models.dart';
 import '../../../models/profile_models.dart';
+import '../../../models/recently_viewed.dart';
 import '../../../shared/widgets/multiply_blend.dart';
 import '../../../shared/widgets/network_or_asset_image.dart';
 
@@ -459,59 +459,93 @@ class HomeOrderAgainCard extends StatelessWidget {
   }
 }
 
-/// The category rail. Selection is local to Home; tapping also opens the
-/// category in Shop.
-class HomeCategoryChips extends StatelessWidget {
-  final List<Category> categories;
-  final String? selectedCategoryId;
-  final ValueChanged<Category> onSelect;
+/// A card on the "Recently viewed" rail. Everything on it comes from the
+/// on-device snapshot taken when the product was opened; tapping re-fetches
+/// the product, so nothing stale is ever acted on.
+class HomeRecentlyViewedCard extends StatelessWidget {
+  final RecentlyViewedProduct product;
+  final VoidCallback onTap;
 
-  const HomeCategoryChips({
+  const HomeRecentlyViewedCard({
     super.key,
-    required this.categories,
-    required this.selectedCategoryId,
-    required this.onSelect,
+    required this.product,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 40,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 22),
-        itemCount: categories.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final category = categories[index];
-          final selected = category.id == selectedCategoryId;
-
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => onSelect(category),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.ease,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: selected ? EbtlColors.navy : EbtlColors.white,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: selected ? EbtlColors.navy : EbtlColors.border,
+      width: HomeScreenVisuals.recentlyViewedCardWidth,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Ink(
+            decoration: BoxDecoration(
+              color: EbtlColors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: EbtlColors.border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
                 ),
-              ),
-              child: Text(
-                category.name,
-                style: GoogleFonts.manrope(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: selected ? EbtlColors.white : EbtlColors.navy,
-                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    height: HomeScreenVisuals.recentlyViewedCardImageHeight,
+                    width: double.infinity,
+                    child: NetworkOrAssetImage(
+                      imageUrl: product.imageUrl,
+                      asset: product.imageAsset,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            product.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.manrope(
+                              fontSize: 11,
+                              height: 1.12,
+                              fontWeight: FontWeight.w900,
+                              color: EbtlColors.navy,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (product.priceLabel.trim().isNotEmpty)
+                            Text(
+                              product.priceLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.manrope(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: EbtlColors.coral,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }

@@ -61,6 +61,14 @@ class HomeScreenVisuals {
       spotlightBannerWidth / spotlightBannerAspectRatio;
   static const double spotlightBannerGap = 14;
 
+  // Recently Viewed Rail (Home v2)
+  //
+  // Drawn from the on-device snapshot of what the customer opened, so the card
+  // carries artwork, name and price only.
+  static const double recentlyViewedCardWidth = 128;
+  static const double recentlyViewedCardImageHeight = 96;
+  static const double recentlyViewedRailHeight = 168;
+
   // Home Liquor Bottle Cards
   //
   // Laid out as a fixed 3-column grid on Home. The aspect ratio is width /

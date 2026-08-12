@@ -7,6 +7,7 @@ import '../../../core/theme/ebtl_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/common_models.dart';
 import '../../../models/product_models.dart';
+import '../../../models/recently_viewed.dart';
 import '../../../models/shop_models.dart';
 import '../../../services/analytics_service.dart';
 import '../../../services/api_service.dart';
@@ -89,9 +90,18 @@ class _ShopProductDetailSheetState extends State<ShopProductDetailSheet> {
       ),
     );
 
-    // Feeds the Explore "Recently viewed" rail. Fire-and-forget: a storage
-    // failure must never take the sheet down with it.
-    ApiService.recordRecentlyViewed(product.slug).ignore();
+    // Feeds Home's "Recently viewed" rail. Fire-and-forget: a storage failure
+    // must never take the sheet down with it.
+    ApiService.recordRecentlyViewed(
+      RecentlyViewedProduct(
+        slug: product.slug,
+        name: product.name,
+        imageUrl: product.imageUrl,
+        imageAsset: product.imageAsset,
+        priceLabel: product.priceLabel,
+        isCocktail: product.isCocktail,
+      ),
+    ).ignore();
   }
 
   void changeQuantity(int delta) {

@@ -381,7 +381,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   void openOrderHistory() {
     Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => const CustomerOrdersScreen()))
-        .then((_) => _refreshActiveOrders());
+        .then((_) => _afterOrderScreenClosed());
   }
 
   /// Opens one order's detail screen from the tab it was tapped in. Home's
@@ -399,7 +399,14 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
           ),
         )
         // The order may have moved on (or finished) while it was open.
-        .then((_) => _refreshActiveOrders());
+        .then((_) => _afterOrderScreenClosed());
+  }
+
+  /// An order screen can finish a pending payment, which empties the cart
+  /// server-side, so the shell re-reads its own payload as well as the orders.
+  void _afterOrderScreenClosed() {
+    _refreshActiveOrders();
+    reloadAppData();
   }
 
   /// Opens a Home category chip in the Shop's category listing. The home
@@ -737,6 +744,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         data: data,
         liveOrder: liveOrder,
         pastOrders: pastOrders,
+        isActive: safeSelectedIndex == EbtlBottomNav.homeIndex,
         unreadNotificationCount: unreadNotificationCount,
         onOpenNotifications: openNotifications,
         searchQuery: searchQuery,
@@ -748,7 +756,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         onOpenFinder: () => openFinder(),
         onOpenFinderWithBottle: (liquor) => openFinder(liquorTypeId: liquor.id),
         onOpenCocktail: (cocktail) => openCocktailDetail(data, cocktail),
-        onOpenCategory: (category) => openShopCategory(data, category),
+        onOpenCocktailBySlug: (slug) => openCocktailBySlug(data, slug),
         onOpenHeroBanner: (banner) => openHeroBanner(data, banner),
         onLocationSelected: selectLocation,
         onCartChanged: handleCartChanged,

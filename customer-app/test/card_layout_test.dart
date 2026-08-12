@@ -23,8 +23,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:ebtl_customer_app/features/cart/cart_screen.dart';
 import 'package:ebtl_customer_app/features/checkout/checkout_screen.dart';
 import 'package:ebtl_customer_app/features/profile/widgets/spirit_widgets.dart';
+import 'package:ebtl_customer_app/features/home/widgets/home_modules.dart';
 import 'package:ebtl_customer_app/features/shop/widgets/shop_product_widgets.dart';
+import 'package:ebtl_customer_app/core/theme/home_screen_visuals.dart';
 import 'package:ebtl_customer_app/models/cart_models.dart';
+import 'package:ebtl_customer_app/models/recently_viewed.dart';
 import 'package:ebtl_customer_app/models/shop_models.dart';
 import 'package:ebtl_customer_app/models/spirit_models.dart';
 
@@ -144,9 +147,7 @@ void main() {
     });
   });
 
-  testWidgets('product tile fits the Explore recently-viewed rail', (
-    tester,
-  ) async {
+  testWidgets('product tile fits a fixed-height rail', (tester) async {
     phone(tester);
 
     await tester.pumpWidget(
@@ -202,6 +203,101 @@ void main() {
                 onAdd: () {},
               ),
             ],
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('shop catalog card fits the grid it is laid out in', (
+    tester,
+  ) async {
+    phone(tester);
+
+    await tester.pumpWidget(
+      wrap(
+        SizedBox(
+          width: 346,
+          height: 600,
+          child: GridView(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 14,
+              crossAxisSpacing: 14,
+              childAspectRatio: 0.62,
+            ),
+            children: [
+              ShopCatalogCard(
+                product: _product,
+                isAdding: false,
+                onTap: () {},
+                onAdd: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('recently-viewed card fits the Home rail', (tester) async {
+    phone(tester);
+
+    await tester.pumpWidget(
+      wrap(
+        SizedBox(
+          height: HomeScreenVisuals.recentlyViewedRailHeight,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(22, 0, 22, 4),
+            children: [
+              HomeRecentlyViewedCard(
+                product: const RecentlyViewedProduct(
+                  slug: 'mojito',
+                  name: 'Classic Mojito Beach Kit',
+                  imageUrl: null,
+                  imageAsset: 'assets/images/cocktail_placeholder.jpg',
+                  priceLabel: 'EGP 320',
+                  isCocktail: true,
+                ),
+                onTap: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('beach cart card fits a status split over two lines', (
+    tester,
+  ) async {
+    phone(tester);
+
+    await tester.pumpWidget(
+      wrap(
+        SizedBox(
+          width: 390,
+          child: CartLocationCard(
+            location: CartLocation.fromJson(const {
+              'id': 'loc1',
+              'name': 'Hacienda Bay — North Cart',
+              'compound_name': 'Hacienda Bay',
+              'beach_name': 'North Beach',
+              'current_status': {
+                'is_open': true,
+                'label': 'Open now · Closes at 11:00 PM',
+              },
+            }),
+            fallbackLocationName: null,
+            hasSelectedLocation: true,
+            onChooseLocation: () {},
           ),
         ),
       ),

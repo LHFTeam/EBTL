@@ -5,7 +5,9 @@ import '../../core/theme/ebtl_colors.dart';
 import '../../core/theme/ebtl_text_styles.dart';
 
 class SectionBlock extends StatelessWidget {
-  final IconData icon;
+  /// Leading icon for the header. Null renders the title on its own, flush with
+  /// the page gutter.
+  final IconData? icon;
   final String title;
   final String? subtitle;
   final String? actionText;
@@ -14,7 +16,7 @@ class SectionBlock extends StatelessWidget {
 
   const SectionBlock({
     super.key,
-    required this.icon,
+    this.icon,
     required this.title,
     this.subtitle,
     this.actionText,
@@ -33,8 +35,10 @@ class SectionBlock extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Icon(icon, color: EbtlColors.coral, size: 28),
-                const SizedBox(width: 12),
+                if (icon != null) ...[
+                  Icon(icon, color: EbtlColors.coral, size: 28),
+                  const SizedBox(width: 12),
+                ],
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

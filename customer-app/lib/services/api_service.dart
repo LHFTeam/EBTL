@@ -21,6 +21,7 @@ import '../models/favorite_models.dart';
 import '../models/notification_models.dart';
 import '../models/order_detail_models.dart';
 import '../models/profile_models.dart';
+import '../models/recently_viewed.dart';
 import '../models/referral_models.dart';
 import '../models/shop_models.dart';
 import '../models/spirit_models.dart';
@@ -35,10 +36,10 @@ class ApiService {
   static const _selectedLocationIdKey = 'selected_location_id';
   static const _selectedLocationNameKey = 'selected_location_name';
   static const _onboardingCompletedKey = 'onboarding_completed_v1';
-  static const _recentlyViewedKey = 'recently_viewed_slugs_v1';
+  static const _recentlyViewedKey = 'recently_viewed_products_v2';
   static const _goldenHourSeenKey = 'golden_hour_seen_v1';
 
-  /// How many product slugs the "Recently viewed" rail remembers.
+  /// How many products the "Recently viewed" rail remembers.
   static const int recentlyViewedLimit = 10;
 
   /// How many Golden Hour windows are remembered as shown.
@@ -697,6 +698,22 @@ class ApiService {
     return OrderDetailResponse.fromJson(json);
   }
 
+  /// Cancels an order the customer has not paid for.
+  ///
+  /// The backend closes the payment window before it moves the order, and
+  /// refuses (409) anything it will not cancel — an order already paid for, or
+  /// one whose payment is still in flight.
+  static Future<void> cancelCustomerOrder({required String orderId}) async {
+    await ensureSession();
+
+    await _request(
+      method: 'POST',
+      path: '/api/customer/orders/${Uri.encodeComponent(orderId)}/cancel',
+      body: const {},
+      attachToken: true,
+    );
+  }
+
   static Future<FavoriteCocktailsResponse> fetchFavoriteCocktails({
     String? locationId,
     int page = 1,
@@ -882,12 +899,13 @@ class ApiService {
     await _storage.write(key: _selectedLocationNameKey, value: location.name);
   }
 
-  /// Product slugs the customer opened, most recent first.
+  /// Products the customer opened, most recent first.
   ///
-  /// Only slugs are stored — the Explore screen resolves them against the
-  /// catalog it has already loaded, so prices and availability stay live and
-  /// products that disappear from the catalog simply drop out of the rail.
-  static Future<List<String>> loadRecentlyViewedSlugs() async {
+  /// A display snapshot of each one is stored rather than only its slug: the
+  /// rail lives on Home, which never loads the shop catalog, so there is
+  /// nothing there to resolve a bare slug against. Opening a card still
+  /// re-fetches the product, so nothing acted on comes from this cache.
+  static Future<List<RecentlyViewedProduct>> loadRecentlyViewed() async {
     final raw = await _storage.read(key: _recentlyViewedKey);
     if (raw == null || raw.trim().isEmpty) return const [];
 
@@ -896,8 +914,8 @@ class ApiService {
       if (decoded is! List) return const [];
 
       return decoded
-          .map((value) => value is String ? value.trim() : '')
-          .where((slug) => slug.isNotEmpty)
+          .map((value) => RecentlyViewedProduct.fromJson(asMap(value)))
+          .where((product) => product.slug.isNotEmpty)
           .take(recentlyViewedLimit)
           .toList();
     } on FormatException {
@@ -908,17 +926,22 @@ class ApiService {
   }
 
   /// Records a viewed product, moving it to the front and capping the list.
-  static Future<void> recordRecentlyViewed(String slug) async {
-    final cleanSlug = slug.trim();
+  static Future<void> recordRecentlyViewed(
+    RecentlyViewedProduct product,
+  ) async {
+    final cleanSlug = product.slug.trim();
     if (cleanSlug.isEmpty) return;
 
-    final existing = await loadRecentlyViewedSlugs();
-    final updated = <String>[
-      cleanSlug,
-      ...existing.where((value) => value != cleanSlug),
+    final existing = await loadRecentlyViewed();
+    final updated = <RecentlyViewedProduct>[
+      product,
+      ...existing.where((value) => value.slug != cleanSlug),
     ].take(recentlyViewedLimit).toList();
 
-    await _storage.write(key: _recentlyViewedKey, value: jsonEncode(updated));
+    await _storage.write(
+      key: _recentlyViewedKey,
+      value: jsonEncode(updated.map((value) => value.toJson()).toList()),
+    );
   }
 
   static Future<void> clearRecentlyViewed() async {

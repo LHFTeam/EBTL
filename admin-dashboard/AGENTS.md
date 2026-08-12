@@ -246,6 +246,13 @@ large by design — **follow the local structure**; don't refactor it wholesale.
   order has a `paid` payment row, or the cancel call fails, the order is left
   pending for the next sweep. `PENDING_ORDER_MAX_AGE_MINUTES` (30) is the
   customer's payment window, not a webhook grace period.
+- **Customer-cancelled checkouts:** `POST /api/customer/orders/:orderId/cancel`
+  is the customer doing by hand what that sweep would do for them, and takes the
+  same route — the shared `closePaymentWindow` cancels the Stripe intent first,
+  and the order only moves to `cancelled` if it does, still filtered on
+  `pending_payment` + an unpaid payment status. Money already in flight, or a
+  `paid` payment row, answers 409 rather than cancelling. The app offers this
+  next to "Continue Payment" on an order left unpaid.
 - **Late payments:** `updateOrderForPaymentResult` returns `confirmed`, which is
   false when the order was not sitting at `pending_payment`. Fulfillment side
   effects (promotion redemption, referral/credit settlement, cart conversion)
