@@ -18,6 +18,7 @@ import '../../shared/widgets/cocktail_card_widgets.dart';
 import '../../shared/widgets/section_block.dart';
 import '../search/catalog_search.dart';
 import '../search/search_collection_screen.dart';
+import '../search/widgets/catalog_search_field.dart';
 import '../search/widgets/search_results_panel.dart';
 import 'widgets/beach_cart_picker_sheet.dart';
 import 'widgets/home_context_header.dart';
@@ -118,6 +119,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Anchors the results dropdown to the search field in the header.
   final LayerLink searchFieldLink = LayerLink();
+
+  /// The field and its dropdown, as one thing to tap: a tap anywhere else on
+  /// the page puts the keyboard away.
+  final SearchTapGroup searchTapGroup = SearchTapGroup();
   Timer? searchDebounce;
 
   /// The query the results below the header are showing. Empty means Home is
@@ -371,6 +376,7 @@ class _HomeScreenState extends State<HomeScreen> {
           searchController: searchController,
           searchFocusNode: searchFocusNode,
           searchFieldLink: searchFieldLink,
+          searchTapGroup: searchTapGroup,
           onSearchChanged: updateSearch,
           onSubmitSearch: submitSearch,
           onClearSearch: clearSearch,
@@ -387,6 +393,7 @@ class _HomeScreenState extends State<HomeScreen> {
               if (appliedQuery.isNotEmpty)
                 SearchResultsDropdown(
                   link: searchFieldLink,
+                  tapGroup: searchTapGroup,
                   child: buildSearchResults(),
                 ),
             ],

@@ -24,6 +24,10 @@ class HomeContextHeader extends StatelessWidget {
   /// Anchors the results dropdown to the field, so it hangs off the header
   /// over the modules below.
   final LayerLink searchFieldLink;
+
+  /// Groups the field with that dropdown, so only a tap outside both puts the
+  /// keyboard away.
+  final SearchTapGroup searchTapGroup;
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<String> onSubmitSearch;
   final VoidCallback onClearSearch;
@@ -37,6 +41,7 @@ class HomeContextHeader extends StatelessWidget {
     required this.searchController,
     required this.searchFocusNode,
     required this.searchFieldLink,
+    required this.searchTapGroup,
     required this.onSearchChanged,
     required this.onSubmitSearch,
     required this.onClearSearch,
@@ -75,6 +80,7 @@ class HomeContextHeader extends StatelessWidget {
                 controller: searchController,
                 focusNode: searchFocusNode,
                 layerLink: searchFieldLink,
+                tapGroup: searchTapGroup,
                 onChanged: onSearchChanged,
                 onSubmitted: onSubmitSearch,
                 onClear: onClearSearch,

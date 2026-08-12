@@ -358,4 +358,95 @@ void main() {
       expect(collections, {'Salt': 2});
     });
   });
+
+  // A touch outside a focused field does not dismiss the keyboard on iOS, so
+  // the field puts it away itself — and the dropdown it shares a tap group
+  // with has to count as inside.
+  group('search keyboard dismissal', () {
+    Future<FocusNode> pumpSearch(WidgetTester tester) async {
+      final controller = TextEditingController(text: 'salt');
+      addTearDown(controller.dispose);
+      final focusNode = FocusNode();
+      addTearDown(focusNode.dispose);
+      final link = LayerLink();
+      final tapGroup = SearchTapGroup();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Stack(
+              children: [
+                Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 22),
+                      child: CatalogSearchField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        layerLink: link,
+                        tapGroup: tapGroup,
+                        onChanged: (_) {},
+                        onClear: () => focusNode.requestFocus(),
+                      ),
+                    ),
+                    // Below the dropdown, so tapping it is a tap on the page
+                    // rather than on the results.
+                    const Expanded(
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Text('the page underneath'),
+                      ),
+                    ),
+                  ],
+                ),
+                SearchResultsDropdown(
+                  link: link,
+                  tapGroup: tapGroup,
+                  child: SearchResultsPanel(
+                    catalog: _catalog,
+                    results: _catalog.search('salt'),
+                    onOpenProduct: (_) {},
+                    onOpenCollection: (_, _) {},
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      focusNode.requestFocus();
+      await tester.pump();
+      expect(focusNode.hasFocus, isTrue);
+
+      return focusNode;
+    }
+
+    testWidgets('a tap on the page puts the keyboard away', (tester) async {
+      final focusNode = await pumpSearch(tester);
+
+      await tester.tap(find.text('the page underneath'));
+      await tester.pump();
+
+      expect(focusNode.hasFocus, isFalse);
+    });
+
+    testWidgets('a tap on the results does not', (tester) async {
+      final focusNode = await pumpSearch(tester);
+
+      await tester.tap(find.text('Salted Chips'));
+      await tester.pump();
+
+      expect(focusNode.hasFocus, isTrue);
+    });
+
+    testWidgets('nor does the clear button next to the field', (tester) async {
+      final focusNode = await pumpSearch(tester);
+
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pump();
+
+      expect(focusNode.hasFocus, isTrue);
+    });
+  });
 }

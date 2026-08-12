@@ -3,6 +3,22 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/ebtl_colors.dart';
 
+/// Ties a search field to the results dropdown hanging off it, for the sake of
+/// taps: a tap on either belongs to the search, and a tap anywhere else puts
+/// the keyboard away.
+///
+/// A screen makes one and hands the same instance to its [CatalogSearchField]
+/// and its results dropdown. It carries no state — a [TapRegion] group only
+/// needs an identity — and is deliberately not const, so that two screens each
+/// get a group of their own.
+///
+/// iOS is why this is needed at all: unlike desktop and the web, a touch
+/// outside a focused field does not dismiss the keyboard there, so the field
+/// has to dismiss it itself and needs to know what "outside" means.
+class SearchTapGroup {
+  SearchTapGroup();
+}
+
 /// The one search field the app has: a white pill with the magnifier on the
 /// left and a clear button that appears once something is typed.
 ///
@@ -26,6 +42,11 @@ class CatalogSearchField extends StatelessWidget {
   /// instead of pushing the page around. See [SearchResultsDropdown].
   final LayerLink? layerLink;
 
+  /// Groups the pill with its results dropdown, so a tap on either keeps the
+  /// keyboard up and a tap anywhere else dismisses it. Without one the pill
+  /// stands alone and only taps on it are "inside".
+  final SearchTapGroup? tapGroup;
+
   const CatalogSearchField({
     super.key,
     required this.controller,
@@ -34,6 +55,7 @@ class CatalogSearchField extends StatelessWidget {
     this.onSubmitted,
     this.focusNode,
     this.layerLink,
+    this.tapGroup,
     this.hintText = 'Search cocktails, mixers, snacks',
   });
 
@@ -48,6 +70,15 @@ class CatalogSearchField extends StatelessWidget {
   }
 
   Widget buildField() {
+    final group = tapGroup;
+    if (group == null) return buildPill();
+
+    // The whole pill counts as inside, not just the text — the clear button
+    // sits next to the field and must not dismiss what it re-focuses.
+    return TapRegion(groupId: group, child: buildPill());
+  }
+
+  Widget buildPill() {
     return Container(
       height: height,
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -64,6 +95,12 @@ class CatalogSearchField extends StatelessWidget {
             child: TextField(
               controller: controller,
               focusNode: focusNode,
+              groupId: tapGroup ?? EditableText,
+              // iOS keeps the keyboard up on a touch outside the field, so it
+              // is put away by hand. "Outside" is the whole tap group: the
+              // pill and the results dropdown hanging off it.
+              onTapOutside: (_) =>
+                  FocusManager.instance.primaryFocus?.unfocus(),
               textInputAction: TextInputAction.search,
               textAlignVertical: TextAlignVertical.center,
               cursorColor: EbtlColors.coral,

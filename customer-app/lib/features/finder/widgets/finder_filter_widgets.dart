@@ -294,6 +294,9 @@ class FinderSearchBox extends StatelessWidget {
         controller: controller,
         textInputAction: TextInputAction.search,
         onSubmitted: onSubmitted,
+        // iOS keeps the keyboard up on a touch outside the field, so tapping
+        // the results below it has to put the keyboard away by hand.
+        onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
         decoration: InputDecoration(
           hintText: 'Search cocktails, flavors, tags...',
           prefixIcon: const Icon(Icons.search, color: EbtlColors.muted),

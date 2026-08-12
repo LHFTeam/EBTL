@@ -66,6 +66,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
   /// Anchors the results dropdown to the search field, which scrolls with the
   /// rest of the page here.
   final LayerLink searchFieldLink = LayerLink();
+
+  /// The field and its dropdown, as one thing to tap: a tap anywhere else on
+  /// the page puts the keyboard away.
+  final SearchTapGroup searchTapGroup = SearchTapGroup();
   Timer? searchDebounce;
   String appliedQuery = '';
 
@@ -346,6 +350,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
         if (appliedQuery.isNotEmpty)
           SearchResultsDropdown(
             link: searchFieldLink,
+            tapGroup: searchTapGroup,
             child: SearchResultsPanel(
               catalog: catalog,
               results: catalog.search(appliedQuery),
@@ -465,6 +470,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
         controller: searchController,
         focusNode: searchFocusNode,
         layerLink: searchFieldLink,
+        tapGroup: searchTapGroup,
         onChanged: updateSearch,
         onSubmitted: (_) => submitSearch(catalog),
         onClear: clearSearch,
