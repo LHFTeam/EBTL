@@ -28,6 +28,46 @@ function tokenHash(token) {
   return crypto.createHash('sha256').update(String(token)).digest('hex');
 }
 
+/// A push that failed to deliver, tagging the one case worth acting on: the
+/// token no longer belongs to an install of the app, so every future send to it
+/// fails the same way. Anything else (a network blip, a bad payload, an expired
+/// service account) is transient or our fault, and the token must survive it.
+class PushSendError extends Error {
+  constructor(message, { tokenGone = false } = {}) {
+    super(message);
+    this.name = 'PushSendError';
+    this.tokenGone = tokenGone;
+  }
+}
+
+/// Digs the FCM-specific error code out of an HTTP v1 error body. Google's
+/// envelope carries a generic `status` (NOT_FOUND, INVALID_ARGUMENT) plus a
+/// details array in which the FcmError entry holds the code that actually says
+/// what happened to the token.
+export function fcmErrorCode(responseBody) {
+  const details = responseBody?.error?.details;
+  if (!Array.isArray(details)) return '';
+
+  const fcmError = details.find((detail) => String(detail?.['@type'] || '').endsWith('FcmError'));
+  return String(fcmError?.errorCode || '');
+}
+
+/// Whether an FCM v1 failure means the token is dead rather than the send.
+///
+/// UNREGISTERED is the uninstall/token-rotation case. SENDER_ID_MISMATCH means
+/// the token was minted for a different Firebase project and can never work
+/// here. INVALID_ARGUMENT is deliberately absent: FCM also returns it for a
+/// malformed payload, so treating it as a dead token would let one bad message
+/// wipe out every device it was sent to.
+export function isTokenGoneFcm({ status, body }) {
+  const code = fcmErrorCode(body);
+  if (code) return code === 'UNREGISTERED' || code === 'SENDER_ID_MISMATCH';
+
+  // Older responses, and some proxies, omit the details array. A bare 404 on a
+  // send can only be the token: the project and endpoint are ours.
+  return status === 404;
+}
+
 function cleanPushData(data = {}) {
   return Object.fromEntries(
     Object.entries(data || {})
@@ -113,7 +153,10 @@ async function sendFcmPush({ token, title, body, data }) {
 
   const responseBody = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(responseBody.error?.message || `FCM push failed with HTTP ${response.status}.`);
+    throw new PushSendError(
+      responseBody.error?.message || `FCM push failed with HTTP ${response.status}.`,
+      { tokenGone: isTokenGoneFcm({ status: response.status, body: responseBody }) }
+    );
   }
 
   return responseBody;
@@ -131,7 +174,17 @@ async function sendExpoPush({ token, title, body, data }) {
 
   const responseBody = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(responseBody.errors?.[0]?.message || `Expo push failed with HTTP ${response.status}.`);
+    throw new PushSendError(responseBody.errors?.[0]?.message || `Expo push failed with HTTP ${response.status}.`);
+  }
+
+  // Expo answers 200 with a per-message ticket, so a rejected token arrives as
+  // a successful HTTP response and would otherwise be recorded as delivered.
+  const ticket = responseBody?.data;
+  if (ticket?.status === 'error') {
+    const code = String(ticket?.details?.error || '');
+    throw new PushSendError(ticket.message || `Expo push failed (${code || 'unknown error'}).`, {
+      tokenGone: code === 'DeviceNotRegistered'
+    });
   }
 
   return responseBody;
@@ -231,6 +284,20 @@ export async function sendPushToCustomer({ customerId, title, body, data = {} })
         .update({ last_used_at: new Date().toISOString() })
         .eq('id', tokenRow.id);
     } catch (error) {
+      if (error?.tokenGone) {
+        // Retiring the row rather than deleting it: re-registering the same
+        // device upserts on (customer_id, token_hash) and flips is_active back
+        // on, so a reinstall recovers by itself. Left active, an uninstalled
+        // device costs a failing round-trip on every notification, forever.
+        await supabase
+          .from('customer_push_tokens')
+          .update({ is_active: false })
+          .eq('id', tokenRow.id);
+
+        results.push({ token_id: tokenRow.id, status: 'deactivated', provider: PUSH_PROVIDER, reason: error.message });
+        continue;
+      }
+
       results.push({ token_id: tokenRow.id, status: 'error', provider: PUSH_PROVIDER, reason: error.message });
     }
   }

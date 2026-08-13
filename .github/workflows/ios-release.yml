@@ -25,6 +25,12 @@ name: iOS release
 #                                         Firebase project ebtl-37ddb. Without it
 #                                         the build still succeeds, but push,
 #                                         Crashlytics, and Analytics stay off.
+#
+# Push notifications additionally need one thing that lives outside this repo:
+# an APNs Authentication Key (.p8) uploaded to Firebase console → Project
+# settings → Cloud Messaging → the iOS app, with its Key ID and the Apple team
+# ID. Firebase talks to APNs on the app's behalf, and without that key it
+# cannot, no matter how the app is signed.
 
 on:
   workflow_dispatch:
@@ -205,8 +211,15 @@ jobs:
             echo "::error::Provisioning profile is for '$app_id' but this app is '$APPLE_TEAM_ID.$BUNDLE_ID'."
             exit 1
           fi
-          if ! /usr/libexec/PlistBuddy -c 'Print :Entitlements:aps-environment' "$decoded" > /dev/null 2>&1; then
+          # The profile must grant production APNs: Release signs against
+          # ios/Runner/RunnerRelease.entitlements, which asks for it, and
+          # codesign fails when the profile does not allow what the
+          # entitlements request.
+          aps="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:aps-environment' "$decoded" 2> /dev/null || true)"
+          if [ -z "$aps" ]; then
             echo "::warning::Provisioning profile has no aps-environment entitlement — enable Push Notifications on the App ID and regenerate it, or the archive will fail."
+          elif [ "$aps" != "production" ]; then
+            echo "::warning::Provisioning profile grants aps-environment '$aps', not 'production'. Use an App Store distribution profile, or push will not work in TestFlight."
           fi
 
           # Xcode 16 reads profiles from UserData; older tooling reads the
@@ -329,6 +342,18 @@ jobs:
             exit 1
           fi
           echo "IPA_PATH=$ipa" >> "$GITHUB_ENV"
+
+          # A build signed for the APNs sandbox uploads and installs happily,
+          # then drops every push with BadDeviceToken — invisible until a
+          # tester reports missing notifications. Read what actually got
+          # signed rather than trusting the entitlements file.
+          app="$(find "$RUNNER_TEMP/Runner.xcarchive/Products/Applications" -maxdepth 1 -name '*.app' | head -1)"
+          signed_aps="$(codesign -d --entitlements :- "$app" 2> /dev/null \
+            | plutil -extract aps-environment raw -o - - 2> /dev/null || true)"
+          if [ "$signed_aps" != "production" ]; then
+            echo "::error::Archive is signed with aps-environment '${signed_aps:-none}', not 'production'. Push notifications will not reach TestFlight builds. Check ios/Runner/RunnerRelease.entitlements and the provisioning profile."
+            exit 1
+          fi
 
           # Keep the dSYMs: without them TestFlight and Crashlytics crash
           # reports stay unsymbolicated, and the archive dies with the runner.

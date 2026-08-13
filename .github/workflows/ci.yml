@@ -53,10 +53,11 @@ jobs:
           cache: npm
           cache-dependency-path: admin-dashboard/package-lock.json
       - run: npm ci
-      # The forecasting model's pure maths and the Golden Hour window keys, via
-      # Node's built-in test runner (no extra dependency). Needs no database or
-      # secrets — `server/lib/goldenHour.test.js` stands in placeholder Supabase
-      # credentials so importing the module under test does not demand real ones.
+      # The forecasting model's pure maths, the Golden Hour window keys, and the
+      # push-failure classification, via Node's built-in test runner (no extra
+      # dependency). Needs no database or secrets — the `server/lib` tests stand
+      # in placeholder Supabase credentials so importing the modules under test
+      # does not demand real ones.
       - run: npm test
       # The client build (vite) is self-contained and needs no runtime secrets.
       - run: npm run build
