@@ -5,6 +5,7 @@ import '../../../core/theme/ebtl_colors.dart';
 import '../../../core/theme/home_screen_visuals.dart';
 import '../../../models/profile_models.dart';
 import '../../../models/recently_viewed.dart';
+import '../../../shared/widgets/cocktail_card_widgets.dart';
 import '../../../shared/widgets/multiply_blend.dart';
 import '../../../shared/widgets/network_or_asset_image.dart';
 
@@ -466,14 +467,24 @@ class HomeRecentlyViewedCard extends StatelessWidget {
   final RecentlyViewedProduct product;
   final VoidCallback onTap;
 
+  /// Adds the product to the cart without leaving Home. The snapshot carries no
+  /// availability, so the button stays enabled and the add path re-fetches the
+  /// product to decide — the same round trip "Order It Again" makes.
+  final VoidCallback? onAdd;
+  final bool isAdding;
+
   const HomeRecentlyViewedCard({
     super.key,
     required this.product,
     required this.onTap,
+    this.onAdd,
+    this.isAdding = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final subtitle = product.subtitle.trim();
+
     return SizedBox(
       width: HomeScreenVisuals.recentlyViewedCardWidth,
       child: Material(
@@ -519,24 +530,60 @@ class HomeRecentlyViewedCard extends StatelessWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.manrope(
-                              fontSize: 11,
-                              height: 1.12,
+                              fontSize: HomeScreenVisuals
+                                  .recentlyViewedCardNameFontSize,
+                              height: HomeScreenVisuals
+                                  .recentlyViewedCardNameLineHeight,
                               fontWeight: FontWeight.w900,
                               color: EbtlColors.navy,
                             ),
                           ),
-                          const Spacer(),
-                          if (product.priceLabel.trim().isNotEmpty)
-                            Text(
-                              product.priceLabel,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.manrope(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                                color: EbtlColors.coral,
+                          const SizedBox(height: 4),
+                          if (subtitle.isNotEmpty)
+                            Expanded(
+                              child: Text(
+                                subtitle,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.manrope(
+                                  fontSize: HomeScreenVisuals
+                                      .recentlyViewedCardShortDescriptionFontSize,
+                                  height: HomeScreenVisuals
+                                      .recentlyViewedCardShortDescriptionLineHeight,
+                                  fontWeight: FontWeight.w500,
+                                  color: EbtlColors.ink,
+                                ),
                               ),
-                            ),
+                            )
+                          else
+                            const Spacer(),
+                          Row(
+                            children: [
+                              if (product.priceLabel.trim().isNotEmpty)
+                                Expanded(
+                                  child: Text(
+                                    product.priceLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.manrope(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w900,
+                                      color: EbtlColors.coral,
+                                    ),
+                                  ),
+                                )
+                              else
+                                const Spacer(),
+                              if (onAdd != null) ...[
+                                const SizedBox(width: 8),
+                                CocktailCardAddButton(
+                                  isAdding: isAdding,
+                                  isOrderable: true,
+                                  onTap: onAdd,
+                                ),
+                              ],
+                            ],
+                          ),
                         ],
                       ),
                     ),

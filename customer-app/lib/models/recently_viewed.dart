@@ -16,6 +16,11 @@ class RecentlyViewedProduct {
   final String imageAsset;
   final String priceLabel;
 
+  /// The product's short description, as the rail's card subtitle. Snapshots
+  /// taken before the card carried one have none, so it defaults to empty and
+  /// the card simply drops the line.
+  final String subtitle;
+
   /// Cocktails open the full detail screen from their slug alone. Everything
   /// else needs the catalog entry the sheet is built from, which Home does not
   /// have — so only cocktails are offered there.
@@ -28,6 +33,7 @@ class RecentlyViewedProduct {
     required this.imageAsset,
     required this.priceLabel,
     required this.isCocktail,
+    this.subtitle = '',
   });
 
   factory RecentlyViewedProduct.fromJson(Map<String, dynamic> json) {
@@ -40,6 +46,7 @@ class RecentlyViewedProduct {
         fallback: CocktailAssets.forName(readString(json['name'])),
       ),
       priceLabel: readString(json['price_label']),
+      subtitle: readString(json['subtitle']),
       isCocktail: readBool(json['is_cocktail']),
     );
   }
@@ -51,6 +58,7 @@ class RecentlyViewedProduct {
       'image_url': imageUrl,
       'image_asset': imageAsset,
       'price_label': priceLabel,
+      'subtitle': subtitle,
       'is_cocktail': isCocktail,
     };
   }

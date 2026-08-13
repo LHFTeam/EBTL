@@ -102,6 +102,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
           imageUrl: cocktail.imageUrl,
           imageAsset: cocktail.imageAsset,
           priceLabel: cocktail.priceLabel,
+          subtitle: cocktail.cleanShortDescription,
           isCocktail: true,
         ),
       ).ignore();

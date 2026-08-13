@@ -99,6 +99,7 @@ class _ShopProductDetailSheetState extends State<ShopProductDetailSheet> {
         imageUrl: product.imageUrl,
         imageAsset: product.imageAsset,
         priceLabel: product.priceLabel,
+        subtitle: product.shortDescription?.trim() ?? '',
         isCocktail: product.isCocktail,
       ),
     ).ignore();
