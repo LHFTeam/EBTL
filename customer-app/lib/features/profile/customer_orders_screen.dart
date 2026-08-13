@@ -30,8 +30,8 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
     });
   }
 
-  void _openOrderDetail(ProfileOrder order) {
-    Navigator.of(context).push(
+  Future<void> _openOrderDetail(ProfileOrder order) async {
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => OrderDetailScreen(
           orderId: order.id,
@@ -39,6 +39,11 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
         ),
       ),
     );
+
+    // An order can be paid for or cancelled on that screen, so the list it
+    // came from is re-read rather than left showing the status it had.
+    if (!mounted) return;
+    reload();
   }
 
   @override

@@ -60,6 +60,9 @@ class ExploreScreen extends StatefulWidget {
 
 class _ExploreScreenState extends State<ExploreScreen> {
   late Future<SearchCatalog> exploreFuture;
+
+  /// The last catalog that arrived, so a refresh does not blank the page.
+  SearchCatalog? lastCatalog;
   late final TextEditingController searchController;
   final FocusNode searchFocusNode = FocusNode();
 
@@ -75,8 +78,26 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   /// Null means the "All" badge is selected.
   String? selectedCategoryId;
-  List<String> recentlyViewedSlugs = const [];
   String? addingProductId;
+
+  /// How many products of the selected category the grid is drawing.
+  ///
+  /// The whole catalog is already in memory, so the grid grows a page at a time
+  /// as the customer nears the end of it rather than rendering thousands of
+  /// tiles up front — an infinite scroll without a second request.
+  static const int _productPageSize = 12;
+
+  /// How close to the bottom the scroll has to get before the next page is
+  /// revealed, so more tiles are there before the customer reaches the end.
+  static const double _loadMoreExtent = 600;
+
+  int visibleProductCount = _productPageSize;
+
+  /// How many products the selected category holds, as the last build saw it.
+  /// The scroll listener has no catalog of its own to check against.
+  int loadedProductCount = 0;
+
+  final ScrollController scrollController = ScrollController();
 
   @override
   void initState() {
@@ -84,7 +105,26 @@ class _ExploreScreenState extends State<ExploreScreen> {
     searchController = TextEditingController(text: widget.searchQuery);
     appliedQuery = widget.searchQuery.trim();
     exploreFuture = loadExplore();
-    refreshRecentlyViewed();
+    scrollController.addListener(handleScroll);
+  }
+
+  /// Reveals the next page as the end of the grid comes into reach.
+  void handleScroll() {
+    if (!scrollController.hasClients) return;
+    if (visibleProductCount >= loadedProductCount) return;
+
+    final position = scrollController.position;
+    if (position.pixels < position.maxScrollExtent - _loadMoreExtent) return;
+
+    setState(() => visibleProductCount += _productPageSize);
+  }
+
+  void selectCategory(String? categoryId) {
+    setState(() {
+      selectedCategoryId = categoryId;
+      // A different category is a different list; start it from the top.
+      visibleProductCount = _productPageSize;
+    });
   }
 
   @override
@@ -108,6 +148,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     searchDebounce?.cancel();
     searchController.dispose();
     searchFocusNode.dispose();
+    scrollController.dispose();
     super.dispose();
   }
 
@@ -159,40 +200,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
     setState(() {
       exploreFuture = Future.value(catalog);
+      visibleProductCount = _productPageSize;
     });
-
-    await refreshRecentlyViewed();
-  }
-
-  Future<void> refreshRecentlyViewed() async {
-    final slugs = await ApiService.loadRecentlyViewedSlugs();
-    if (!mounted) return;
-
-    setState(() => recentlyViewedSlugs = slugs);
-  }
-
-  /// Resolves stored slugs against the loaded catalog, newest first. Anything
-  /// no longer in the catalog silently drops out.
-  List<ShopProduct> recentlyViewedProducts(SearchCatalog catalog) {
-    final bySlug = <String, ShopProduct>{};
-
-    for (final product in catalog.allProducts) {
-      final slug = product.slug.trim();
-      if (slug.isNotEmpty) {
-        bySlug[slug] = product;
-      }
-    }
-
-    final resolved = <ShopProduct>[];
-
-    for (final slug in recentlyViewedSlugs) {
-      final product = bySlug[slug];
-      if (product != null) {
-        resolved.add(product);
-      }
-    }
-
-    return resolved;
   }
 
   void showMessage(String message) {
@@ -284,17 +293,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
   }
 
-  Future<void> openProduct(ShopProduct product) async {
-    await openCatalogProduct(
+  Future<void> openProduct(ShopProduct product) {
+    return openCatalogProduct(
       context,
       product: product,
       locationId: widget.data.selectedLocationId,
       onCartChanged: widget.onCartChanged,
       onOpenCocktail: widget.onOpenCocktail,
     );
-
-    if (!mounted) return;
-    await refreshRecentlyViewed();
   }
 
   @override
@@ -306,10 +312,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
         child: FutureBuilder<SearchCatalog>(
           future: exploreFuture,
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const ShopLoadingState();
-            }
-
             if (snapshot.hasError) {
               return ListView(
                 padding: const EdgeInsets.only(top: 40),
@@ -323,8 +325,18 @@ class _ExploreScreenState extends State<ExploreScreen> {
               );
             }
 
-            final catalog = snapshot.data;
+            // A refresh — a pull, a beach-cart change, an add that re-reads
+            // availability — replaces the future, which empties the snapshot
+            // while the request is out. The catalog already on screen is kept
+            // through that, so a browse deep into an infinite scroll is not
+            // thrown back to a loading page and the top of the grid.
+            final catalog = snapshot.data ?? lastCatalog;
+
             if (catalog == null) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const ShopLoadingState();
+              }
+
               return ListView(
                 padding: const EdgeInsets.only(top: 40),
                 children: const [
@@ -333,6 +345,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               );
             }
 
+            lastCatalog = catalog;
             return buildContent(catalog);
           },
         ),
@@ -366,10 +379,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
   Widget buildBrowse(SearchCatalog catalog) {
     // A category can disappear between reloads; fall back to "All".
     final activeCategoryId = catalog.categoryById(selectedCategoryId)?.id;
-    final visibleProducts = catalog.productsFor(activeCategoryId);
-    final recents = recentlyViewedProducts(catalog);
+    final products = catalog.productsFor(activeCategoryId);
+    // Infinite scroll: the catalog is already in memory, so "loading more" is
+    // revealing more of it as the customer reaches the end of what is drawn.
+    loadedProductCount = products.length;
+    final visibleProducts = products.take(visibleProductCount).toList();
+    final hasMore = visibleProducts.length < products.length;
 
     return CustomScrollView(
+      controller: scrollController,
       slivers: [
         SliverToBoxAdapter(
           child: ExploreHeader(
@@ -383,39 +401,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
         SliverToBoxAdapter(
           child: ExploreHeroBanner(onTap: widget.onOpenFinder),
         ),
-        if (recents.isNotEmpty)
-          SliverToBoxAdapter(
-            child: SectionBlock(
-              icon: Icons.history,
-              title: 'Recently viewed',
-              child: SizedBox(
-                height: ShopProductCardTile.heightFor(
-                  compact: false,
-                  subtitleMaxLines: 2,
-                ),
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 22),
-                  itemCount: recents.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 12),
-                  itemBuilder: (context, index) {
-                    final product = recents[index];
-
-                    return ShopProductCardTile(
-                      product: product,
-                      width: 128,
-                      compact: false,
-                      isAdding: false,
-                      subtitleOverride: product.shortDescription,
-                      subtitleMaxLines: 2,
-                      onTap: () => openProduct(product),
-                      onAdd: null,
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
         SliverToBoxAdapter(
           child: SectionBlock(
             icon: Icons.grid_view_rounded,
@@ -428,8 +413,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               },
               selectedCategoryId: activeCategoryId,
               totalProductCount: catalog.allProducts.length,
-              onSelect: (categoryId) =>
-                  setState(() => selectedCategoryId = categoryId),
+              onSelect: selectCategory,
             ),
           ),
         ),
@@ -442,22 +426,51 @@ class _ExploreScreenState extends State<ExploreScreen> {
               ),
             ),
           )
-        else
+        else ...[
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.only(top: 22),
-              child: ShopProductGridSection(
+              padding: const EdgeInsets.fromLTRB(22, 22, 22, 14),
+              child: ShopGridSectionHeader(
                 title:
                     catalog.categoryById(activeCategoryId)?.name ??
                     'All products',
-                items: visibleProducts,
-                initialVisibleCount: 12,
-                addingProductId: addingProductId,
-                onProductTap: openProduct,
-                onQuickAdd: quickAddProduct,
               ),
             ),
           ),
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 22),
+            sliver: SliverGrid.builder(
+              itemCount: visibleProducts.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 14,
+                crossAxisSpacing: 14,
+                childAspectRatio: 0.62,
+              ),
+              itemBuilder: (context, index) {
+                final product = visibleProducts[index];
+
+                return ShopCatalogCard(
+                  product: product,
+                  isAdding: addingProductId == product.id,
+                  onTap: () => openProduct(product),
+                  onAdd: () => quickAddProduct(product),
+                );
+              },
+            ),
+          ),
+          if (hasMore)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.only(top: 20),
+                child: EbtlLoadingSection(
+                  padding: EdgeInsets.zero,
+                  size: 48,
+                  showLabel: false,
+                ),
+              ),
+            ),
+        ],
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ],
     );

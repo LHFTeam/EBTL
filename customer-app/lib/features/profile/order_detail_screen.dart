@@ -4,8 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/ebtl_colors.dart';
 import '../../models/order_detail_models.dart';
 import '../../services/api_service.dart';
+import '../../services/payment_sheet_service.dart';
 import '../../core/network/api_exception.dart';
 import '../../shared/widgets/app_state_widgets.dart';
+import '../../shared/widgets/brand_widgets.dart';
 import '../../shared/widgets/detail_card.dart';
 import '../../shared/widgets/network_or_asset_image.dart';
 import 'widgets/profile_widgets.dart';
@@ -27,6 +29,11 @@ class OrderDetailScreen extends StatefulWidget {
 class _OrderDetailScreenState extends State<OrderDetailScreen> {
   late Future<OrderDetailResponse> orderFuture;
 
+  /// True while the payment sheet for this order is being opened, or while the
+  /// payment it submitted is being confirmed.
+  bool isPaying = false;
+  bool isCancelling = false;
+
   @override
   void initState() {
     super.initState();
@@ -39,6 +46,99 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         orderId: widget.orderId,
       );
     });
+  }
+
+  /// Picks the payment of an order left unpaid back up.
+  ///
+  /// The payment session created when the order was placed is still live until
+  /// the backend closes it (thirty minutes, then the order expires), so this
+  /// re-reads that session and presents the same sheet checkout would have.
+  /// Nothing here decides that the money arrived — the backend's webhook does,
+  /// which is what the poll afterwards is waiting for.
+  Future<void> continuePayment(OrderDetail order) async {
+    if (isPaying || isCancelling) return;
+
+    setState(() => isPaying = true);
+
+    try {
+      final status = await ApiService.fetchOrderPaymentStatus(
+        orderId: order.id,
+      );
+
+      if (!mounted) return;
+
+      if (status.isPaid) {
+        setState(() => isPaying = false);
+        showAppSnackBar(context, 'This order is already paid for.');
+        reload();
+        return;
+      }
+
+      final result = await presentStripePaymentSheet(status.payment.stripe);
+
+      if (!mounted) return;
+
+      if (!result.isSubmitted) {
+        setState(() => isPaying = false);
+
+        final message = result.message;
+        if (message != null) showAppSnackBar(context, message);
+        return;
+      }
+
+      final settled = await pollPaymentStatus(order.id);
+
+      if (!mounted) return;
+      setState(() => isPaying = false);
+
+      showAppSnackBar(
+        context,
+        settled.isPaid
+            ? 'Payment confirmed. Your order is on its way.'
+            : settled.isFailed
+            ? 'Your payment did not go through, so you have not been charged.'
+            : "We're still waiting for your bank to confirm this payment. It will update here shortly.",
+      );
+
+      reload();
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() => isPaying = false);
+      showAppSnackBar(
+        context,
+        apiErrorMessage(error, fallback: 'Could not start this payment.'),
+      );
+    }
+  }
+
+  Future<void> cancelOrder(OrderDetail order) async {
+    if (isPaying || isCancelling) return;
+
+    final confirmed = await showConfirmCancelOrderDialog(context);
+    if (!confirmed || !mounted) return;
+
+    setState(() => isCancelling = true);
+
+    try {
+      await ApiService.cancelCustomerOrder(orderId: order.id);
+
+      if (!mounted) return;
+      setState(() => isCancelling = false);
+      showAppSnackBar(context, 'Order cancelled. You have not been charged.');
+      reload();
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() => isCancelling = false);
+      showAppSnackBar(
+        context,
+        apiErrorMessage(error, fallback: 'Could not cancel this order.'),
+      );
+      // Whatever the backend refused for, the order is not where this screen
+      // thought it was — show where it actually stands.
+      reload();
+    }
   }
 
   @override
@@ -95,6 +195,16 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
     return [
       SliverToBoxAdapter(child: _OrderStatusCard(order: order)),
+      if (order.awaitsPayment)
+        SliverToBoxAdapter(
+          child: _PendingPaymentCard(
+            order: order,
+            isPaying: isPaying,
+            isCancelling: isCancelling,
+            onContinuePayment: () => continuePayment(order),
+            onCancelOrder: () => cancelOrder(order),
+          ),
+        ),
       if (order.location != null)
         SliverToBoxAdapter(child: _OrderLocationCard(location: order.location!)),
       SliverToBoxAdapter(
@@ -118,6 +228,165 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       ),
       SliverToBoxAdapter(child: _OrderSummaryCard(totals: order.totals)),
     ];
+  }
+}
+
+/// Asks before an order is dropped: cancelling closes the payment window with
+/// the gateway, so it cannot be undone from here.
+Future<bool> showConfirmCancelOrderDialog(BuildContext context) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        backgroundColor: EbtlColors.white,
+        title: Text(
+          'Cancel this order?',
+          style: GoogleFonts.manrope(
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+            color: EbtlColors.navy,
+          ),
+        ),
+        content: Text(
+          'You have not been charged, and nothing has been prepared. You will '
+          'need to place a new order if you change your mind.',
+          style: GoogleFonts.manrope(
+            fontSize: 14,
+            height: 1.35,
+            fontWeight: FontWeight.w600,
+            color: EbtlColors.ink,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(
+              'Keep it',
+              style: GoogleFonts.manrope(
+                fontWeight: FontWeight.w900,
+                color: EbtlColors.teal,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              'Cancel order',
+              style: GoogleFonts.manrope(
+                fontWeight: FontWeight.w900,
+                color: EbtlColors.coral,
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+
+  return confirmed ?? false;
+}
+
+/// The two ways out of an order that was placed but never paid for.
+class _PendingPaymentCard extends StatelessWidget {
+  final OrderDetail order;
+  final bool isPaying;
+  final bool isCancelling;
+  final VoidCallback onContinuePayment;
+  final VoidCallback onCancelOrder;
+
+  const _PendingPaymentCard({
+    required this.order,
+    required this.isPaying,
+    required this.isCancelling,
+    required this.onContinuePayment,
+    required this.onCancelOrder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isBusy = isPaying || isCancelling;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 0, 22, 8),
+      child: DetailCard(
+        backgroundColor: EbtlColors.sand.withValues(alpha: 0.48),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.hourglass_bottom,
+                  size: 20,
+                  color: EbtlColors.coral,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Payment pending',
+                    style: GoogleFonts.manrope(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      color: EbtlColors.navy,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'This order is being held until it is paid for. Finish the '
+              'payment to confirm it, or cancel it — nothing has been charged '
+              'either way.',
+              style: GoogleFonts.manrope(
+                fontSize: 13,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
+                color: EbtlColors.ink,
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: isBusy ? null : onContinuePayment,
+                style: ebtlCoralButtonStyle(withDisabledColors: true),
+                child: isPaying
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        'Continue Payment',
+                        style: GoogleFonts.manrope(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Center(
+              child: TextButton(
+                onPressed: isBusy ? null : onCancelOrder,
+                child: Text(
+                  isCancelling ? 'Cancelling...' : 'Cancel Order',
+                  style: GoogleFonts.manrope(
+                    fontWeight: FontWeight.w900,
+                    color: EbtlColors.coral,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

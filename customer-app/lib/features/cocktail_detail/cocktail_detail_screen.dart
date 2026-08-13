@@ -8,6 +8,7 @@ import '../../core/theme/ebtl_text_styles.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/cocktail_detail_models.dart';
 import '../../models/common_models.dart';
+import '../../models/recently_viewed.dart';
 import '../../services/analytics_service.dart';
 import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
@@ -92,9 +93,18 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
     final cocktail = response.cocktail;
     if (trackedSlugs.add(cocktail.slug)) {
       AnalyticsService.logViewItem(analyticsItem(cocktail));
-      // Feeds the Explore "Recently viewed" rail. Fire-and-forget: a storage
+      // Feeds Home's "Recently viewed" rail. Fire-and-forget: a storage
       // failure must never take the detail screen down with it.
-      ApiService.recordRecentlyViewed(cocktail.slug).ignore();
+      ApiService.recordRecentlyViewed(
+        RecentlyViewedProduct(
+          slug: cocktail.slug,
+          name: cocktail.name,
+          imageUrl: cocktail.imageUrl,
+          imageAsset: cocktail.imageAsset,
+          priceLabel: cocktail.priceLabel,
+          isCocktail: true,
+        ),
+      ).ignore();
     }
 
     return response;
@@ -346,15 +356,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
               CustomScrollView(
                 slivers: [
                   SliverToBoxAdapter(
-                    child: CocktailDetailHero(
-                      cocktail: cocktail,
-                      cartCount: cartCount,
-                      isFavorite: favoriteOverride ?? cocktail.isFavorite,
-                      onBack: () => Navigator.of(context).pop(),
-                      onFavorite: () => toggleFavorite(cocktail),
-                      onCart: () =>
-                          widget.onBottomNavTap(EbtlBottomNav.cartIndex),
-                    ),
+                    child: CocktailDetailHero(cocktail: cocktail),
                   ),
                   SliverToBoxAdapter(
                     child: CocktailDetailContent(
@@ -372,6 +374,21 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                   ),
                   const SliverToBoxAdapter(child: SizedBox(height: 118)),
                 ],
+              ),
+              // Close, favorite and cart ride above the scroll rather than
+              // inside the hero, so they are still there once the artwork has
+              // scrolled away.
+              Positioned(
+                left: 22,
+                right: 22,
+                top: MediaQuery.of(context).padding.top + 10,
+                child: CocktailDetailTopActions(
+                  cartCount: cartCount,
+                  isFavorite: favoriteOverride ?? cocktail.isFavorite,
+                  onBack: () => Navigator.of(context).pop(),
+                  onFavorite: () => toggleFavorite(cocktail),
+                  onCart: () => widget.onBottomNavTap(EbtlBottomNav.cartIndex),
+                ),
               ),
               Positioned(
                 left: 0,
@@ -408,21 +425,8 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
 
 class CocktailDetailHero extends StatelessWidget {
   final CocktailDetail cocktail;
-  final int cartCount;
-  final bool isFavorite;
-  final VoidCallback onBack;
-  final VoidCallback onFavorite;
-  final VoidCallback onCart;
 
-  const CocktailDetailHero({
-    super.key,
-    required this.cocktail,
-    required this.cartCount,
-    required this.isFavorite,
-    required this.onBack,
-    required this.onFavorite,
-    required this.onCart,
-  });
+  const CocktailDetailHero({super.key, required this.cocktail});
 
   @override
   Widget build(BuildContext context) {
@@ -461,52 +465,6 @@ class CocktailDetailHero extends StatelessWidget {
               child: Container(height: 66, color: EbtlColors.cream),
             ),
           ),
-          Positioned(
-            left: 22,
-            right: 22,
-            top: MediaQuery.of(context).padding.top + 10,
-            child: Row(
-              children: [
-                CircleIconButton(icon: Icons.close, onTap: onBack),
-                const Spacer(),
-                CircleIconButton(
-                  icon: isFavorite ? Icons.favorite : Icons.favorite_border,
-                  iconColor: isFavorite ? EbtlColors.coral : Colors.black,
-                  onTap: onFavorite,
-                ),
-                const SizedBox(width: 12),
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    CircleIconButton(
-                      icon: Icons.shopping_cart_outlined,
-                      onTap: onCart,
-                    ),
-                    if (cartCount > 0)
-                      Positioned(
-                        right: -2,
-                        top: -4,
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: const BoxDecoration(
-                            color: EbtlColors.coral,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            cartCount > 99 ? '99+' : cartCount.toString(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
           if (cocktail.tagDetails.isNotEmpty)
             Positioned(
               left: 22,
@@ -522,6 +480,70 @@ class CocktailDetailHero extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Close, favorite and cart, drawn over the detail scroll so they stay
+/// available all the way down the page.
+class CocktailDetailTopActions extends StatelessWidget {
+  final int cartCount;
+  final bool isFavorite;
+  final VoidCallback onBack;
+  final VoidCallback onFavorite;
+  final VoidCallback onCart;
+
+  const CocktailDetailTopActions({
+    super.key,
+    required this.cartCount,
+    required this.isFavorite,
+    required this.onBack,
+    required this.onFavorite,
+    required this.onCart,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        CircleIconButton(icon: Icons.close, onTap: onBack),
+        const Spacer(),
+        CircleIconButton(
+          icon: isFavorite ? Icons.favorite : Icons.favorite_border,
+          iconColor: isFavorite ? EbtlColors.coral : Colors.black,
+          onTap: onFavorite,
+        ),
+        const SizedBox(width: 12),
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            CircleIconButton(
+              icon: Icons.shopping_cart_outlined,
+              onTap: onCart,
+            ),
+            if (cartCount > 0)
+              Positioned(
+                right: -2,
+                top: -4,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: const BoxDecoration(
+                    color: EbtlColors.coral,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    cartCount > 99 ? '99+' : cartCount.toString(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -601,38 +623,10 @@ class CocktailDetailContent extends StatelessWidget {
             CocktailVibeCard(cocktail: cocktail),
           ],
 
-          // Then "What's in Your Cocktail" / "How to Make It".
+          // Then "What's in Your Cocktail", full width now that the
+          // preparation steps beside it have been dropped.
           const SizedBox(height: 16),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final useColumn = constraints.maxWidth < 380;
-
-              final ingredientsCard = CocktailIngredientsCard(
-                ingredients: cocktail.includedIngredients,
-              );
-
-              final howToCard = CocktailHowToCard(steps: cocktail.howToMake);
-
-              if (useColumn) {
-                return Column(
-                  children: [
-                    ingredientsCard,
-                    const SizedBox(height: 12),
-                    howToCard,
-                  ],
-                );
-              }
-
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: ingredientsCard),
-                  const SizedBox(width: 12),
-                  Expanded(child: howToCard),
-                ],
-              );
-            },
-          ),
+          CocktailIngredientsCard(ingredients: cocktail.includedIngredients),
 
           // Customization after description and ingredients.
           if (cocktail.customization.shouldShow) ...[
@@ -808,7 +802,9 @@ class CocktailAvailabilityCard extends StatelessWidget {
                   maxLines: isUnavailableWithLocation ? 4 : 2,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.manrope(
-                    fontSize: isUnavailableWithLocation ? 13 : 16,
+                    fontSize: isUnavailableWithLocation
+                        ? 13
+                        : detailBeachCartNameFontSize,
                     height: isUnavailableWithLocation ? 1.3 : 1.25,
                     fontWeight: FontWeight.w900,
                     color: EbtlColors.navy,
@@ -869,27 +865,13 @@ class CocktailCustomizationSection extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Remove ingredients',
-                        style: GoogleFonts.manrope(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900,
-                          color: EbtlColors.ink,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      'No charge',
-                      style: GoogleFonts.manrope(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: EbtlColors.teal,
-                      ),
-                    ),
-                  ],
+                Text(
+                  'I want to remove…',
+                  style: GoogleFonts.manrope(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: EbtlColors.ink,
+                  ),
                 ),
                 const SizedBox(height: 14),
                 Wrap(
@@ -1056,7 +1038,9 @@ class RemovableIngredientChip extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.manrope(
-                      fontSize: 16,
+                      // Same size as the beach cart's name on the card at the
+                      // top of this screen.
+                      fontSize: detailBeachCartNameFontSize,
                       height: 1.1,
                       fontWeight: FontWeight.w700,
                       color: textColor,
@@ -1380,57 +1364,6 @@ class CocktailIngredientRow extends StatelessWidget {
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class CocktailHowToCard extends StatelessWidget {
-  final List<CocktailHowToStep> steps;
-
-  const CocktailHowToCard({super.key, required this.steps});
-
-  @override
-  Widget build(BuildContext context) {
-    return DetailCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('How to make it', style: detailSectionTitleStyle()),
-          const SizedBox(height: 12),
-          if (steps.isEmpty)
-            Text(
-              'Preparation steps will appear here soon.',
-              style: GoogleFonts.manrope(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: EbtlColors.muted,
-              ),
-            )
-          else
-            ...steps.map(
-              (step) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  children: [
-                    StepBubble(number: step.step),
-                    const SizedBox(width: 11),
-                    Expanded(
-                      child: Text(
-                        step.title,
-                        style: GoogleFonts.manrope(
-                          fontSize: 13,
-                          height: 1.28,
-                          fontWeight: FontWeight.w700,
-                          color: EbtlColors.ink,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
         ],
       ),
     );

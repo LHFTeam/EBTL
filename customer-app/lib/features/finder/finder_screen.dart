@@ -6,6 +6,7 @@ import '../../services/analytics_service.dart';
 import '../../services/api_service.dart';
 import '../../core/network/api_exception.dart';
 import '../../shared/widgets/app_state_widgets.dart';
+import '../../shared/widgets/brand_widgets.dart';
 import '../../shared/widgets/cocktail_card_widgets.dart';
 import 'widgets/finder_filter_widgets.dart';
 import 'widgets/finder_header.dart';
@@ -111,9 +112,28 @@ class _FinderScreenState extends State<FinderScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final onBack = widget.onBack;
+
     return SafeArea(
-      child: CustomScrollView(
-        slivers: [
+      child: Stack(
+        children: [
+          buildScroll(),
+          // The way back stays put while the page scrolls, rather than leaving
+          // with the header it used to sit in.
+          if (onBack != null)
+            Positioned(
+              left: 22,
+              top: 14,
+              child: CircleIconButton(icon: Icons.arrow_back, onTap: onBack),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget buildScroll() {
+    return CustomScrollView(
+      slivers: [
           SliverToBoxAdapter(
             child: FinderHeader(
               liquorTypes: widget.data.liquorTypes,
@@ -268,8 +288,7 @@ class _FinderScreenState extends State<FinderScreen> {
               },
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 }

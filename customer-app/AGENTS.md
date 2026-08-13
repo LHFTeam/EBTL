@@ -244,6 +244,20 @@ tree):
    `ShopScreen` still exists but is no longer wired into the nav; Explore
    replaced it.
 
+**Explore's product grid is an infinite scroll over an in-memory catalog.** The
+whole catalog is already loaded for the badges and the search, so the grid draws
+a page of it at a time (`_productPageSize`) and reveals the next page as the
+scroll nears the end — there is no second request and no "View more" button.
+Its cards are the Finder's `CocktailGridCard` (through `ShopCatalogCard`), with
+the favorite heart swapped for the plus that adds to the cart.
+
+**"Recently viewed" lives on Home, not Explore.** `ApiService` stores a display
+snapshot of each opened product (`models/recently_viewed.dart`) rather than a
+bare slug, because Home never loads the shop catalog and so has nothing to
+resolve a slug against. The rail offers cocktails only — a card re-opens the
+product by slug, which is all the cocktail detail screen needs, while the other
+shop products open a sheet built from a catalog entry Home does not hold.
+
 **Search is one feature on two surfaces.** Home and Explore both render
 `CatalogSearchField` and, while a query is applied, `SearchResultsPanel`
 (`features/search/`) — a live field that searches in place, debounced 250 ms,
@@ -364,7 +378,13 @@ an endpoint, copy the existing shape:
   backend expires an unpaid order after 30 minutes and cancels its payment
   intent; place-order then answers 409 with `ApiException.errorCode ==
   'checkout_expired'`, which `placeOrder` handles by reloading checkout so the
-  next attempt starts from a fresh key.
+  next attempt starts from a fresh key. Inside that window the order detail
+  screen offers the two ways out of an order left unpaid: **Continue Payment**
+  re-reads the payment session from `GET .../payment-status` and re-presents the
+  same sheet, and **Cancel Order** calls `POST .../cancel`, which shuts the
+  gateway's payment window before it moves the order. Both the sheet and the
+  poll live in `services/payment_sheet_service.dart` — checkout and the order
+  screen share them; do not re-implement either.
 - **Favorites** — per-anonymous-customer favorite cocktails
   (`/api/customer/favorites`), surfaced on profile and cocktail cards.
 - **Spirits** — the customer's bottles, as two lists on the profile

@@ -151,6 +151,12 @@ class CocktailDetail {
 
   String get cleanShortDescription => shortDescription?.trim() ?? '';
 
+  /// The serving size's price, as the cards elsewhere in the app label it.
+  String get priceLabel => formatOptionalPrice(
+    variant?.priceIncVat,
+    variant?.currency ?? 'EGP',
+  );
+
   String get cleanDescription => description?.trim() ?? '';
 
   bool get canAddToCart {

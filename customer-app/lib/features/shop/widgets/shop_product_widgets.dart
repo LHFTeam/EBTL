@@ -9,6 +9,37 @@ import '../../../shared/widgets/cocktail_card_widgets.dart';
 import '../../../shared/widgets/network_or_asset_image.dart';
 import '../../../shared/widgets/product_tag_widgets.dart';
 
+/// A product in the shop grid, drawn as the Cocktail Finder draws its cards.
+///
+/// The two grids show the same catalog, so they use the same card: the shell
+/// from [CocktailGridCard], fed through the [Cocktail.fromShopProduct] bridge.
+/// The one difference is the corner action — the Finder's heart marks a
+/// favorite, while here it is the plus that adds the product to the cart.
+class ShopCatalogCard extends StatelessWidget {
+  final ShopProduct product;
+  final bool isAdding;
+  final VoidCallback onTap;
+  final VoidCallback onAdd;
+
+  const ShopCatalogCard({
+    super.key,
+    required this.product,
+    required this.isAdding,
+    required this.onTap,
+    required this.onAdd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CocktailGridCard(
+      cocktail: Cocktail.fromShopProduct(product),
+      onTap: onTap,
+      onAdd: onAdd,
+      isAdding: isAdding,
+    );
+  }
+}
+
 class ShopProductGridSection extends StatefulWidget {
   final String title;
   final List<ShopProduct> items;
@@ -16,8 +47,8 @@ class ShopProductGridSection extends StatefulWidget {
   final ValueChanged<ShopProduct> onProductTap;
   final ValueChanged<ShopProduct> onQuickAdd;
 
-  /// How many tiles show before "View more". Browse-first screens (Explore)
-  /// pass a larger value than the shop's stacked sections.
+  /// How many tiles show before "View more". Used by the shop's stacked
+  /// sections; Explore's grid pages itself as the customer scrolls instead.
   final int initialVisibleCount;
 
   const ShopProductGridSection({

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 // OverflowBoxFit is defined in the rendering layer and is not re-exported
 // through material.dart, so import just that symbol.
 import 'package:flutter/rendering.dart' show OverflowBoxFit;
-import 'package:flutter_stripe/flutter_stripe.dart' as stripe;
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/constants/fulfillment_types.dart';
@@ -15,6 +14,7 @@ import '../../models/checkout_models.dart';
 import '../../models/common_models.dart';
 import '../../services/analytics_service.dart';
 import '../../services/api_service.dart';
+import '../../services/payment_sheet_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import '../../shared/widgets/brand_widgets.dart';
 import '../../shared/widgets/network_or_asset_image.dart';
@@ -286,34 +286,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
-  // Payment reconciliation waits on a Stripe/Geidea webhook reaching the
-  // backend. On a cold-starting Render instance that can take much longer than
-  // the couple of seconds it usually does, so poll well past the common case
-  // before giving up — backing off so we don't hammer the API — and return the
-  // last status seen if the window is exhausted (the order still settles
-  // server-side; the UI just can't confirm it live yet).
-  static const Duration _paymentPollBudget = Duration(seconds: 90);
-  static const Duration _paymentPollInitialDelay = Duration(seconds: 2);
-  static const Duration _paymentPollMaxDelay = Duration(seconds: 6);
-
-  Future<PaymentStatusResponse> pollPaymentStatus(String orderId) async {
-    final deadline = DateTime.now().add(_paymentPollBudget);
-    Duration delay = _paymentPollInitialDelay;
-    PaymentStatusResponse latest = await ApiService.fetchOrderPaymentStatus(
-      orderId: orderId,
-    );
-
-    while (!latest.isFinal && DateTime.now().add(delay).isBefore(deadline)) {
-      await Future<void>.delayed(delay);
-      latest = await ApiService.fetchOrderPaymentStatus(orderId: orderId);
-
-      final Duration next = delay * 1.5;
-      delay = next > _paymentPollMaxDelay ? _paymentPollMaxDelay : next;
-    }
-
-    return latest;
-  }
-
   void openOrderConfirmed(
     CheckoutOrder order, {
     CheckoutLocation? location,
@@ -458,80 +430,25 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     await finishPaymentByPolling(response, checkout);
   }
 
-  // Opens the native Stripe Payment Sheet (cards + Apple Pay / Google Pay when
-  // configured), then reconciles the order via the same webhook-backed polling
-  // the Geidea path uses. The order is only treated as paid once our backend
-  // has processed the Stripe webhook.
+  // Opens the native Stripe Payment Sheet for the session the order was placed
+  // with, then reconciles the order via the same webhook-backed polling the
+  // Geidea path uses. The order is only treated as paid once our backend has
+  // processed the Stripe webhook.
   Future<void> startStripePaymentSheetAndRefresh(
     PlaceOrderResponse response,
     CheckoutData checkout,
   ) async {
-    final session = response.payment.stripe;
-    final publishableKey = session.publishableKey;
+    final result = await presentStripePaymentSheet(response.payment.stripe);
 
-    if (!session.hasClientSecret ||
-        publishableKey == null ||
-        publishableKey.isEmpty) {
+    if (!result.isSubmitted) {
       if (!mounted) return;
       setState(() => isPlacingOrder = false);
-      showAppSnackBar(
-        context,
-        'Payment could not be started. Please try again.',
-      );
-      return;
-    }
 
-    final hasApplePay =
-        session.applePayMerchantId != null &&
-        session.applePayMerchantId!.isNotEmpty;
-
-    try {
-      stripe.Stripe.publishableKey = publishableKey;
-      if (hasApplePay) {
-        stripe.Stripe.merchantIdentifier = session.applePayMerchantId!;
-      }
-      await stripe.Stripe.instance.applySettings();
-
-      await stripe.Stripe.instance.initPaymentSheet(
-        paymentSheetParameters: stripe.SetupPaymentSheetParameters(
-          paymentIntentClientSecret: session.clientSecret,
-          merchantDisplayName: session.merchantDisplayName,
-          customerId: session.hasCustomer ? session.customerId : null,
-          customerEphemeralKeySecret: session.hasCustomer
-              ? session.ephemeralKeySecret
-              : null,
-          applePay: hasApplePay
-              ? stripe.PaymentSheetApplePay(
-                  merchantCountryCode: session.merchantCountry,
-                )
-              : null,
-          googlePay: session.googlePayEnabled
-              ? stripe.PaymentSheetGooglePay(
-                  merchantCountryCode: session.merchantCountry,
-                  testEnv: session.isTest,
-                )
-              : null,
-        ),
-      );
-
-      await stripe.Stripe.instance.presentPaymentSheet();
-    } on stripe.StripeException catch (error) {
-      if (!mounted) return;
-      setState(() => isPlacingOrder = false);
-      // A user cancelling the sheet is not an error worth surfacing. Their cart
-      // is untouched and activeIdempotencyKey is kept, so tapping Place Order
-      // again replays the same order and re-opens the same payment sheet.
-      if (error.error.code != stripe.FailureCode.Canceled) {
-        showAppSnackBar(
-          context,
-          error.error.localizedMessage ?? 'Payment was not completed.',
-        );
-      }
-      return;
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => isPlacingOrder = false);
-      showAppSnackBar(context, 'Payment was not completed. Please try again.');
+      // A cancelled sheet leaves the cart untouched and activeIdempotencyKey
+      // in place, so tapping Place Order again replays the same order and
+      // re-opens the same payment sheet.
+      final message = result.message;
+      if (message != null) showAppSnackBar(context, message);
       return;
     }
 

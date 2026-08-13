@@ -50,23 +50,11 @@ class FinderHeader extends StatelessWidget {
               ),
             ),
           ),
-          Positioned(
-            left: 22,
-            right: 22,
-            top: 14,
-            child: Row(
-              children: [
-                if (onBack != null)
-                  CircleIconButton(icon: Icons.arrow_back, onTap: onBack!)
-                else
-                  const EbtlLogo(),
-                const Spacer(),
-                CircleIconButton(icon: Icons.search, onTap: () {}),
-                const SizedBox(width: 12),
-                CircleIconButton(icon: Icons.tune, onTap: () {}),
-              ],
-            ),
-          ),
+          // The back button is not drawn here: the screen floats it above the
+          // scroll so it stays reachable once the header has scrolled away.
+          // The logo takes its place when the Finder is not a pushed route.
+          if (onBack == null)
+            const Positioned(left: 22, right: 22, top: 14, child: EbtlLogo()),
           Positioned(
             left: 22,
             right: 22,

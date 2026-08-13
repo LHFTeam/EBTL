@@ -37,6 +37,7 @@ import {
   redeemCreditForOrder,
   buildReferralHub
 } from '../lib/referrals.js';
+import { closePaymentWindow, UNPAID_PAYMENT_STATUSES } from '../lib/pendingOrderCleanup.js';
 import {
   TOP_SPIRIT_PLACES,
   addCustomerFavoriteSpirit,
@@ -6721,6 +6722,97 @@ customerRouter.get('/customer/orders/:orderId/payment-status', async (req, res) 
       order: order.data,
       payment: payment.data
     }) : null
+  });
+});
+
+// Cancels an order the customer has not paid for yet.
+//
+// This is the customer doing by hand what the pending-order sweep would do for
+// them thirty minutes later, so it takes the same route: shut the gateway's
+// payment window first, and only move the order once that succeeded. An order
+// whose money is already in flight is left alone — the webhook decides that
+// one, not this endpoint.
+customerRouter.post('/customer/orders/:orderId/cancel', async (req, res) => {
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const order = await supabase
+    .from('orders')
+    .select('id,order_number,status,payment_status,customer_id')
+    .eq('id', req.params.orderId)
+    .eq('customer_id', ensured.customer.id)
+    .maybeSingle();
+
+  if (order.error) return res.status(400).json({ error: order.error.message });
+  if (!order.data) return res.status(404).json({ error: 'Order not found.' });
+
+  if (order.data.status === 'cancelled') {
+    return res.json({
+      session: sessionPayload(ensured.customer.id, ensured.token),
+      order: {
+        id: order.data.id,
+        order_number: order.data.order_number,
+        status: order.data.status,
+        payment_status: order.data.payment_status
+      }
+    });
+  }
+
+  if (order.data.status !== 'pending_payment' || !UNPAID_PAYMENT_STATUSES.includes(order.data.payment_status)) {
+    return res.status(409).json({
+      error: 'This order can no longer be cancelled here. Contact the beach cart for help.',
+      error_code: 'order_not_cancellable'
+    });
+  }
+
+  const payments = await supabase
+    .from('payments')
+    .select('id,order_id,provider,provider_payment_id,status,raw_payload')
+    .eq('order_id', order.data.id);
+
+  if (payments.error) return res.status(400).json({ error: payments.error.message });
+
+  const orderPayments = payments.data || [];
+
+  // A payment row that already says paid, on an order that does not, means a
+  // webhook updated one and not the other. Cancelling would bury real money.
+  if (orderPayments.some((payment) => payment.status === 'paid')) {
+    return res.status(409).json({
+      error: 'This order has been paid for. Contact the beach cart for help.',
+      error_code: 'order_not_cancellable'
+    });
+  }
+
+  if (!(await closePaymentWindow(orderPayments))) {
+    return res.status(409).json({
+      error: 'This payment is still being processed. Try again in a moment.',
+      error_code: 'payment_in_flight'
+    });
+  }
+
+  // Re-assert both filters: an order paid between the read above and this write
+  // is left where it is.
+  const cancelled = await supabase
+    .from('orders')
+    .update({ status: 'cancelled' })
+    .eq('id', order.data.id)
+    .eq('status', 'pending_payment')
+    .in('payment_status', UNPAID_PAYMENT_STATUSES)
+    .select('id,order_number,status,payment_status')
+    .maybeSingle();
+
+  if (cancelled.error) return res.status(400).json({ error: cancelled.error.message });
+
+  if (!cancelled.data) {
+    return res.status(409).json({
+      error: 'This order moved on while it was being cancelled. Reload to see where it stands.',
+      error_code: 'order_not_cancellable'
+    });
+  }
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    order: cancelled.data
   });
 });
 
