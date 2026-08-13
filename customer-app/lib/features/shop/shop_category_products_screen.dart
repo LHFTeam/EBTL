@@ -168,6 +168,8 @@ class _ShopCategoryProductsScreenState
           price: variant.priceIncVat,
           quantity: 1,
           currency: variant.currency,
+          source: AnalyticsSource.shopCategory,
+          sourceDetail: widget.category.name,
         ),
       );
 
@@ -198,6 +200,8 @@ class _ShopCategoryProductsScreenState
         product: product,
         locationId: widget.locationId,
         onCartChanged: widget.onCartChanged,
+        analyticsSource: AnalyticsSource.shopCategory,
+        analyticsSourceDetail: widget.category.name,
       );
       return;
     }

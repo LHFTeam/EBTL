@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/cocktail_models.dart';
 import '../../models/common_models.dart';
 import '../../models/shop_models.dart';
+import '../../services/analytics_service.dart';
 import '../../services/api_service.dart';
 import '../../shared/widgets/app_state_widgets.dart';
 import '../shop/shop_product_loading.dart';
@@ -198,12 +199,16 @@ class SearchResults {
 
 /// Opens a product picked out of search results the way both surfaces do: shop
 /// items in the detail sheet, cocktails on their own screen.
+///
+/// Both halves are attributed to [AnalyticsSource.search], so a product opened
+/// out of the search panel reads as a search result rather than as a Home or
+/// Explore browse — the two surfaces that share this.
 Future<void> openCatalogProduct(
   BuildContext context, {
   required ShopProduct product,
   required String? locationId,
   required CartChangedCallback onCartChanged,
-  required Future<void> Function(Cocktail cocktail) onOpenCocktail,
+  required OpenCocktailCallback onOpenCocktail,
 }) async {
   if (!product.isCocktail) {
     await showShopProductDetailSheet(
@@ -211,6 +216,7 @@ Future<void> openCatalogProduct(
       product: product,
       locationId: locationId,
       onCartChanged: onCartChanged,
+      analyticsSource: AnalyticsSource.search,
     );
     return;
   }
@@ -221,5 +227,8 @@ Future<void> openCatalogProduct(
     return;
   }
 
-  await onOpenCocktail(Cocktail.fromShopProduct(product));
+  await onOpenCocktail(
+    Cocktail.fromShopProduct(product),
+    source: AnalyticsSource.search,
+  );
 }

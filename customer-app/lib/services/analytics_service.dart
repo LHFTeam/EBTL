@@ -8,8 +8,45 @@ import 'firebase_bootstrap.dart';
 /// A provider-neutral analytics boundary for the customer experience.
 ///
 /// Firebase Analytics and Meta App Events receive structured product/funnel
-/// data, while Clarity receives matching screen names and PII-free event
-/// markers. Screens should not call vendor SDKs directly.
+/// data, while Clarity receives matching screen names, PII-free event markers
+/// and session tags. Screens should not call vendor SDKs directly.
+///
+/// The two are answering different questions and both are wired on purpose:
+/// Firebase counts (how many people opened Negroni, how many added it),
+/// Clarity shows (the recordings of the sessions that did). A funnel step
+/// worth counting is worth being able to watch, so a new event here should
+/// normally set a Clarity marker as well.
+///
+/// Where a surface names itself. Sent as GA4's `item_list_name` on the item
+/// and as a `source` parameter on the event, which is what makes
+/// "Finder → detail → cart" answerable in one report rather than three.
+class AnalyticsSource {
+  static const String home = 'home';
+  static const String heroBanner = 'home_hero_banner';
+  static const String spotlight = 'spotlight_banner';
+  static const String goldenHour = 'golden_hour';
+  static const String orderAgain = 'order_again';
+  static const String recentlyViewed = 'recently_viewed';
+  static const String explore = 'explore';
+  static const String search = 'catalog_search';
+  static const String shop = 'shop';
+  static const String shopCategory = 'shop_category';
+  static const String cocktailFinder = 'cocktail_finder';
+  static const String relatedCocktail = 'related_cocktail';
+  static const String favorites = 'favorites';
+
+  const AnalyticsSource._();
+}
+
+/// Which banner surface a promotion tap came from — GA4's `creative_slot`.
+class AnalyticsPromotionSlot {
+  static const String heroCarousel = 'home_hero_carousel';
+  static const String spotlightRail = 'home_spotlight_rail';
+  static const String goldenHourModal = 'golden_hour_modal';
+
+  const AnalyticsPromotionSlot._();
+}
+
 class AnalyticsItem {
   final String id;
   final String name;
@@ -19,6 +56,14 @@ class AnalyticsItem {
   final int quantity;
   final String currency;
 
+  /// The surface the customer was on when they viewed or added this — an
+  /// [AnalyticsSource] constant.
+  final String? source;
+
+  /// Which instance of that surface: the Finder bottle that was selected, or
+  /// the banner whose sheet this was opened from. Reported as `source_detail`.
+  final String? sourceDetail;
+
   const AnalyticsItem({
     required this.id,
     required this.name,
@@ -27,6 +72,8 @@ class AnalyticsItem {
     required this.quantity,
     required this.currency,
     this.variant,
+    this.source,
+    this.sourceDetail,
   });
 
   AnalyticsEventItem toFirebaseItem() {
@@ -36,10 +83,25 @@ class AnalyticsItem {
       itemBrand: 'EBTL',
       itemCategory: category,
       itemVariant: variant,
+      itemListName: AnalyticsService._cleanOptional(source),
       price: price,
       quantity: quantity,
       currency: currency,
     );
+  }
+
+  /// The origin repeated as event-scoped parameters. GA4 reports on those
+  /// without the item-scoped custom dimensions the `items` array needs, so
+  /// both carry it.
+  Map<String, Object>? get sourceParameters {
+    final cleanSource = AnalyticsService._cleanOptional(source);
+    final cleanDetail = AnalyticsService._cleanOptional(sourceDetail);
+    if (cleanSource == null && cleanDetail == null) return null;
+
+    return <String, Object>{
+      'source': ?cleanSource,
+      'source_detail': ?cleanDetail,
+    };
   }
 }
 
@@ -157,13 +219,18 @@ class AnalyticsService {
     );
   }
 
+  /// A product detail page open — the cocktail detail screen or the shop
+  /// product sheet. Reported by name and category on both providers.
   static void logViewItem(AnalyticsItem item) {
     ClarityService.recordEvent('view_item');
+    _tagClarityItem(item, nameKey: 'product_viewed');
+
     _sendFirebase(
       (analytics) => analytics.logViewItem(
         currency: item.currency,
         value: item.price * item.quantity,
         items: [item.toFirebaseItem()],
+        parameters: item.sourceParameters,
       ),
     );
     _sendMeta(
@@ -179,11 +246,14 @@ class AnalyticsService {
 
   static void logAddToCart(AnalyticsItem item) {
     ClarityService.recordEvent('add_to_cart');
+    _tagClarityItem(item, nameKey: 'product_added');
+
     _sendFirebase(
       (analytics) => analytics.logAddToCart(
         currency: item.currency,
         value: item.price * item.quantity,
         items: [item.toFirebaseItem()],
+        parameters: item.sourceParameters,
       ),
     );
     _sendMeta(
@@ -195,6 +265,107 @@ class AnalyticsService {
         parameters: _metaItemParameters(item),
       ),
     );
+  }
+
+  /// A tap on a merchandising banner: a Home hero slide, a Spotlight rail card,
+  /// or the Golden Hour card's call to action.
+  ///
+  /// [promotionName] is the banner as marketing named it, which is what makes
+  /// one banner comparable against another; [slot] is which rail it sat in (an
+  /// [AnalyticsPromotionSlot]), and [destination] the deep link or sheet it
+  /// opened. Everything the tap leads to is then tagged with a matching
+  /// [AnalyticsSource], so the click and the sale it produced join up.
+  static void logPromotionSelected({
+    required String promotionId,
+    required String promotionName,
+    required String slot,
+    String? destination,
+  }) {
+    final cleanId = _cleanOptional(promotionId);
+    final cleanName = _cleanOptional(promotionName);
+
+    // A banner with neither a name nor an id says nothing a report could use.
+    if (cleanId == null && cleanName == null) return;
+
+    final reportedName = cleanName ?? cleanId!;
+    final cleanDestination = _cleanOptional(destination);
+
+    ClarityService.recordEvent('select_promotion');
+    ClarityService.setTag('banner_clicked', reportedName);
+
+    _sendFirebase(
+      (analytics) => analytics.logSelectPromotion(
+        promotionId: cleanId,
+        promotionName: reportedName,
+        creativeSlot: slot,
+        parameters: {'banner_destination': ?cleanDestination},
+      ),
+    );
+    _sendMeta(
+      (events) => events.logEvent(
+        name: 'select_promotion',
+        parameters: {
+          'promotion_id': ?cleanId,
+          'promotion_name': reportedName,
+          'creative_slot': slot,
+          'banner_destination': ?cleanDestination,
+        },
+      ),
+    );
+  }
+
+  /// The Cocktail Finder's opening question: which bottle the customer already
+  /// has. [selectionCount] is how many bottles are selected once the change has
+  /// landed, which separates "picked one bottle" from "widened the net" —
+  /// and, at zero, marks the customer backing all the way out.
+  ///
+  /// The steps after this one are ordinary product events carrying
+  /// [AnalyticsSource.cocktailFinder]: which cocktails were opened from the
+  /// results, and which of those were added.
+  static void logFinderBottleChanged({
+    required String bottleName,
+    required bool isSelected,
+    required int selectionCount,
+  }) {
+    final cleanName = _cleanOptional(bottleName);
+    if (cleanName == null) return;
+
+    final eventName = isSelected
+        ? 'finder_bottle_selected'
+        : 'finder_bottle_deselected';
+
+    ClarityService.recordEvent(eventName);
+    if (isSelected) ClarityService.setTag('finder_bottle', cleanName);
+
+    _sendFirebase(
+      (analytics) => analytics.logEvent(
+        name: eventName,
+        parameters: {
+          'bottle_name': cleanName,
+          'selected_bottle_count': selectionCount,
+        },
+      ),
+    );
+    _sendMeta(
+      (events) => events.logEvent(
+        name: eventName,
+        parameters: {
+          'bottle_name': cleanName,
+          'selected_bottle_count': selectionCount,
+        },
+      ),
+    );
+  }
+
+  /// Mirrors a product event into Clarity as session tags, so a count in
+  /// Firebase can be turned into the recordings behind it. Names only — the
+  /// price and id would be noise on a replay filter.
+  static void _tagClarityItem(AnalyticsItem item, {required String nameKey}) {
+    ClarityService.setTag(nameKey, item.name);
+    ClarityService.setTag('product_category', item.category);
+
+    final source = _cleanOptional(item.source);
+    if (source != null) ClarityService.setTag('product_source', source);
   }
 
   static void logFavoriteChanged({

@@ -31,6 +31,14 @@ class CocktailDetailScreen extends StatefulWidget {
   final CartChangedCallback onCartChanged;
   final ValueChanged<int> onBottomNavTap;
 
+  /// Where the customer came from (an [AnalyticsSource] constant), and which
+  /// instance of it — the Finder bottle they picked, or the banner whose sheet
+  /// they tapped through. Both ride along on this screen's view and
+  /// add-to-cart events, which is what makes the Cocktail Finder funnel
+  /// readable end to end.
+  final String analyticsSource;
+  final String? analyticsSourceDetail;
+
   const CocktailDetailScreen({
     super.key,
     required this.slug,
@@ -41,6 +49,8 @@ class CocktailDetailScreen extends StatefulWidget {
     required this.initialCartQuantity,
     required this.onCartChanged,
     required this.onBottomNavTap,
+    required this.analyticsSource,
+    this.analyticsSourceDetail,
   });
 
   @override
@@ -50,6 +60,12 @@ class CocktailDetailScreen extends StatefulWidget {
 class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
   late String activeSlug;
   late Future<CocktailDetailResponse> detailFuture;
+
+  /// Starts as the origin this screen was pushed with and is replaced once the
+  /// customer follows a "related" card, since from there on they are browsing
+  /// the detail screen itself rather than whatever opened it.
+  late String analyticsSource = widget.analyticsSource;
+  late String? analyticsSourceDetail = widget.analyticsSourceDetail;
 
   int selectedQuantity = 1;
   int? cartQuantityOverride;
@@ -120,6 +136,8 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
       price: variant?.priceIncVat ?? 0,
       quantity: quantity,
       currency: variant?.currency ?? 'EGP',
+      source: analyticsSource,
+      sourceDetail: analyticsSourceDetail,
     );
   }
 
@@ -133,6 +151,11 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
     if (slug.trim().isEmpty || slug == activeSlug) return;
 
     setState(() {
+      // Credit the cocktail they came from rather than the surface that opened
+      // this screen, so a Finder result is not credited with every cocktail
+      // reached by hopping through "You might also like".
+      analyticsSourceDetail = activeSlug;
+      analyticsSource = AnalyticsSource.relatedCocktail;
       activeSlug = slug;
       selectedQuantity = 1;
       favoriteOverride = null;
@@ -517,10 +540,7 @@ class CocktailDetailTopActions extends StatelessWidget {
         Stack(
           clipBehavior: Clip.none,
           children: [
-            CircleIconButton(
-              icon: Icons.shopping_cart_outlined,
-              onTap: onCart,
-            ),
+            CircleIconButton(icon: Icons.shopping_cart_outlined, onTap: onCart),
             if (cartCount > 0)
               Positioned(
                 right: -2,
@@ -1611,14 +1631,15 @@ class CocktailDetailAddBar extends StatelessWidget {
                   height: 50,
                   child: ElevatedButton(
                     onPressed: enabled ? onAdd : null,
-                    style: ebtlCoralButtonStyle(
-                      radius: 16,
-                      withDisabledColors: true,
-                    ).copyWith(
-                      padding: const WidgetStatePropertyAll(
-                        EdgeInsets.symmetric(horizontal: 18),
-                      ),
-                    ),
+                    style:
+                        ebtlCoralButtonStyle(
+                          radius: 16,
+                          withDisabledColors: true,
+                        ).copyWith(
+                          padding: const WidgetStatePropertyAll(
+                            EdgeInsets.symmetric(horizontal: 18),
+                          ),
+                        ),
                     child: isAdding
                         ? const SizedBox(
                             width: 18,
