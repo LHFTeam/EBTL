@@ -2,6 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Debug and Profile only. The Release configuration signs against
+	     RunnerRelease.entitlements, which asks for the production APNs
+	     environment that TestFlight and App Store builds need. -->
 	<key>aps-environment</key>
 	<string>development</string>
 </dict>

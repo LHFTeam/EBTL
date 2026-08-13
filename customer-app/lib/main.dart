@@ -219,6 +219,10 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     // Dart timers keep firing while the app is paused, so stop polling in
     // the background and pick it back up (with an immediate check) on resume.
     if (state == AppLifecycleState.resumed) {
+      // Retries the device-token registration if it has not landed yet — the
+      // first attempt can lose a race with the iOS APNs handshake, and an
+      // unregistered device silently receives no push at all.
+      PushNotificationService.refreshRegistration();
       _startNotificationsPolling(notifyImmediately: true);
       _startLiveOrderPolling();
       _refreshActiveOrders();
