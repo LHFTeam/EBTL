@@ -102,6 +102,8 @@ class _GoldenHourDialogState extends State<_GoldenHourDialog> {
           price: variant.priceIncVat,
           quantity: 1,
           currency: variant.currency,
+          source: AnalyticsSource.goldenHour,
+          sourceDetail: widget.modal.title,
         ),
       );
 
@@ -292,34 +294,37 @@ class _PillRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pills = <GoldenHourPill>[modal.spiritPill, ...modal.pills]
-        .where((pill) => pill.label.isNotEmpty)
-        .toList(growable: false);
+    final pills = <GoldenHourPill>[
+      modal.spiritPill,
+      ...modal.pills,
+    ].where((pill) => pill.label.isNotEmpty).toList(growable: false);
 
     if (pills.isEmpty) return const SizedBox.shrink();
 
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: pills.map((pill) {
-        final colors = pill.colors;
+      children: pills
+          .map((pill) {
+            final colors = pill.colors;
 
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          decoration: BoxDecoration(
-            color: colors.background,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Text(
-            pill.label,
-            style: GoogleFonts.manrope(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: colors.foreground,
-            ),
-          ),
-        );
-      }).toList(growable: false),
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: colors.background,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                pill.label,
+                style: GoogleFonts.manrope(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: colors.foreground,
+                ),
+              ),
+            );
+          })
+          .toList(growable: false),
     );
   }
 }

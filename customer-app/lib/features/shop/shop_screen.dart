@@ -213,6 +213,7 @@ class _ShopScreenState extends State<ShopScreen> {
           price: variant.priceIncVat,
           quantity: 1,
           currency: variant.currency,
+          source: AnalyticsSource.shop,
         ),
       );
 
@@ -246,6 +247,7 @@ class _ShopScreenState extends State<ShopScreen> {
         product: product,
         locationId: widget.data.selectedLocationId,
         onCartChanged: widget.onCartChanged,
+        analyticsSource: AnalyticsSource.shop,
       );
       return;
     }

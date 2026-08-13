@@ -34,6 +34,28 @@ class CocktailSearchResult {
   }
 }
 
+/// Opens a cocktail's detail screen, naming the surface the customer tapped.
+///
+/// [source] is an `AnalyticsSource` constant and [sourceDetail] the instance of
+/// it — the Finder bottle, the banner. Both are required rather than defaulted
+/// because they are what the detail view and any add-to-cart underneath are
+/// attributed to: a rail that forgets to name itself quietly credits its opens
+/// to nothing.
+typedef OpenCocktailCallback =
+    Future<void> Function(
+      Cocktail cocktail, {
+      required String source,
+      String? sourceDetail,
+    });
+
+/// The same, for a cocktail the caller only knows the slug of.
+typedef OpenCocktailBySlugCallback =
+    Future<void> Function(
+      String slug, {
+      required String source,
+      String? sourceDetail,
+    });
+
 class Cocktail {
   final String id;
   final String slug;

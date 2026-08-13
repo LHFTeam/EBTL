@@ -20,11 +20,18 @@ import '../../../shared/widgets/product_tag_widgets.dart';
 /// products carry everything needed (image, description, price, variants,
 /// availability) on the already-loaded [ShopProduct], so this sheet needs no
 /// extra backend call and adds to cart directly.
+///
+/// [analyticsSource] is the surface the sheet was opened from (an
+/// [AnalyticsSource] constant) and rides along on the view and add-to-cart
+/// events, so a shop product's detail opens can be split by where they came
+/// from. Callers that open this sheet must pass one.
 Future<void> showShopProductDetailSheet({
   required BuildContext context,
   required ShopProduct product,
   required String? locationId,
   required CartChangedCallback onCartChanged,
+  required String analyticsSource,
+  String? analyticsSourceDetail,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -34,6 +41,8 @@ Future<void> showShopProductDetailSheet({
       product: product,
       locationId: locationId,
       onCartChanged: onCartChanged,
+      analyticsSource: analyticsSource,
+      analyticsSourceDetail: analyticsSourceDetail,
     ),
   );
 }
@@ -42,12 +51,16 @@ class ShopProductDetailSheet extends StatefulWidget {
   final ShopProduct product;
   final String? locationId;
   final CartChangedCallback onCartChanged;
+  final String analyticsSource;
+  final String? analyticsSourceDetail;
 
   const ShopProductDetailSheet({
     super.key,
     required this.product,
     required this.locationId,
     required this.onCartChanged,
+    required this.analyticsSource,
+    this.analyticsSourceDetail,
   });
 
   @override
@@ -87,6 +100,8 @@ class _ShopProductDetailSheetState extends State<ShopProductDetailSheet> {
         price: variant?.priceIncVat ?? product.startingPriceIncVat ?? 0,
         quantity: 1,
         currency: variant?.currency ?? product.currency,
+        source: widget.analyticsSource,
+        sourceDetail: widget.analyticsSourceDetail,
       ),
     );
 
@@ -149,6 +164,8 @@ class _ShopProductDetailSheetState extends State<ShopProductDetailSheet> {
           price: variant.priceIncVat,
           quantity: quantity,
           currency: variant.currency,
+          source: widget.analyticsSource,
+          sourceDetail: widget.analyticsSourceDetail,
         ),
       );
 

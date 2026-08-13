@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/navigation/slide_up_route.dart';
 import '../../core/theme/ebtl_colors.dart';
 import '../../models/favorite_models.dart';
+import '../../services/analytics_service.dart';
 import '../../services/api_service.dart';
 import '../../core/network/api_exception.dart';
 import '../../shared/widgets/app_state_widgets.dart';
@@ -93,6 +94,7 @@ class _FavoriteCocktailsScreenState extends State<FavoriteCocktailsScreen> {
           initialCartQuantity: 0,
           onCartChanged: ([_]) {},
           onBottomNavTap: (index) => Navigator.of(context).pop(),
+          analyticsSource: AnalyticsSource.favorites,
         ),
       ),
     );

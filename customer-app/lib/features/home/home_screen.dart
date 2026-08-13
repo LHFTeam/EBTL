@@ -72,18 +72,20 @@ class HomeScreen extends StatefulWidget {
   final ValueChanged<String> onSearchQueryChanged;
   final VoidCallback onOpenCart;
   final VoidCallback onOpenShop;
+
   /// Opens the live order's own detail screen. The card tracks one order, so
   /// it goes straight there rather than by way of the active-orders list.
   final ValueChanged<ProfileOrder> onOpenLiveOrder;
   final VoidCallback onOpenOrderHistory;
   final VoidCallback onOpenFinder;
   final ValueChanged<LiquorType> onOpenFinderWithBottle;
-  final Future<void> Function(Cocktail cocktail) onOpenCocktail;
+  final OpenCocktailCallback onOpenCocktail;
 
   /// Opens a cocktail the screen only knows the slug of — the "Recently
   /// viewed" rail, which is drawn from an on-device snapshot rather than from
   /// a loaded catalog.
-  final Future<void> Function(String slug) onOpenCocktailBySlug;
+  final OpenCocktailBySlugCallback onOpenCocktailBySlug;
+
   /// Follows a hero banner's deep link. Only called for banners that carry one.
   final ValueChanged<HomeHeroBanner> onOpenHeroBanner;
   final ValueChanged<ServiceLocation> onLocationSelected;
@@ -369,6 +371,7 @@ class _HomeScreenState extends State<HomeScreen> {
           price: variant.priceIncVat,
           quantity: quantity,
           currency: variant.currency,
+          source: AnalyticsSource.orderAgain,
         ),
       );
 
@@ -569,6 +572,13 @@ class _HomeScreenState extends State<HomeScreen> {
   /// banner keeps opening the curated product grid, same as before this
   /// destination existed.
   void openSpotlightBanner(SpotlightBanner banner) {
+    AnalyticsService.logPromotionSelected(
+      promotionId: banner.id,
+      promotionName: banner.title,
+      slot: AnalyticsPromotionSlot.spotlightRail,
+      destination: banner.isMarkdownSlide ? 'markdown' : 'products',
+    );
+
     if (banner.isMarkdownSlide) {
       showSpotlightMarkdownSheet(context: context, banner: banner);
       return;
@@ -579,8 +589,11 @@ class _HomeScreenState extends State<HomeScreen> {
       banner: banner,
       locationId: widget.data.selectedLocationId,
       onCartChanged: widget.onCartChanged,
-      onOpenCocktail: (product) =>
-          widget.onOpenCocktail(Cocktail.fromShopProduct(product)),
+      onOpenCocktail: (product) => widget.onOpenCocktail(
+        Cocktail.fromShopProduct(product),
+        source: AnalyticsSource.spotlight,
+        sourceDetail: banner.title,
+      ),
     );
   }
 
@@ -621,13 +634,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> openRecentlyViewed(RecentlyViewedProduct product) async {
-    await widget.onOpenCocktailBySlug(product.slug);
+    await widget.onOpenCocktailBySlug(
+      product.slug,
+      source: AnalyticsSource.recentlyViewed,
+    );
     if (!mounted) return;
     await refreshRecentlyViewed();
   }
 
   Future<void> openFeaturedCocktail(Cocktail cocktail) async {
-    await widget.onOpenCocktail(cocktail);
+    await widget.onOpenCocktail(cocktail, source: AnalyticsSource.home);
     if (!mounted) return;
     await refreshRecentlyViewed();
   }

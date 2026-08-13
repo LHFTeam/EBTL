@@ -91,11 +91,98 @@ Firebase Analytics, Meta App Events, and Clarity share the provider-neutral
 | `search_submitted` | Cocktail Finder search is submitted; query text is not sent |
 | `add_to_wishlist` / `remove_from_wishlist` | Favorite status changes |
 | `add_to_cart` | A successful cart addition |
+| `select_promotion` | A merchandising banner is tapped |
+| `finder_bottle_selected` / `finder_bottle_deselected` | A bottle is added to or removed from the Cocktail Finder's filter |
 | `begin_checkout` | Checkout data first loads |
 | `purchase` | Backend-confirmed paid order only |
 
 Commerce values use EGP as delivered by the API. Purchase events use the order
 ID as the GA4 transaction ID and are deduplicated within the running app.
+
+### Product name and category
+
+`view_item` and `add_to_cart` carry the product in the GA4 `items` array, so
+both break down by **Item name** and **Item category** in the standard
+ecommerce reports with no custom dimension to register. Category is the
+product's catalog category, falling back to its product type (and to
+`cocktail` for a cocktail with no category set).
+
+### Where the view or the add came from
+
+Both events also carry a `source` — the surface the customer was on — and a
+`source_detail` naming the instance of it. `source` is repeated as the item's
+`item_list_name`, so it reads in the ecommerce reports as well as in the event
+parameters.
+
+| `source` | `source_detail` |
+| --- | --- |
+| `home` | — |
+| `home_hero_banner` | Banner headline |
+| `spotlight_banner` | Banner title |
+| `golden_hour` | Card title |
+| `order_again` | — |
+| `recently_viewed` | — |
+| `explore`, `shop`, `favorites` | — |
+| `shop_category` | Category name |
+| `catalog_search` | — |
+| `cocktail_finder` | The selected bottle, when exactly one is selected |
+| `related_cocktail` | The slug of the cocktail hopped from |
+
+Register `source` and `source_detail` as **event-scoped custom dimensions** in
+GA4 (Admin → Custom definitions) before they appear in exploration reports;
+they are collected either way and are in BigQuery from the first event.
+
+### Banner clicks
+
+`select_promotion` carries `promotion_name` (what marketing called the banner),
+`promotion_id`, `creative_slot`, and `banner_destination` (the deep link or
+sheet it opened). The slot separates the three banner surfaces:
+
+| `creative_slot` | Surface | `promotion_id` |
+| --- | --- | --- |
+| `home_hero_carousel` | Home hero slide with a deep link | Banner id |
+| `home_spotlight_rail` | "The Spotlight" rail card | Banner id |
+| `golden_hour_modal` | Golden Hour card's cocktail action | Window mode (`sunset`), not the dated occurrence key |
+
+A hero slide may ship artwork with no headline; those report under the banner
+id, and untappable slides fire nothing at all. Whatever the banner opens is
+attributed with the matching `source`, so a click and the sale behind it join
+up without a session-scoped attribution model.
+
+### The Cocktail Finder funnel
+
+The four steps the funnel is built from, in order:
+
+1. `screen_view` with `screen_name = cocktail_finder` — a visit.
+2. `finder_bottle_selected` with `bottle_name` and `selected_bottle_count` —
+   the bottle choice. The deselect event carries the same parameters, and a
+   count of `0` is the customer clearing their selection.
+3. `view_item` where `source = cocktail_finder` — which cocktail details were
+   opened from the results, by name and category.
+4. `add_to_cart` where `source = cocktail_finder` — which of those were added.
+
+Steps 3 and 4 carry the bottle in `source_detail` while exactly one is
+selected. With several selected no single bottle sent them there, so the
+`finder_bottle_selected` events are what covers that case.
+
+### Clarity
+
+Clarity gets the same funnel, in the form Clarity can use: a custom event per
+step and session tags to filter recordings by. Firebase answers *how many*;
+Clarity is how you watch the sessions behind a number.
+
+| Tag | Set by |
+| --- | --- |
+| `product_viewed` | `view_item` |
+| `product_added` | `add_to_cart` |
+| `product_category` | Both |
+| `product_source` | Both, when a source is named |
+| `banner_clicked` | `select_promotion` |
+| `finder_bottle` | `finder_bottle_selected` |
+
+Tags carry catalog and banner names only — never search text or anything else
+the customer typed. Clarity is release-only, so these do not appear in a debug
+run even with `ANALYTICS_ENABLE_DEBUG=true`, which affects Firebase and Meta.
 
 Firebase Analytics is disabled in debug builds by default. For a deliberate
 DebugView validation build, pass:

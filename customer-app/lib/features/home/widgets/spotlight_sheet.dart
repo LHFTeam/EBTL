@@ -136,6 +136,8 @@ class _SpotlightSheetState extends State<SpotlightSheet> {
       product: product,
       locationId: widget.locationId,
       onCartChanged: widget.onCartChanged,
+      analyticsSource: AnalyticsSource.spotlight,
+      analyticsSourceDetail: banner.title,
     );
   }
 
@@ -178,6 +180,8 @@ class _SpotlightSheetState extends State<SpotlightSheet> {
           price: variant.priceIncVat,
           quantity: 1,
           currency: variant.currency,
+          source: AnalyticsSource.spotlight,
+          sourceDetail: banner.title,
         ),
       );
 
@@ -215,8 +219,7 @@ class _SpotlightSheetState extends State<SpotlightSheet> {
                 child: Stack(
                   children: [
                     AspectRatio(
-                      aspectRatio:
-                          HomeScreenVisuals.spotlightBannerAspectRatio,
+                      aspectRatio: HomeScreenVisuals.spotlightBannerAspectRatio,
                       child: NetworkOrAssetImage(
                         imageUrl: banner.imageUrl,
                         asset: 'assets/banners/explore_hero.webp',
@@ -269,10 +272,7 @@ class _SpotlightSheetState extends State<SpotlightSheet> {
                 const EbtlLoadingSliver(label: 'Loading products...')
               else if (errorMessage != null)
                 SliverToBoxAdapter(
-                  child: InlineErrorCard(
-                    message: errorMessage!,
-                    onRetry: load,
-                  ),
+                  child: InlineErrorCard(message: errorMessage!, onRetry: load),
                 )
               else if (products.isEmpty)
                 const SliverToBoxAdapter(

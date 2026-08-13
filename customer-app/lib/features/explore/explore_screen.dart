@@ -30,7 +30,7 @@ class ExploreScreen extends StatefulWidget {
   final AppData data;
   final CartChangedCallback onCartChanged;
   final VoidCallback onOpenFinder;
-  final Future<void> Function(Cocktail cocktail) onOpenCocktail;
+  final OpenCocktailCallback onOpenCocktail;
   final int unreadNotificationCount;
   final VoidCallback onOpenNotifications;
   final int activeOrdersCount;
@@ -267,6 +267,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
           price: variant.priceIncVat,
           quantity: 1,
           currency: variant.currency,
+          source: AnalyticsSource.explore,
         ),
       );
 
