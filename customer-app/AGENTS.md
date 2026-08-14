@@ -394,6 +394,18 @@ an endpoint, copy the existing shape:
   gateway's payment window before it moves the order. Both the sheet and the
   poll live in `services/payment_sheet_service.dart` — checkout and the order
   screen share them; do not re-implement either.
+- **Analytics source** — every product detail view and cart add names the
+  surface it came from, as an `AnalyticsSource` constant on `AnalyticsItem`
+  (`source`) plus the instance of it (`sourceDetail`: the Finder bottle, the
+  banner title, the category). That is what makes "Finder → detail → cart"
+  one report rather than three unjoinable ones, so **a new way to open a
+  product must name itself** — `showShopProductDetailSheet` and
+  `CocktailDetailScreen` both require it rather than defaulting, and the
+  `OpenCocktailCallback` typedef carries it down through the shell. See
+  `services/analytics_service.dart`, and the root `TRACKING_SETUP.md` for what
+  each event reports. Banner taps go through
+  `AnalyticsService.logPromotionSelected`; whatever the banner opens takes the
+  matching source, so the click and the sale behind it join up.
 - **Favorites** — per-anonymous-customer favorite cocktails
   (`/api/customer/favorites`), surfaced on the profile and the cocktail detail
   screen. Browsing cards carry the add-to-cart plus in that corner instead.

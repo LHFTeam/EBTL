@@ -127,7 +127,12 @@ Mac keeps working with automatic signing.
 - Customer product analytics uses Firebase project `ebtl-37ddb`. It records
   PII-free screen and commerce events through `AnalyticsService`; customer
   names, phone numbers, addresses, and payment details must never be added to
-  event parameters.
+  event parameters. Product views and cart adds report the product by name and
+  category and name the surface they came from; banner taps and Cocktail Finder
+  bottle choices are reported too. The same funnel reaches Clarity as custom
+  events and session tags, so a count in Firebase can be turned into the
+  recordings behind it. See the root `TRACKING_SETUP.md` for the event and
+  parameter reference.
 - Native Meta App Events uses Meta Developer App `1611789933929380` through
   the same `AnalyticsService` boundary. The App ID and Client Token are public
   native client configuration; the Meta App Secret must never be committed.

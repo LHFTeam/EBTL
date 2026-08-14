@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Release-only entitlements, used by the TestFlight/App Store archive.
+	     Debug and Profile keep Runner.entitlements with "development".
+
+	     This has to be a separate file: Xcode signs the archive with whatever
+	     the entitlements file says and does not copy aps-environment out of the
+	     provisioning profile, so a Release build sharing the development file
+	     ships a sandbox-registered app. APNs then rejects every push for it
+	     with BadDeviceToken, because firebase_messaging registers the device
+	     token as FIRMessagingAPNSTokenTypeProd in any non-DEBUG build. -->
+	<key>aps-environment</key>
+	<string>production</string>
+</dict>
+</plist>

@@ -118,6 +118,48 @@ class _FinderScreenState extends State<FinderScreen> {
     });
   }
 
+  /// Adds or removes a bottle and reports the choice — the Finder's first
+  /// funnel step, and the one nothing else records. What follows it is
+  /// ordinary product tracking: the cocktails opened from these results carry
+  /// [AnalyticsSource.cocktailFinder], and so does anything added from them.
+  ///
+  /// The name, not the id, is what the report reads; an id no longer in the
+  /// payload has no name to report, so the toggle still happens and only the
+  /// event is skipped.
+  void toggleLiquorType(String liquorTypeId) {
+    final isSelected = !selectedLiquorTypeIds.contains(liquorTypeId);
+
+    setState(() {
+      if (isSelected) {
+        selectedLiquorTypeIds.add(liquorTypeId);
+      } else {
+        selectedLiquorTypeIds.remove(liquorTypeId);
+      }
+
+      resultsFuture = loadResults();
+    });
+
+    final bottle = liquorTypeNamed(liquorTypeId);
+    if (bottle == null) return;
+
+    AnalyticsService.logFinderBottleChanged(
+      bottleName: bottle,
+      isSelected: isSelected,
+      selectionCount: selectedLiquorTypeIds.length,
+    );
+  }
+
+  /// The bottle's name, as the reports read it. An id no longer in the payload
+  /// has none to give.
+  String? liquorTypeNamed(String? liquorTypeId) {
+    if (liquorTypeId == null) return null;
+
+    return widget.data.liquorTypes
+        .where((liquor) => liquor.id == liquorTypeId)
+        .firstOrNull
+        ?.name;
+  }
+
   /// The serving the plus adds: the first one that can actually be ordered,
   /// falling back to an active one so the request answers with the reason
   /// rather than the card refusing silently.
@@ -187,6 +229,8 @@ class _FinderScreenState extends State<FinderScreen> {
           price: variant.priceIncVat,
           quantity: 1,
           currency: variant.currency,
+          source: AnalyticsSource.cocktailFinder,
+          sourceDetail: liquorTypeNamed(liquorTypeId),
         ),
       );
 
@@ -235,163 +279,151 @@ class _FinderScreenState extends State<FinderScreen> {
   Widget buildScroll() {
     return CustomScrollView(
       slivers: [
+        SliverToBoxAdapter(
+          child: FinderHeader(
+            liquorTypes: widget.data.liquorTypes,
+            onBack: widget.onBack,
+            selectedLiquorTypeIds: selectedLiquorTypeIds,
+            onToggle: toggleLiquorType,
+            onClear: () {
+              selectedLiquorTypeIds.clear();
+              selectedProductTagNames.clear();
+              reloadResults();
+            },
+          ),
+        ),
+        if (widget.data.finderOptions.productTags.isNotEmpty)
           SliverToBoxAdapter(
-            child: FinderHeader(
-              liquorTypes: widget.data.liquorTypes,
-              onBack: widget.onBack,
-              selectedLiquorTypeIds: selectedLiquorTypeIds,
-              onToggle: (liquorTypeId) {
+            child: ProductTagFilterSection(
+              productTags: widget.data.finderOptions.productTags,
+              selectedTagNames: selectedProductTagNames,
+              onToggle: (tagName) {
                 setState(() {
-                  if (selectedLiquorTypeIds.contains(liquorTypeId)) {
-                    selectedLiquorTypeIds.remove(liquorTypeId);
+                  if (selectedProductTagNames.contains(tagName)) {
+                    selectedProductTagNames.remove(tagName);
                   } else {
-                    selectedLiquorTypeIds.add(liquorTypeId);
+                    selectedProductTagNames.add(tagName);
                   }
                   resultsFuture = loadResults();
                 });
               },
               onClear: () {
-                selectedLiquorTypeIds.clear();
                 selectedProductTagNames.clear();
                 reloadResults();
               },
             ),
           ),
-          if (widget.data.finderOptions.productTags.isNotEmpty)
-            SliverToBoxAdapter(
-              child: ProductTagFilterSection(
-                productTags: widget.data.finderOptions.productTags,
-                selectedTagNames: selectedProductTagNames,
-                onToggle: (tagName) {
-                  setState(() {
-                    if (selectedProductTagNames.contains(tagName)) {
-                      selectedProductTagNames.remove(tagName);
-                    } else {
-                      selectedProductTagNames.add(tagName);
-                    }
-                    resultsFuture = loadResults();
-                  });
-                },
-                onClear: () {
-                  selectedProductTagNames.clear();
-                  reloadResults();
-                },
-              ),
-            ),
-          SliverToBoxAdapter(
-            child: SelectedChips(
-              liquorTypes: widget.data.liquorTypes,
-              productTags: widget.data.finderOptions.productTags,
-              selectedLiquorTypeIds: selectedLiquorTypeIds,
-              selectedProductTagNames: selectedProductTagNames,
-              onRemoveLiquor: (id) {
-                selectedLiquorTypeIds.remove(id);
-                reloadResults();
-              },
-              onRemoveTag: (name) {
-                selectedProductTagNames.remove(name);
-                reloadResults();
-              },
-            ),
+        SliverToBoxAdapter(
+          child: SelectedChips(
+            liquorTypes: widget.data.liquorTypes,
+            productTags: widget.data.finderOptions.productTags,
+            selectedLiquorTypeIds: selectedLiquorTypeIds,
+            selectedProductTagNames: selectedProductTagNames,
+            // The chip's X is the same choice as un-tapping the bottle, so it
+            // goes through the same path and is reported the same way.
+            onRemoveLiquor: toggleLiquorType,
+            onRemoveTag: (name) {
+              selectedProductTagNames.remove(name);
+              reloadResults();
+            },
           ),
-          SliverToBoxAdapter(
-            child: FinderSearchBox(
-              controller: searchController,
-              onSubmitted: (_) {
-                AnalyticsService.logSearch(
-                  surface: 'cocktail_finder',
-                  hasQuery: searchController.text.trim().isNotEmpty,
+        ),
+        SliverToBoxAdapter(
+          child: FinderSearchBox(
+            controller: searchController,
+            onSubmitted: (_) {
+              AnalyticsService.logSearch(
+                surface: 'cocktail_finder',
+                hasQuery: searchController.text.trim().isNotEmpty,
+              );
+              reloadResults();
+            },
+            onClear: () {
+              searchController.clear();
+              reloadResults();
+            },
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: FutureBuilder<CocktailSearchResult>(
+            future: resultsFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const EbtlLoadingSection(label: 'Finding cocktails...');
+              }
+
+              if (snapshot.hasError) {
+                return InlineErrorCard(
+                  message: apiErrorMessage(snapshot.error!),
+                  onRetry: reloadResults,
                 );
-                reloadResults();
-              },
-              onClear: () {
-                searchController.clear();
-                reloadResults();
-              },
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: FutureBuilder<CocktailSearchResult>(
-              future: resultsFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const EbtlLoadingSection(
-                    label: 'Finding cocktails...',
+              }
+
+              final result =
+                  snapshot.data ??
+                  const CocktailSearchResult(
+                    results: [],
+                    total: 0,
+                    page: 1,
+                    pageSize: 50,
                   );
-                }
 
-                if (snapshot.hasError) {
-                  return InlineErrorCard(
-                    message: apiErrorMessage(snapshot.error!),
-                    onRetry: reloadResults,
-                  );
-                }
+              return Column(
+                children: [
+                  FinderResultsHeader(
+                    count: result.total,
+                    sortOptions: widget.data.finderOptions.sortOptions,
+                    sortIndex: sortIndex,
+                    onSortChanged: (index) {
+                      setState(() {
+                        sortIndex = index;
+                        resultsFuture = loadResults();
+                      });
+                    },
+                  ),
+                  if (result.results.isEmpty)
+                    const EmptyStateCard(
+                      message: 'No cocktails match your current filters.',
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(22, 10, 22, 28),
+                      child: GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: result.results.length,
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              mainAxisSpacing: 14,
+                              crossAxisSpacing: 14,
+                              childAspectRatio: 0.62,
+                            ),
+                        itemBuilder: (context, index) {
+                          final cocktail = result.results[index];
+                          final detailLiquorTypeId =
+                              selectedLiquorTypeIds.length == 1
+                              ? selectedLiquorTypeIds.first
+                              : null;
 
-                final result =
-                    snapshot.data ??
-                    const CocktailSearchResult(
-                      results: [],
-                      total: 0,
-                      page: 1,
-                      pageSize: 50,
-                    );
-
-                return Column(
-                  children: [
-                    FinderResultsHeader(
-                      count: result.total,
-                      sortOptions: widget.data.finderOptions.sortOptions,
-                      sortIndex: sortIndex,
-                      onSortChanged: (index) {
-                        setState(() {
-                          sortIndex = index;
-                          resultsFuture = loadResults();
-                        });
-                      },
-                    ),
-                    if (result.results.isEmpty)
-                      const EmptyStateCard(
-                        message: 'No cocktails match your current filters.',
-                      )
-                    else
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(22, 10, 22, 28),
-                        child: GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: result.results.length,
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                mainAxisSpacing: 14,
-                                crossAxisSpacing: 14,
-                                childAspectRatio: 0.62,
-                              ),
-                          itemBuilder: (context, index) {
-                            final cocktail = result.results[index];
-                            final detailLiquorTypeId =
-                                selectedLiquorTypeIds.length == 1
-                                ? selectedLiquorTypeIds.first
-                                : null;
-
-                            return CocktailGridCard(
-                              cocktail: cocktail,
-                              onTap: () => widget.onOpenCocktail(
-                                cocktail,
-                                detailLiquorTypeId,
-                              ),
-                              onAdd: () =>
-                                  quickAddCocktail(cocktail, detailLiquorTypeId),
-                              isAdding: addingCocktailId == cocktail.id,
-                            );
-                          },
-                        ),
+                          return CocktailGridCard(
+                            cocktail: cocktail,
+                            onTap: () => widget.onOpenCocktail(
+                              cocktail,
+                              detailLiquorTypeId,
+                            ),
+                            onAdd: () =>
+                                quickAddCocktail(cocktail, detailLiquorTypeId),
+                            isAdding: addingCocktailId == cocktail.id,
+                          );
+                        },
                       ),
-                  ],
-                );
-              },
-            ),
+                    ),
+                ],
+              );
+            },
           ),
+        ),
       ],
     );
   }

@@ -13,7 +13,10 @@ class HomeScreenVisuals {
   // Featured Products Cards
   static const bool showFeaturedProductCardPrice = false;
 
-  static const double featuredProductCardHeight = 200;
+  // The height carries the artwork plus the tallest the text block can get: a
+  // two-line name, the short description over two lines, and the corner action.
+  // Raising a font size here without raising this overflows the rail.
+  static const double featuredProductCardHeight = 204;
   static const double featuredProductCardWidth = 128;
   static const double featuredProductCardImageHeight = 110;
 
@@ -24,10 +27,10 @@ class HomeScreenVisuals {
     8,
   );
 
-  static const double featuredProductCardNameFontSize = 11;
+  static const double featuredProductCardNameFontSize = 12;
   static const double featuredProductCardNameLineHeight = 1.12;
 
-  static const double featuredProductCardShortDescriptionFontSize = 9;
+  static const double featuredProductCardShortDescriptionFontSize = 11;
   static const double featuredProductCardShortDescriptionLineHeight = 1.1;
 
   // Order It Again Rail (Home v2, live order only)
@@ -63,11 +66,20 @@ class HomeScreenVisuals {
 
   // Recently Viewed Rail (Home v2)
   //
-  // Drawn from the on-device snapshot of what the customer opened, so the card
-  // carries artwork, name and price only.
+  // Drawn from the on-device snapshot of what the customer opened: artwork,
+  // name, short description and price, over the add-to-cart action. The rail
+  // height carries the tallest that stack gets — a two-line name, a two-line
+  // description and the 30pt button — so a font size raised here has to be paid
+  // for there.
   static const double recentlyViewedCardWidth = 128;
   static const double recentlyViewedCardImageHeight = 96;
-  static const double recentlyViewedRailHeight = 168;
+  static const double recentlyViewedRailHeight = 206;
+
+  static const double recentlyViewedCardNameFontSize = 12;
+  static const double recentlyViewedCardNameLineHeight = 1.12;
+
+  static const double recentlyViewedCardShortDescriptionFontSize = 11;
+  static const double recentlyViewedCardShortDescriptionLineHeight = 1.1;
 
   // Home Liquor Bottle Cards
   //

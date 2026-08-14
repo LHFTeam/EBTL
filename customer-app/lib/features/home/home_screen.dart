@@ -72,18 +72,20 @@ class HomeScreen extends StatefulWidget {
   final ValueChanged<String> onSearchQueryChanged;
   final VoidCallback onOpenCart;
   final VoidCallback onOpenShop;
+
   /// Opens the live order's own detail screen. The card tracks one order, so
   /// it goes straight there rather than by way of the active-orders list.
   final ValueChanged<ProfileOrder> onOpenLiveOrder;
   final VoidCallback onOpenOrderHistory;
   final VoidCallback onOpenFinder;
   final ValueChanged<LiquorType> onOpenFinderWithBottle;
-  final Future<void> Function(Cocktail cocktail) onOpenCocktail;
+  final OpenCocktailCallback onOpenCocktail;
 
   /// Opens a cocktail the screen only knows the slug of — the "Recently
   /// viewed" rail, which is drawn from an on-device snapshot rather than from
   /// a loaded catalog.
-  final Future<void> Function(String slug) onOpenCocktailBySlug;
+  final OpenCocktailBySlugCallback onOpenCocktailBySlug;
+
   /// Follows a hero banner's deep link. Only called for banners that carry one.
   final ValueChanged<HomeHeroBanner> onOpenHeroBanner;
   final ValueChanged<ServiceLocation> onLocationSelected;
@@ -122,6 +124,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// The order whose "add again" request is in flight, if any.
   String? reorderingOrderId;
+
+  /// The recently-viewed product whose add-to-cart request is in flight, keyed
+  /// by slug — the only id the on-device snapshot carries.
+  String? addingRecentSlug;
 
   /// What the customer opened last, newest first, as stored on-device.
   List<RecentlyViewedProduct> recentlyViewed = const [];
@@ -369,6 +375,7 @@ class _HomeScreenState extends State<HomeScreen> {
           price: variant.priceIncVat,
           quantity: quantity,
           currency: variant.currency,
+          source: AnalyticsSource.orderAgain,
         ),
       );
 
@@ -569,6 +576,13 @@ class _HomeScreenState extends State<HomeScreen> {
   /// banner keeps opening the curated product grid, same as before this
   /// destination existed.
   void openSpotlightBanner(SpotlightBanner banner) {
+    AnalyticsService.logPromotionSelected(
+      promotionId: banner.id,
+      promotionName: banner.title,
+      slot: AnalyticsPromotionSlot.spotlightRail,
+      destination: banner.isMarkdownSlide ? 'markdown' : 'products',
+    );
+
     if (banner.isMarkdownSlide) {
       showSpotlightMarkdownSheet(context: context, banner: banner);
       return;
@@ -579,8 +593,11 @@ class _HomeScreenState extends State<HomeScreen> {
       banner: banner,
       locationId: widget.data.selectedLocationId,
       onCartChanged: widget.onCartChanged,
-      onOpenCocktail: (product) =>
-          widget.onOpenCocktail(Cocktail.fromShopProduct(product)),
+      onOpenCocktail: (product) => widget.onOpenCocktail(
+        Cocktail.fromShopProduct(product),
+        source: AnalyticsSource.spotlight,
+        sourceDetail: banner.title,
+      ),
     );
   }
 
@@ -612,6 +629,8 @@ class _HomeScreenState extends State<HomeScreen> {
             return HomeRecentlyViewedCard(
               product: product,
               onTap: () => openRecentlyViewed(product),
+              onAdd: () => addRecentlyViewedToCart(product),
+              isAdding: addingRecentSlug == product.slug,
             );
           },
         ),
@@ -621,13 +640,85 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> openRecentlyViewed(RecentlyViewedProduct product) async {
-    await widget.onOpenCocktailBySlug(product.slug);
+    await widget.onOpenCocktailBySlug(
+      product.slug,
+      source: AnalyticsSource.recentlyViewed,
+    );
     if (!mounted) return;
     await refreshRecentlyViewed();
   }
 
+  /// Puts a recently-viewed cocktail back in the cart from the rail itself.
+  ///
+  /// The snapshot is display-only — no product id, no variant, no availability
+  /// — so the cocktail is looked up again by slug and added at today's price and
+  /// availability, the same way [orderAgain] does it. Customizations are not
+  /// offered here; the card's tap target opens the detail screen for those.
+  Future<void> addRecentlyViewedToCart(RecentlyViewedProduct product) async {
+    if (addingRecentSlug != null) return;
+
+    final locationId = widget.data.selectedLocationId?.trim();
+    if (locationId == null || locationId.isEmpty) {
+      showMessage('Choose a beach cart before adding items.');
+      return;
+    }
+
+    setState(() => addingRecentSlug = product.slug);
+
+    try {
+      final detail = await ApiService.fetchCocktailDetail(
+        slug: product.slug,
+        locationId: locationId,
+      );
+      final cocktail = detail.cocktail;
+      final variant = cocktail.variant;
+
+      if (variant == null || !cocktail.canAddToCart) {
+        if (!mounted) return;
+        setState(() => addingRecentSlug = null);
+        showMessage(cocktail.availabilityMessage);
+        return;
+      }
+
+      final result = await ApiService.addCocktailToCart(
+        cocktailId: cocktail.id,
+        variantId: variant.id,
+        selectedQuantity: 1,
+        locationId: locationId,
+      );
+
+      AnalyticsService.logAddToCart(
+        AnalyticsItem(
+          id: cocktail.id,
+          name: cocktail.name,
+          category: cocktail.category?.name ?? 'cocktail',
+          variant: variant.name,
+          price: variant.priceIncVat,
+          quantity: 1,
+          currency: variant.currency,
+        ),
+      );
+
+      if (!mounted) return;
+
+      setState(() => addingRecentSlug = null);
+      widget.onCartChanged(result.totals);
+      showMessage(result.successMessage);
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() => addingRecentSlug = null);
+      showMessage(
+        apiErrorMessage(
+          error,
+          fallback: 'Could not add this item to your cart.',
+        ),
+      );
+    }
+  }
+
   Future<void> openFeaturedCocktail(Cocktail cocktail) async {
-    await widget.onOpenCocktail(cocktail);
+    await widget.onOpenCocktail(cocktail, source: AnalyticsSource.home);
     if (!mounted) return;
     await refreshRecentlyViewed();
   }

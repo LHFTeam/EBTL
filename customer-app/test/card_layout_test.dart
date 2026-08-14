@@ -27,6 +27,8 @@ import 'package:ebtl_customer_app/features/home/widgets/home_modules.dart';
 import 'package:ebtl_customer_app/features/shop/widgets/shop_product_widgets.dart';
 import 'package:ebtl_customer_app/core/theme/home_screen_visuals.dart';
 import 'package:ebtl_customer_app/models/cart_models.dart';
+import 'package:ebtl_customer_app/models/cocktail_models.dart';
+import 'package:ebtl_customer_app/shared/widgets/cocktail_card_widgets.dart';
 import 'package:ebtl_customer_app/models/recently_viewed.dart';
 import 'package:ebtl_customer_app/models/shop_models.dart';
 import 'package:ebtl_customer_app/models/spirit_models.dart';
@@ -78,8 +80,9 @@ final _plainCartItem = CartPageItem.fromJson({
   'availability': {'is_orderable': true},
 });
 
-Widget wrap(Widget child) =>
-    MaterialApp(home: Scaffold(body: Center(child: child)));
+Widget wrap(Widget child) => MaterialApp(
+  home: Scaffold(body: Center(child: child)),
+);
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
@@ -244,28 +247,71 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('recently-viewed card fits the Home rail', (tester) async {
+  // The rail height has to carry the card at its tallest: a name over two
+  // lines, a short description over two more, and the add-to-cart button under
+  // them. The subtitle-less case is the older snapshot, kept because stored
+  // entries predating the subtitle still draw this card.
+  group('recently-viewed card fits the Home rail', () {
+    Future<void> pumpCard(WidgetTester tester, {required String subtitle}) {
+      return tester.pumpWidget(
+        wrap(
+          SizedBox(
+            height: HomeScreenVisuals.recentlyViewedRailHeight,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(22, 0, 22, 4),
+              children: [
+                HomeRecentlyViewedCard(
+                  product: RecentlyViewedProduct(
+                    slug: 'mojito',
+                    name: 'Classic Mojito Beach Kit',
+                    imageUrl: null,
+                    imageAsset: 'assets/images/cocktail_placeholder.jpg',
+                    priceLabel: 'EGP 320',
+                    subtitle: subtitle,
+                    isCocktail: true,
+                  ),
+                  onTap: () {},
+                  onAdd: () {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('with a subtitle', (tester) async {
+      phone(tester);
+
+      await pumpCard(tester, subtitle: _product.shortDescription!);
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('without a subtitle', (tester) async {
+      phone(tester);
+
+      await pumpCard(tester, subtitle: '');
+
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  // Same contract for the featured rail: its fixed height has to hold a
+  // two-line name over a two-line short description and the corner action.
+  testWidgets('featured cocktail card fits its rail', (tester) async {
     phone(tester);
 
     await tester.pumpWidget(
       wrap(
         SizedBox(
-          height: HomeScreenVisuals.recentlyViewedRailHeight,
+          height: HomeScreenVisuals.featuredProductCardHeight,
           child: ListView(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(22, 0, 22, 4),
+            padding: const EdgeInsets.symmetric(horizontal: 22),
             children: [
-              HomeRecentlyViewedCard(
-                product: const RecentlyViewedProduct(
-                  slug: 'mojito',
-                  name: 'Classic Mojito Beach Kit',
-                  imageUrl: null,
-                  imageAsset: 'assets/images/cocktail_placeholder.jpg',
-                  priceLabel: 'EGP 320',
-                  isCocktail: true,
-                ),
-                onTap: () {},
-              ),
+              CocktailSmallCard(cocktail: Cocktail.fromShopProduct(_product)),
             ],
           ),
         ),

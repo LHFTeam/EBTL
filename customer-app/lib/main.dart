@@ -158,6 +158,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   static const Duration _liveOrderPollInterval = Duration(seconds: 20);
 
   int selectedIndex = EbtlBottomNav.homeIndex;
+
   /// The search text, shared by Home and Explore so a query typed on one is
   /// still there on the other.
   String searchQuery = '';
@@ -219,6 +220,10 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     // Dart timers keep firing while the app is paused, so stop polling in
     // the background and pick it back up (with an immediate check) on resume.
     if (state == AppLifecycleState.resumed) {
+      // Retries the device-token registration if it has not landed yet — the
+      // first attempt can lose a race with the iOS APNs handshake, and an
+      // unregistered device silently receives no push at all.
+      PushNotificationService.refreshRegistration();
       _startNotificationsPolling(notifyImmediately: true);
       _startLiveOrderPolling();
       _refreshActiveOrders();
@@ -431,8 +436,12 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
             Navigator.of(context).popUntil((route) => route.isFirst);
             handleBottomNavTap(index);
           },
-          onOpenProduct: (product) =>
-              openCocktailDetail(data, Cocktail.fromShopProduct(product)),
+          onOpenProduct: (product) => openCocktailDetail(
+            data,
+            Cocktail.fromShopProduct(product),
+            source: AnalyticsSource.shopCategory,
+            sourceDetail: category.name,
+          ),
         ),
       ),
     );
@@ -449,6 +458,18 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   void openHeroBanner(AppData data, HomeHeroBanner banner) {
     final link = banner.link;
 
+    if (link.kind == HeroBannerLinkKind.none) return;
+
+    // A slide may ship artwork with no copy, in which case the deep link is
+    // the only thing that distinguishes it in a report; the banner id is the
+    // fallback that always exists.
+    AnalyticsService.logPromotionSelected(
+      promotionId: banner.id,
+      promotionName: banner.headline ?? '',
+      slot: AnalyticsPromotionSlot.heroCarousel,
+      destination: banner.deepLink,
+    );
+
     switch (link.kind) {
       case HeroBannerLinkKind.none:
         return;
@@ -461,7 +482,12 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
       case HeroBannerLinkKind.orders:
         openOrderHistory();
       case HeroBannerLinkKind.cocktail:
-        openCocktailBySlug(data, link.value);
+        openCocktailBySlug(
+          data,
+          link.value,
+          source: AnalyticsSource.heroBanner,
+          sourceDetail: banner.headline,
+        );
       case HeroBannerLinkKind.category:
         final category = data.categories
             .where((candidate) => candidate.id == link.value)
@@ -536,7 +562,24 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         modal: modal,
         locationId: locationId,
         onCartChanged: handleCartChanged,
-        onOpenCocktail: () => openCocktailBySlug(data, modal.cocktail.slug),
+        onOpenCocktail: () {
+          AnalyticsService.logPromotionSelected(
+            // The window mode, not the occurrence key: the key carries a date,
+            // so using it would make every day's card a new promotion and
+            // leave nothing to compare week over week.
+            promotionId: modal.mode,
+            promotionName: modal.title,
+            slot: AnalyticsPromotionSlot.goldenHourModal,
+            destination: 'cocktail/${modal.cocktail.slug}',
+          );
+
+          openCocktailBySlug(
+            data,
+            modal.cocktail.slug,
+            source: AnalyticsSource.goldenHour,
+            sourceDetail: modal.title,
+          );
+        },
       );
     });
   }
@@ -634,6 +677,12 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
                   data,
                   cocktail,
                   liquorTypeId: liquorTypeId,
+                  source: AnalyticsSource.cocktailFinder,
+                  // The Finder passes a bottle only while exactly one is
+                  // selected, which is the case worth attributing: with
+                  // several picked, no single bottle sent them here. The
+                  // `finder_bottle_selected` events cover that case instead.
+                  sourceDetail: _liquorTypeName(data, liquorTypeId),
                 ),
               ),
             ),
@@ -651,6 +700,19 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     'cart',
     'profile',
   ];
+
+  /// The display name behind a liquor type id, for analytics that report the
+  /// bottle a customer picked rather than its id. Null when nothing is
+  /// selected, or when the id is one this payload no longer carries.
+  static String? _liquorTypeName(AppData data, String? liquorTypeId) {
+    final cleanId = liquorTypeId?.trim();
+    if (cleanId == null || cleanId.isEmpty) return null;
+
+    return data.liquorTypes
+        .where((liquor) => liquor.id == cleanId)
+        .firstOrNull
+        ?.name;
+  }
 
   void handleBottomNavTap(int index) {
     final safeIndex = index.clamp(0, EbtlBottomNav.tabCount - 1).toInt();
@@ -675,13 +737,21 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     AppData data,
     Cocktail cocktail, {
     String? liquorTypeId,
+    required String source,
+    String? sourceDetail,
   }) {
     if (cocktail.slug.trim().isEmpty) {
       showAppSnackBar(context, 'This cocktail is missing a detail link.');
       return Future.value();
     }
 
-    return openCocktailBySlug(data, cocktail.slug, liquorTypeId: liquorTypeId);
+    return openCocktailBySlug(
+      data,
+      cocktail.slug,
+      liquorTypeId: liquorTypeId,
+      source: source,
+      sourceDetail: sourceDetail,
+    );
   }
 
   /// The detail screen loads from the slug alone, so anything that knows one —
@@ -690,6 +760,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     AppData data,
     String slug, {
     String? liquorTypeId,
+    required String source,
+    String? sourceDetail,
   }) {
     return Navigator.of(context).push(
       slideUpModalRoute(
@@ -701,6 +773,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
           selectedNavIndex: selectedIndex,
           initialCartQuantity: data.cartSummary?.totalQuantity ?? 0,
           onCartChanged: handleCartChanged,
+          analyticsSource: source,
+          analyticsSourceDetail: sourceDetail,
           onBottomNavTap: (index) {
             // The Finder may also be on the stack, so unwind back to the shell
             // rather than popping a single route.
@@ -735,7 +809,9 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
 
     // Home resolves its layout from what the customer has in flight: the order
     // still being made, and the finished ones it can offer to repeat.
-    final liveOrder = customerOrders.where((order) => order.isActive).firstOrNull;
+    final liveOrder = customerOrders
+        .where((order) => order.isActive)
+        .firstOrNull;
     final pastOrders = customerOrders
         .where((order) => !order.isActive)
         .toList(growable: false);
@@ -756,8 +832,20 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         onOpenOrderHistory: openOrderHistory,
         onOpenFinder: () => openFinder(),
         onOpenFinderWithBottle: (liquor) => openFinder(liquorTypeId: liquor.id),
-        onOpenCocktail: (cocktail) => openCocktailDetail(data, cocktail),
-        onOpenCocktailBySlug: (slug) => openCocktailBySlug(data, slug),
+        onOpenCocktail: (cocktail, {required source, sourceDetail}) =>
+            openCocktailDetail(
+              data,
+              cocktail,
+              source: source,
+              sourceDetail: sourceDetail,
+            ),
+        onOpenCocktailBySlug: (slug, {required source, sourceDetail}) =>
+            openCocktailBySlug(
+              data,
+              slug,
+              source: source,
+              sourceDetail: sourceDetail,
+            ),
         onOpenHeroBanner: (banner) => openHeroBanner(data, banner),
         onLocationSelected: selectLocation,
         onCartChanged: handleCartChanged,
@@ -766,7 +854,13 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         data: data,
         onCartChanged: handleCartChanged,
         onOpenFinder: () => openFinder(),
-        onOpenCocktail: (cocktail) => openCocktailDetail(data, cocktail),
+        onOpenCocktail: (cocktail, {required source, sourceDetail}) =>
+            openCocktailDetail(
+              data,
+              cocktail,
+              source: source,
+              sourceDetail: sourceDetail,
+            ),
         unreadNotificationCount: unreadNotificationCount,
         onOpenNotifications: openNotifications,
         activeOrdersCount: activeOrdersCount,

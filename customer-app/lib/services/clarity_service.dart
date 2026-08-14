@@ -55,4 +55,32 @@ class ClarityService {
     if (!isEnabled || eventName.trim().isEmpty) return;
     Clarity.sendCustomEvent(eventName);
   }
+
+  /// Tags the active recording so sessions can be filtered on the Clarity
+  /// dashboard — "show me sessions that viewed Negroni", "sessions that picked
+  /// Gin in the Finder". Clarity gives no numbers for these; the counting is
+  /// Firebase's job. A tag is what turns a number there into the recordings
+  /// behind it here.
+  ///
+  /// Values must stay PII-free — catalog and banner names only, never anything
+  /// the customer typed. Clarity rejects blank keys/values and caps both at
+  /// 255 characters, so an over-long name is trimmed to fit rather than
+  /// dropped.
+  static void setTag(String key, String value) {
+    if (!isEnabled) return;
+
+    final cleanKey = key.trim();
+    final cleanValue = value.trim();
+    if (cleanKey.isEmpty || cleanValue.isEmpty) return;
+
+    Clarity.setCustomTag(
+      cleanKey,
+      cleanValue.length > _maxTagLength
+          ? cleanValue.substring(0, _maxTagLength)
+          : cleanValue,
+    );
+  }
+
+  /// Clarity's limit on both halves of a custom tag.
+  static const int _maxTagLength = 255;
 }
