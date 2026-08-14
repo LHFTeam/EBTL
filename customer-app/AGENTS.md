@@ -251,6 +251,15 @@ scroll nears the end — there is no second request and no "View more" button.
 Its cards are the Finder's `CocktailGridCard` (through `ShopCatalogCard`), with
 the favorite heart swapped for the plus that adds to the cart.
 
+**The plus is the corner action on every browsing card.** `CocktailCardShell`
+draws the heart only when no `onAdd` is passed, so Explore's grid and the
+Cocktail Finder's results both carry the add-to-cart plus and the heart is left
+to the detail screen and the favorites list. The Finder adds through
+`addCocktailToCart` — one serving of the first orderable variant, no removed
+ingredients and no add-ons, with the liquor type it is filtered by when exactly
+one is selected. Anything beyond that plain add is the detail screen's job,
+which tapping the card still opens.
+
 **"Recently viewed" lives on Home, not Explore.** `ApiService` stores a display
 snapshot of each opened product (`models/recently_viewed.dart`) rather than a
 bare slug, because Home never loads the shop catalog and so has nothing to
@@ -398,7 +407,8 @@ an endpoint, copy the existing shape:
   `AnalyticsService.logPromotionSelected`; whatever the banner opens takes the
   matching source, so the click and the sale behind it join up.
 - **Favorites** — per-anonymous-customer favorite cocktails
-  (`/api/customer/favorites`), surfaced on profile and cocktail cards.
+  (`/api/customer/favorites`), surfaced on the profile and the cocktail detail
+  screen. Browsing cards carry the add-to-cart plus in that corner instead.
 - **Spirits** — the customer's bottles, as two lists on the profile
   (`/api/customer/spirits`, `models/spirit_models.dart`,
   `features/profile/favorite_spirits_screen.dart`). *My Spirits* is curated by

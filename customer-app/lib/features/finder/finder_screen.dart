@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../models/app_data.dart';
 import '../../models/cocktail_models.dart';
+import '../../models/common_models.dart';
+import '../../models/product_models.dart';
 import '../../services/analytics_service.dart';
 import '../../services/api_service.dart';
 import '../../core/network/api_exception.dart';
@@ -15,6 +17,7 @@ class FinderScreen extends StatefulWidget {
   final AppData data;
   final void Function(Cocktail cocktail, String? liquorTypeId) onOpenCocktail;
   final String? initialLiquorTypeId;
+  final CartChangedCallback onCartChanged;
 
   /// Set when the Finder is pushed as a route (it no longer has a nav tab),
   /// which is when it needs a way back.
@@ -25,6 +28,7 @@ class FinderScreen extends StatefulWidget {
     required this.data,
     required this.initialLiquorTypeId,
     required this.onOpenCocktail,
+    required this.onCartChanged,
     this.onBack,
   });
 
@@ -39,6 +43,10 @@ class _FinderScreenState extends State<FinderScreen> {
 
   int sortIndex = 0;
   late Future<CocktailSearchResult> resultsFuture;
+
+  /// The cocktail whose card is waiting on an add-to-cart request, so its plus
+  /// spins and a second tap anywhere on the grid is ignored.
+  String? addingCocktailId;
 
   @override
   void initState() {
@@ -131,16 +139,120 @@ class _FinderScreenState extends State<FinderScreen> {
       resultsFuture = loadResults();
     });
 
-    final bottle = widget.data.liquorTypes
-        .where((liquor) => liquor.id == liquorTypeId)
-        .firstOrNull;
+    final bottle = liquorTypeNamed(liquorTypeId);
     if (bottle == null) return;
 
     AnalyticsService.logFinderBottleChanged(
-      bottleName: bottle.name,
+      bottleName: bottle,
       isSelected: isSelected,
       selectionCount: selectedLiquorTypeIds.length,
     );
+  }
+
+  /// The bottle's name, as the reports read it. An id no longer in the payload
+  /// has none to give.
+  String? liquorTypeNamed(String? liquorTypeId) {
+    if (liquorTypeId == null) return null;
+
+    return widget.data.liquorTypes
+        .where((liquor) => liquor.id == liquorTypeId)
+        .firstOrNull
+        ?.name;
+  }
+
+  /// The serving the plus adds: the first one that can actually be ordered,
+  /// falling back to an active one so the request answers with the reason
+  /// rather than the card refusing silently.
+  ProductVariant? orderableVariantFor(Cocktail cocktail) {
+    for (final variant in cocktail.variants) {
+      if (variant.isActive && variant.availability.isOrderable) {
+        return variant;
+      }
+    }
+
+    if (!cocktail.availability.isOrderable) return null;
+
+    for (final variant in cocktail.variants) {
+      if (variant.isActive) return variant;
+    }
+
+    return null;
+  }
+
+  String unavailableReasonFor(Cocktail cocktail) {
+    final reason = cocktail.availability.reason?.trim();
+    if (reason != null && reason.isNotEmpty) return reason;
+
+    return 'This cocktail is currently unavailable.';
+  }
+
+  /// The card's plus adds the cocktail as it comes — one serving, no removed
+  /// ingredients and no add-ons. Anything beyond that is the detail screen's
+  /// job, which the card itself still opens.
+  Future<void> quickAddCocktail(Cocktail cocktail, String? liquorTypeId) async {
+    if (addingCocktailId != null) return;
+
+    final locationId = widget.data.selectedLocationId?.trim();
+    if (locationId == null || locationId.isEmpty) {
+      showAppSnackBar(context, 'Choose a beach cart before adding items.');
+      return;
+    }
+
+    if (!cocktail.availability.isOrderable) {
+      showAppSnackBar(context, unavailableReasonFor(cocktail));
+      return;
+    }
+
+    final variant = orderableVariantFor(cocktail);
+    if (variant == null) {
+      showAppSnackBar(context, unavailableReasonFor(cocktail));
+      return;
+    }
+
+    setState(() => addingCocktailId = cocktail.id);
+
+    try {
+      final result = await ApiService.addCocktailToCart(
+        cocktailId: cocktail.id,
+        variantId: variant.id,
+        selectedQuantity: 1,
+        locationId: locationId,
+        selectedLiquorTypeId: liquorTypeId,
+      );
+
+      AnalyticsService.logAddToCart(
+        AnalyticsItem(
+          id: cocktail.id,
+          name: cocktail.name,
+          category: cocktail.category?.name ?? 'Cocktails',
+          variant: variant.name,
+          price: variant.priceIncVat,
+          quantity: 1,
+          currency: variant.currency,
+          source: AnalyticsSource.cocktailFinder,
+          sourceDetail: liquorTypeNamed(liquorTypeId),
+        ),
+      );
+
+      if (!mounted) return;
+
+      setState(() => addingCocktailId = null);
+
+      showAppSnackBar(context, result.successMessage);
+      widget.onCartChanged(result.totals);
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() => addingCocktailId = null);
+
+      showAppSnackBar(
+        context,
+        apiErrorMessage(
+          error,
+          fallback: 'Could not add this cocktail to your cart.',
+        ),
+      );
+    }
   }
 
   @override
@@ -300,6 +412,9 @@ class _FinderScreenState extends State<FinderScreen> {
                               cocktail,
                               detailLiquorTypeId,
                             ),
+                            onAdd: () =>
+                                quickAddCocktail(cocktail, detailLiquorTypeId),
+                            isAdding: addingCocktailId == cocktail.id,
                           );
                         },
                       ),

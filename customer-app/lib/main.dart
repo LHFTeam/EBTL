@@ -672,6 +672,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
                     ? null
                     : cleanLiquorTypeId,
                 onBack: () => Navigator.of(context).pop(),
+                onCartChanged: handleCartChanged,
                 onOpenCocktail: (cocktail, liquorTypeId) => openCocktailDetail(
                   data,
                   cocktail,
