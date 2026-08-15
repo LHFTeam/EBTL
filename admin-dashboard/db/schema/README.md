@@ -23,10 +23,13 @@ Captured from project `pfcncajijvtvsdwgwbjl` ("EBTL 1", eu-west-1, Postgres 17).
 | `50_functions.sql` | 14 functions in `public` |
 | `60_triggers.sql` | 41 triggers |
 | `70_rls_policies.sql` | 135 RLS policies |
-| `80_comments.sql` | 66 table and column comments |
+| `80_comments.sql` | 68 table and column comments |
 
 These counts are what the files contain, and every object in them was compared
-against the live catalogs on 2026-08-11, object by object. The forecasting
+against the live catalogs on 2026-08-11, object by object. The two
+`product_tags` visibility columns and their comments (migration 20260815202608)
+were added to the capture when they were applied, from the tool's own output for
+that table; nothing else was re-verified that day. The forecasting
 module (migration 20260807171440) was appended as a labelled block at the end of
 each file rather than sorted inline; that block is now sorted into place, which
 is why the diff that refreshed these counts is larger than the schema change
