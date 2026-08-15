@@ -45,19 +45,29 @@ class CocktailGridCard extends StatelessWidget {
   final VoidCallback? onAdd;
   final bool isAdding;
 
+  /// Whether the card carries the liquor-compatibility line. Only a cocktail
+  /// is made with a bottle the customer brings, so the shop grid turns this
+  /// off for everything else it shows.
+  final bool showUsing;
+
   const CocktailGridCard({
     super.key,
     required this.cocktail,
     this.onTap,
     this.onAdd,
     this.isAdding = false,
+    this.showUsing = true,
   });
 
   @override
   Widget build(BuildContext context) {
     return CocktailCardShell(
       cocktail: cocktail,
-      showUsing: true,
+      showUsing: showUsing,
+      // The grid tile is the same height either way, so a card without the
+      // compatibility line gives the space back to the description rather
+      // than leaving it blank.
+      subtitleMaxLines: 3,
       onTap: onTap,
       onAdd: onAdd,
       isAdding: isAdding,
@@ -83,6 +93,10 @@ class CocktailCardShell extends StatelessWidget {
   final double shortDescriptionFontSize;
   final double shortDescriptionLineHeight;
 
+  /// How many lines the description gets. Defaults to what fits under the
+  /// compatibility line when the card carries one.
+  final int? subtitleMaxLines;
+
   const CocktailCardShell({
     super.key,
     required this.cocktail,
@@ -92,6 +106,7 @@ class CocktailCardShell extends StatelessWidget {
     this.isAdding = false,
     this.showPrice = true,
     this.imageHeight,
+    this.subtitleMaxLines,
     this.textPadding = const EdgeInsets.fromLTRB(12, 10, 10, 9),
     this.nameFontSize = 14,
     this.nameLineHeight = 1.15,
@@ -228,7 +243,7 @@ class CocktailCardShell extends StatelessWidget {
                           Expanded(
                             child: Text(
                               subtitle,
-                              maxLines: showUsing ? 3 : 2,
+                              maxLines: subtitleMaxLines ?? (showUsing ? 3 : 2),
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.manrope(
                                 fontSize: shortDescriptionFontSize,

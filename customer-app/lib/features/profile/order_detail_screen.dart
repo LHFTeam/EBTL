@@ -697,7 +697,7 @@ class _OrderItemCard extends StatelessWidget {
               width: 62,
               height: 62,
               child: NetworkOrAssetImage(
-                imageUrl: null,
+                imageUrl: item.imageUrl,
                 asset: item.imageAsset,
                 fit: BoxFit.cover,
               ),

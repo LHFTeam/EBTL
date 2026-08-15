@@ -383,10 +383,11 @@ void main() {
       final fullHeight = await pumpLine(tester, _fullCartItem);
       expect(tester.takeException(), isNull);
 
-      // A line with nothing extra to say still sits on the thumbnail's own
-      // height: 86 thumbnail + 7pt padding + 1pt border on each side. The
-      // ordinary card keeps exactly the layout it has always had.
-      expect(plainHeight, 102);
+      // A line with nothing extra to say sits on the thumbnail's own height:
+      // 64 thumbnail + 7pt padding + 1pt border on each side. The thumbnail is
+      // sized to the text beside it, so the card has no band of empty white
+      // between the name and the quantity row.
+      expect(plainHeight, 80);
       expect(fullHeight, greaterThan(plainHeight));
     });
   });

@@ -377,11 +377,15 @@ class HomeOrderAgainCard extends StatelessWidget {
               padding: const EdgeInsets.all(10),
               child: Row(
                 children: [
+                  // Drawn the way every other product thumbnail in the app is:
+                  // the artwork fills the well and is cropped to it, rather
+                  // than sitting contained on the tint.
                   _Thumb(
                     size: 56,
                     radius: 14,
                     background: EbtlColors.sand,
                     imageUrl: order.orderImageUrl,
+                    cover: true,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -389,14 +393,19 @@ class HomeOrderAgainCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // Kit name and "ordered ..." line are set like a
+                        // featured cocktail card's name and short description,
+                        // so the two rails read as the same product type.
                         Text(
                           order.displayItemsSummary,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.playfairDisplay(
-                            fontSize: 16,
-                            height: 1.2,
-                            fontWeight: FontWeight.w700,
+                          style: GoogleFonts.manrope(
+                            fontSize:
+                                HomeScreenVisuals.featuredProductCardNameFontSize,
+                            height: HomeScreenVisuals
+                                .featuredProductCardNameLineHeight,
+                            fontWeight: FontWeight.w900,
                             color: EbtlColors.navy,
                           ),
                         ),
@@ -406,12 +415,15 @@ class HomeOrderAgainCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.manrope(
-                            fontSize: 12.5,
-                            height: 1.2,
+                            fontSize: HomeScreenVisuals
+                                .featuredProductCardShortDescriptionFontSize,
+                            height: HomeScreenVisuals
+                                .featuredProductCardShortDescriptionLineHeight,
                             // Design tracks body copy at 0; the theme's own
-                            // spacing pushes this line past the card.
+                            // spacing pushes the longest label ("Ordered 11
+                            // months ago") past the card.
                             letterSpacing: 0,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w500,
                             color: EbtlColors.muted,
                           ),
                         ),

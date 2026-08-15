@@ -170,6 +170,10 @@ class OrderDetailItem {
   final double unitPriceIncVat;
   final double lineTotal;
   final String? customizationSummary;
+
+  /// The product's artwork, from the line's joined product. Null on an order
+  /// whose product has no image, in which case [imageAsset] is drawn instead.
+  final String? imageUrl;
   final String imageAsset;
 
   const OrderDetailItem({
@@ -180,6 +184,7 @@ class OrderDetailItem {
     required this.unitPriceIncVat,
     required this.lineTotal,
     required this.customizationSummary,
+    required this.imageUrl,
     required this.imageAsset,
   });
 
@@ -197,6 +202,7 @@ class OrderDetailItem {
           readDouble(json['unit_price_inc_vat_snapshot']) ??
           0,
       customizationSummary: nullableString(json['customization_summary']),
+      imageUrl: nullableString(json['image_url']),
       imageAsset: CocktailAssets.forName(name),
     );
   }
