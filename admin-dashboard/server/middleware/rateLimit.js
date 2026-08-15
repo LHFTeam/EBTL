@@ -41,6 +41,27 @@ const writeLimiter = rateLimit({
   handler: tooManyRequests
 });
 
+// Pickup handoffs (routes/orderRoutes.js). These sit behind an employee session
+// and are not part of the customer API, so they are exported for that router to
+// mount rather than going through customerRateLimiter.
+//
+// The QR path needs no limiting worth the name — forging a token means forging
+// an HMAC. The six-digit fallback is the guessing surface: a code is one in a
+// million, but only until someone tries a million times. `skipSuccessfulRequests`
+// means a busy cart handing over real orders never approaches the limit, and
+// only a run of failures does.
+export const pickupAttemptLimiter = rateLimit({
+  windowMs: minutes(intFromEnv('RATE_LIMIT_PICKUP_WINDOW_MIN', 10)),
+  max: intFromEnv('RATE_LIMIT_PICKUP_MAX_FAILURES', 30),
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) =>
+    res.status(429).json({
+      error: 'Too many failed pickup attempts. Wait a moment, then try again or use an override.'
+    })
+});
+
 // Mounted at /api/customer, so req.path is relative to that (e.g. `/session`,
 // `/cart/items`). The Geidea callback lives at /api/payments/... and never
 // reaches here, so it is not rate limited.

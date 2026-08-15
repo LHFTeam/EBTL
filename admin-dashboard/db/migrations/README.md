@@ -1,6 +1,7 @@
 # Migrations
 
-Every migration applied to the live project, and nothing that has not been.
+Every migration applied to the live project, and nothing that has not been —
+with the one exception listed under [Pending](#pending) below.
 
 The schema is owned by the Supabase dashboard, so this directory is a record
 rather than a pipeline: **none of these files should be re-run.** They are here
@@ -53,6 +54,22 @@ To check the two are still in step:
 ```sql
 select version, name from supabase_migrations.schema_migrations order by version;
 ```
+
+## Pending
+
+One file here has **not** been applied and has no ledger entry yet:
+
+| File | What it adds |
+| --- | --- |
+| `20260815000000_order_handoff_log.sql` | `public.order_handoffs`, the record of who released each pickup order and how (QR scan, typed code, or override). Backs the scan gate in `server/routes/orderRoutes.js`. |
+
+Until it is applied, the pickup handoff routes fail on the log write. The order
+still completes — `releasePickupOrder` treats a failed log as non-fatal and
+answers `logged: false` — but nothing is recorded and the replay guard is not
+there, so apply it before the feature is turned on for a cart.
+
+Its filename version is a placeholder. Apply it as below, rename the file to
+the ledger version, and move its row into the table above.
 
 ## Adding one
 
