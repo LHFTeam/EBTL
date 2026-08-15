@@ -36,11 +36,15 @@ class HomeScreenVisuals {
   // Order It Again Rail (Home v2, live order only)
   //
   // The card is wider than the design's 230pt: at 230 its text column is 94pt,
-  // which ellipsizes "Ordered 3 days ago" (115pt at the specified size). The
-  // rail is tall enough for the 56pt thumb, and for the kit name, the
-  // "ordered ..." line and the price stacked beside it.
+  // which ellipsizes "Ordered 3 days ago" (115pt at the specified size).
+  //
+  // The card lays out to 78pt: the 56pt thumb — taller than the kit name, the
+  // "ordered ..." line and the price stacked beside it — plus 10pt of padding
+  // and 1pt of border on each side. The rail carries that and the 4pt the list
+  // reserves under its cards, so raising the thumb or the padding has to be
+  // paid for here.
   static const double orderAgainCardWidth = 260;
-  static const double orderAgainRailHeight = 88;
+  static const double orderAgainRailHeight = 84;
 
   // Hero Peek Carousel (Home v2, hidden only while an order is live)
   //
