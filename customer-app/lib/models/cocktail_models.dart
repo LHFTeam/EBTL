@@ -179,7 +179,9 @@ class Cocktail {
     return text;
   }
 
-  List<ProductTag> get sortedTagDetails => sortProductTags(tagDetails);
+  /// The tags the card badges. The cocktail page reads [tagDetails] instead,
+  /// so a tag kept off the card still shows there.
+  List<ProductTag> get cardTagDetails => cardProductTags(tagDetails);
 
   String get detailDescription {
     final text = description?.trim();

@@ -361,6 +361,10 @@ class ShopProduct {
     }
   }
 
+  /// The tags the card badges. The product sheet reads [tagDetails] instead,
+  /// so a tag kept off the card still shows there.
+  List<ProductTag> get cardTagDetails => cardProductTags(tagDetails);
+
   String get priceLabel =>
       formatOptionalPrice(startingPriceIncVat, currency);
 

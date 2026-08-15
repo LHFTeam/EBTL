@@ -1,6 +1,7 @@
 # Migrations
 
-Every migration applied to the live project, and nothing that has not been.
+Every migration applied to the live project, plus the one still waiting to be
+applied — listed under "Not yet applied" below, and nothing else.
 
 The schema is owned by the Supabase dashboard, so this directory is a record
 rather than a pipeline: **none of these files should be re-run.** They are here
@@ -53,6 +54,22 @@ To check the two are still in step:
 ```sql
 select version, name from supabase_migrations.schema_migrations order by version;
 ```
+
+## Not yet applied
+
+| File | What it does |
+| --- | --- |
+| `20260815120000_product_tag_visibility.sql` | Adds `show_in_filters` and `show_on_product_card` to `product_tags` |
+
+Apply it through the dashboard or `apply_migration`, confirm the ledger version
+it lands under matches the filename, move its row into the mapping above, and
+refresh `../schema/` with `../tools/dump_schema.sql`. Until then the capture in
+`../schema/` does not describe these two columns.
+
+Reads survive the wait: the customer API takes both flags as "on unless the
+column says otherwise", so every tag keeps filtering and badging the way it did
+before. Writes do not — saving a tag from Shop → Product Tags sends both columns
+and Postgres rejects the update until the migration lands.
 
 ## Adding one
 

@@ -395,9 +395,7 @@ class ShopProductCardTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final firstTag = product.tagDetails.isEmpty
-        ? null
-        : product.tagDetails.first;
+    final cardTags = product.cardTagDetails;
     final showAdd = onAdd != null;
     final orderable =
         product.availability.isOrderable && product.defaultVariant != null;
@@ -450,11 +448,21 @@ class ShopProductCardTile extends StatelessWidget {
                             fit: BoxFit.cover,
                           ),
                         ),
-                        if (firstTag != null && !compact)
+                        // A product may carry several tags; the card badges
+                        // every one an admin marked for the card, and the
+                        // compact card has no room for any of them.
+                        if (cardTags.isNotEmpty && !compact)
                           Positioned(
                             left: 8,
                             top: 8,
-                            child: ProductTagBadge(tag: firstTag),
+                            right: 8,
+                            child: Wrap(
+                              spacing: 5,
+                              runSpacing: 5,
+                              children: cardTags
+                                  .map((tag) => ProductTagBadge(tag: tag))
+                                  .toList(),
+                            ),
                           ),
                       ],
                     ),

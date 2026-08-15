@@ -283,6 +283,8 @@ class _ShopProductDetailSheetState extends State<ShopProductDetailSheet> {
                             color: EbtlColors.coral,
                           ),
                         ),
+                        // Every tag on the product, including the ones kept off
+                        // its card.
                         if (product.tagDetails.isNotEmpty) ...[
                           const SizedBox(height: 14),
                           Wrap(
