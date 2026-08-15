@@ -38,7 +38,12 @@ CREATE INDEX IF NOT EXISTS idx_customers_gender ON public.customers USING btree 
 CREATE INDEX IF NOT EXISTS idx_employee_credentials_username ON public.employee_credentials USING btree (username);
 CREATE INDEX IF NOT EXISTS idx_employees_auth_user_id ON public.employees USING btree (auth_user_id);
 CREATE INDEX IF NOT EXISTS idx_employees_location_role ON public.employees USING btree (default_location_id, role, is_active);
-CREATE INDEX IF NOT EXISTS idx_ingredients_active_category ON public.ingredients USING btree (is_active, category);
+CREATE INDEX IF NOT EXISTS customer_favorite_liquor_types_customer_created_at_idx ON public.customer_favorite_liquor_types USING btree (customer_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS customer_favorite_liquor_types_liquor_type_idx ON public.customer_favorite_liquor_types USING btree (liquor_type_id);
+CREATE INDEX IF NOT EXISTS customer_top_liquor_types_liquor_type_idx ON public.customer_top_liquor_types USING btree (liquor_type_id);
+CREATE INDEX IF NOT EXISTS idx_home_hero_banners_active_order ON public.home_hero_banners USING btree (is_active, display_order, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS ingredient_categories_name_lower_key ON public.ingredient_categories USING btree (lower(name));
+CREATE INDEX IF NOT EXISTS idx_ingredients_active_category_id ON public.ingredients USING btree (is_active, category_id);
 CREATE INDEX IF NOT EXISTS idx_ingredients_icon_key ON public.ingredients USING btree (icon_key) WHERE (icon_key IS NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_inventory_balances_location ON public.inventory_balances USING btree (location_id);
 CREATE INDEX IF NOT EXISTS idx_liquor_types_active_order ON public.liquor_types USING btree (is_active, display_order, name);
@@ -68,6 +73,9 @@ CREATE INDEX IF NOT EXISTS idx_prep_stations_location_active ON public.prep_stat
 CREATE INDEX IF NOT EXISTS idx_product_categories_active_order ON public.product_categories USING btree (is_active, sort_order, name);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_product_categories_slug_unique ON public.product_categories USING btree (slug) WHERE (slug IS NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_product_tags_active_order ON public.product_tags USING btree (is_active, display_order, name);
+CREATE INDEX IF NOT EXISTS idx_spotlight_banner_categories_category ON public.spotlight_banner_categories USING btree (category_id);
+CREATE INDEX IF NOT EXISTS idx_spotlight_banner_products_product ON public.spotlight_banner_products USING btree (product_id);
+CREATE INDEX IF NOT EXISTS idx_spotlight_banners_active_order ON public.spotlight_banners USING btree (is_active, display_order, created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS product_tags_name_key ON public.product_tags USING btree (name);
 CREATE INDEX IF NOT EXISTS idx_product_variants_product_active ON public.product_variants USING btree (product_id, is_active);
 CREATE INDEX IF NOT EXISTS idx_products_status_featured ON public.products USING btree (status, is_featured, display_order);

@@ -21,13 +21,19 @@ ALTER TABLE public.cart_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.carts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customer_addresses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customer_credit_ledger ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.customer_favorite_liquor_types ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customer_favorite_products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customer_notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customer_payment_methods ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customer_push_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.customer_top_liquor_types ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.employee_credentials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.golden_hour_modes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.home_hero_banners ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.home_hero_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ingredient_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ingredients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.inventory_balances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.liquor_types ENABLE ROW LEVEL SECURITY;
@@ -60,6 +66,9 @@ ALTER TABLE public.recipes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.referral_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.referrals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.shop_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.spotlight_banner_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.spotlight_banner_products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.spotlight_banners ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stock_movements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stock_transfer_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stock_transfer_movement_events ENABLE ROW LEVEL SECURITY;
@@ -158,6 +167,36 @@ CREATE POLICY "Managers can manage employees" ON public.employees FOR ALL TO aut
 
 CREATE POLICY "Staff can read employee records" ON public.employees FOR SELECT TO authenticated
   USING (((auth_user_id = ( SELECT auth.uid() AS uid)) OR is_manager_or_admin()));
+
+CREATE POLICY "Managers can manage golden hour modes" ON public.golden_hour_modes FOR ALL TO authenticated
+  USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+
+CREATE POLICY "Public can read active golden hour modes" ON public.golden_hour_modes FOR SELECT TO anon, authenticated
+  USING ((is_active = true));
+
+CREATE POLICY "Staff can read golden hour modes" ON public.golden_hour_modes FOR SELECT TO authenticated
+  USING (is_staff());
+
+CREATE POLICY "Managers can manage home hero banners" ON public.home_hero_banners FOR ALL TO authenticated
+  USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+
+CREATE POLICY "Public can read active home hero banners" ON public.home_hero_banners FOR SELECT TO anon, authenticated
+  USING ((is_active = true));
+
+CREATE POLICY "Staff can read home hero banners" ON public.home_hero_banners FOR SELECT TO authenticated
+  USING (is_staff());
+
+CREATE POLICY "Managers can manage home hero settings" ON public.home_hero_settings FOR ALL TO authenticated
+  USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+
+CREATE POLICY "Public can read home hero settings" ON public.home_hero_settings FOR SELECT TO anon, authenticated
+  USING (true);
+
+CREATE POLICY "Managers can manage ingredient categories" ON public.ingredient_categories FOR ALL TO authenticated
+  USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+
+CREATE POLICY "Staff can read ingredient categories" ON public.ingredient_categories FOR SELECT TO authenticated
+  USING (is_staff());
 
 CREATE POLICY "Managers can manage ingredients" ON public.ingredients FOR ALL TO authenticated
   USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
@@ -323,6 +362,27 @@ CREATE POLICY "Managers can manage shop settings" ON public.shop_settings FOR AL
 
 CREATE POLICY "Public can read shop settings" ON public.shop_settings FOR SELECT TO anon, authenticated
   USING (true);
+
+CREATE POLICY "Managers can manage spotlight banner categories" ON public.spotlight_banner_categories FOR ALL TO authenticated
+  USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+
+CREATE POLICY "Public can read spotlight banner categories" ON public.spotlight_banner_categories FOR SELECT TO anon, authenticated
+  USING (true);
+
+CREATE POLICY "Managers can manage spotlight banner products" ON public.spotlight_banner_products FOR ALL TO authenticated
+  USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+
+CREATE POLICY "Public can read spotlight banner products" ON public.spotlight_banner_products FOR SELECT TO anon, authenticated
+  USING (true);
+
+CREATE POLICY "Managers can manage spotlight banners" ON public.spotlight_banners FOR ALL TO authenticated
+  USING (is_manager_or_admin()) WITH CHECK (is_manager_or_admin());
+
+CREATE POLICY "Public can read active spotlight banners" ON public.spotlight_banners FOR SELECT TO anon, authenticated
+  USING ((is_active = true));
+
+CREATE POLICY "Staff can read spotlight banners" ON public.spotlight_banners FOR SELECT TO authenticated
+  USING (is_staff());
 
 CREATE POLICY "Staff can manage stock_movements" ON public.stock_movements FOR ALL TO authenticated
   USING (is_staff()) WITH CHECK (is_staff());

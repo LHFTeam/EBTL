@@ -34,13 +34,17 @@ DECLARE
         -- reference / catalog
         'product_categories', 'products', 'product_variants', 'product_tags',
         'liquor_types', 'product_liquor_compatibility',
-        'ingredients', 'recipes', 'recipe_items',
+        'ingredient_categories', 'ingredients', 'recipes', 'recipe_items',
         'locations', 'location_opening_hours', 'prep_stations',
         'shop_settings', 'referral_settings', 'promotions', 'suppliers',
+        -- marketing surfaces (CMS-driven, edited from the dashboard)
+        'home_hero_settings', 'home_hero_banners', 'golden_hour_modes',
+        'spotlight_banners', 'spotlight_banner_products', 'spotlight_banner_categories',
         -- people
         'employees', 'employee_credentials',
         'customers', 'customer_addresses', 'customer_payment_methods',
         'customer_push_tokens', 'customer_favorite_products',
+        'customer_favorite_liquor_types', 'customer_top_liquor_types',
         'loyalty_accounts', 'loyalty_transactions',
         'referrals', 'customer_credit_ledger',
         -- carts and orders

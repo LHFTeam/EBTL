@@ -36,25 +36,28 @@ empty.
 | | |
 |---|---|
 | Enum types | 11 |
-| Tables | 53 |
-| Columns | 585 |
-| Primary key / unique constraints | 83 |
-| Check constraints | 87 |
-| Foreign keys | 91 |
-| Indexes | 168 |
-| Functions | 13 in `public`, 1 in `private` |
+| Tables | 78 |
+| Columns | 713 |
+| Primary key / unique constraints | 108 (78 + 30) |
+| Check constraints | 135 |
+| Foreign keys | 122 |
+| Indexes | 104 (the non-constraint ones; `03_constraints.sql` creates the rest) |
+| Functions | 14 in `public`, 1 in `private` |
 | Views | 8 |
-| Triggers | 34 |
-| RLS policies | 86, across 53 RLS-enabled tables |
-| Table / column comments | 36 |
+| Triggers | 41 |
+| RLS policies | 135, across 78 RLS-enabled tables |
+| Table / column comments | 68 |
 
-Those totals predate the demand-forecasting module, which migration
-`20260807171440_forecast_module` added on 2026-08-07 and which is appended to
-each file above as a labelled block: **16 `forecast_*` tables**, 16 primary
-keys, 23 check constraints, 21 foreign keys, 11 indexes, 2 triggers, 32 RLS
-policies and 6 comments. The module is self-contained — its foreign keys point
-outwards only (`locations`, `products`, `promotions`, `employees`), so nothing
-else in the schema depends on it and it restores in the same pass as the rest.
+These totals are the whole bundle, and every one of them was measured on
+2026-08-15 by restoring `schema/` into an empty Postgres 17 and counting the
+result against the live catalogs, object by object. They agree.
+
+The demand-forecasting module (migration `20260807171440_forecast_module`, 16
+`forecast_*` tables) is still appended to each file as a labelled block rather
+than sorted inline. Everything else is in alphabetical order, including the nine
+tables that arrived after that module — the spirit-profile, hero-carousel,
+Golden Hour, Spotlight and ingredient-category work, which were added to the
+capture on 2026-08-15 along with the `product_tags` visibility columns.
 
 Files apply in order and each is independently runnable:
 
@@ -111,7 +114,8 @@ safe in git and useful for standing up a working environment:
 | `12_product_variants.sql` | 73 |
 | `13_product_tags.sql` | 5 |
 | `14_liquor_types.sql` | 9 |
-| `16_ingredients.sql` | 66 |
+| `15b_ingredient_categories.sql` | 10 |
+| `16_ingredients.sql` | 57 |
 | `20_locations.sql` | 3 |
 | `21_location_opening_hours.sql` | 14 |
 | `22_prep_stations.sql` | 3 |
@@ -119,6 +123,11 @@ safe in git and useful for standing up a working environment:
 
 Also committed: `15_product_liquor_compatibility.sql` (72 rows) and
 `17_recipes.sql` (74 rows).
+
+`13_product_tags.sql`, `15b_ingredient_categories.sql` and `16_ingredients.sql`
+were re-dumped from the live project on 2026-08-15, when `ingredients` lost its
+`category` text column to `category_id`. The ingredient count drops 66 → 57
+there: the old file was a June snapshot, and nine of its rows no longer exist.
 
 Still to capture: `products`, `recipe_items`. Run the generator (below) and
 move those two blocks into `data/reference/`.
