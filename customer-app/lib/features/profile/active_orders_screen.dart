@@ -95,7 +95,16 @@ class _ActiveOrdersScreenState extends State<ActiveOrdersScreen> {
                   )
                 else if (activeOrders.isEmpty)
                   const SliverToBoxAdapter(child: _NoActiveOrdersCard())
-                else
+                else ...[
+                  for (final order in activeOrders.where(
+                    (order) => order.isWaitingForCollection,
+                  ))
+                    SliverToBoxAdapter(
+                      child: _ReadyForCollectionBanner(
+                        order: order,
+                        onTap: () => _openOrderDetail(order),
+                      ),
+                    ),
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(22, 8, 22, 4),
                     sliver: SliverList(
@@ -111,6 +120,7 @@ class _ActiveOrdersScreenState extends State<ActiveOrdersScreen> {
                       }, childCount: (activeOrders.length * 2) - 1),
                     ),
                   ),
+                ],
                 if (!isLoading && !hasError)
                   SliverToBoxAdapter(
                     child: _ViewAllOrdersLink(onTap: _openAllOrders),
@@ -118,6 +128,72 @@ class _ActiveOrdersScreenState extends State<ActiveOrdersScreen> {
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+/// An order bagged and waiting at the cart. Tapping through goes straight to
+/// the pickup code, which is the only thing left to do with it.
+class _ReadyForCollectionBanner extends StatelessWidget {
+  final ProfileOrder order;
+  final VoidCallback onTap;
+
+  const _ReadyForCollectionBanner({required this.order, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 8, 22, 0),
+      child: Material(
+        color: EbtlColors.seafoam,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.qr_code_scanner_rounded,
+                  size: 22,
+                  color: EbtlColors.teal,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Order ${order.displayOrderNumber} is ready',
+                        style: GoogleFonts.manrope(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          color: EbtlColors.navy,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Show your pickup code at ${order.displayLocation}',
+                        style: GoogleFonts.manrope(
+                          fontSize: 12.5,
+                          height: 1.3,
+                          fontWeight: FontWeight.w600,
+                          color: EbtlColors.ink,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: EbtlColors.teal,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

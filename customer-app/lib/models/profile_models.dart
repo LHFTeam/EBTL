@@ -314,6 +314,14 @@ class ProfileOrder {
     return !finishedStatuses.contains(normalizedStatus);
   }
 
+  /// Bagged and waiting at the cart, with a pickup code to show for it. This is
+  /// the one moment the customer needs to be somewhere, so it is called out
+  /// above the list rather than left to be found inside an order.
+  bool get isWaitingForCollection =>
+      isActive &&
+      fulfillmentType.trim().toLowerCase() == 'pickup_at_cart' &&
+      status.trim().toLowerCase() == 'ready';
+
   String get displayOrderNumber {
     final number = orderNumber?.trim();
     if (number == null || number.isEmpty) return 'Order';

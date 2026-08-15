@@ -698,6 +698,26 @@ class ApiService {
     return OrderDetailResponse.fromJson(json);
   }
 
+  /// Fetches the code the customer shows at the cart to collect a pickup order.
+  ///
+  /// Called on a timer while the order screen is open, because the code rotates
+  /// — so this is a plain read that mints nothing and can be repeated freely.
+  /// An order with no code yet answers `available: false` with a reason rather
+  /// than failing.
+  static Future<PickupCode> fetchOrderPickupCode({
+    required String orderId,
+  }) async {
+    await ensureSession();
+
+    final json = await _request(
+      method: 'GET',
+      path: '/api/customer/orders/${Uri.encodeComponent(orderId)}/pickup-code',
+      attachToken: true,
+    );
+
+    return PickupCode.fromJson(json);
+  }
+
   /// Cancels an order the customer has not paid for.
   ///
   /// The backend closes the payment window before it moves the order, and
