@@ -4762,3 +4762,290 @@ textarea {
   background: color-mix(in srgb, var(--danger) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
 }
+
+/* ---------------------------------------------------------------------------
+   Pickup handoff — the scan sheet on a ready cart order.
+   Shares the recipe sheet's overlay geometry; the camera and review panel are
+   sized for a phone held one-handed at a beach cart.
+   --------------------------------------------------------------------------- */
+
+.pickupOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 44;
+  display: grid;
+  grid-template-columns: 1fr minmax(420px, 520px);
+}
+
+.pickupScrim {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: rgba(14, 34, 56, 0.34);
+  backdrop-filter: blur(2px);
+}
+
+.pickupSheet {
+  height: 100vh;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 22px;
+  background: #fffaf4;
+  border-left: 1px solid var(--brand-border);
+  box-shadow: -20px 0 54px rgba(14, 34, 56, 0.18);
+}
+
+.pickupSheetHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.pickupSheetHead h2 {
+  margin: 8px 0 0;
+  font-size: 28px;
+  color: var(--brand-navy);
+  font-family: var(--font-display);
+  letter-spacing: -0.025em;
+}
+
+.pickupSheetHead p {
+  margin: 6px 0 0;
+  line-height: 1.45;
+  color: var(--brand-muted);
+}
+
+/* The preview is deliberately tall: the customer holds their phone out at arm's
+   length, and a letterbox strip makes that harder to line up than it needs to be. */
+.pickupCamera {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 20px;
+  background: var(--brand-navy);
+  display: grid;
+  place-items: center;
+}
+
+.pickupCamera video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pickupReticle {
+  position: absolute;
+  inset: 18% 18%;
+  border: 3px solid rgba(255, 248, 238, 0.9);
+  border-radius: 18px;
+  box-shadow: 0 0 0 100vmax rgba(14, 34, 56, 0.25);
+}
+
+.pickupCameraOff {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 26px;
+  text-align: center;
+  color: var(--brand-cream);
+}
+
+.pickupCameraOff span {
+  color: var(--brand-seafoam);
+  line-height: 1.45;
+}
+
+.pickupCameraBusy {
+  position: absolute;
+  bottom: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-weight: 800;
+  color: var(--brand-navy);
+  background: var(--brand-cream);
+}
+
+.pickupNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  line-height: 1.45;
+  font-weight: 700;
+  border: 1px solid var(--brand-border);
+}
+
+.pickupNotice.warn {
+  color: #7a5410;
+  background: color-mix(in srgb, var(--brand-gold) 28%, var(--brand-cream));
+  border-color: var(--brand-gold);
+}
+
+.pickupNotice.stop {
+  color: #8d2718;
+  background: color-mix(in srgb, var(--brand-blush) 55%, var(--brand-cream));
+  border-color: var(--brand-coral);
+}
+
+.pickupSwitchRow {
+  display: grid;
+  gap: 8px;
+}
+
+.pickupSwitchRow button {
+  min-height: 50px;
+  justify-content: center;
+  border-radius: 16px;
+}
+
+.pickupOverrideLink {
+  color: var(--brand-coral);
+}
+
+.pickupForm,
+.pickupReview {
+  display: grid;
+  gap: 12px;
+}
+
+.pickupForm label {
+  display: grid;
+  gap: 6px;
+  font-weight: 800;
+  color: var(--brand-navy);
+}
+
+.pickupForm input,
+.pickupForm select {
+  min-height: 52px;
+  font-size: 17px;
+}
+
+/* Six digits read back off a phone screen, so they are set large and spaced —
+   this is the field an attendant fills with one thumb while holding a bag. */
+.pickupDigits {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.32em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.pickupHint {
+  margin: 0;
+  line-height: 1.45;
+  color: var(--brand-muted);
+}
+
+.pickupActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.pickupActions button {
+  min-height: 54px;
+  justify-content: center;
+  border-radius: 16px;
+}
+
+.pickupActions .primary.danger {
+  background: var(--brand-coral);
+  border-color: var(--brand-coral);
+}
+
+.pickupReviewHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: var(--brand-sand);
+}
+
+.pickupReviewHead b {
+  display: block;
+  font-size: 24px;
+  color: var(--brand-navy);
+}
+
+.pickupReviewHead span {
+  color: var(--brand-ink);
+}
+
+.pickupMethodChip {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--brand-cream);
+  background: var(--brand-teal);
+}
+
+.pickupReviewItems {
+  display: grid;
+  gap: 8px;
+}
+
+.pickupReviewItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--brand-border);
+  background: var(--brand-white);
+}
+
+.pickupReviewItem b {
+  display: block;
+  color: var(--brand-navy);
+}
+
+.pickupReviewItem span {
+  color: var(--brand-muted);
+}
+
+.pickupReviewItem small {
+  display: block;
+  margin-top: 3px;
+  color: var(--brand-teal);
+}
+
+.pickupItemQty {
+  flex: 0 0 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  font-weight: 800;
+  color: var(--brand-navy);
+  background: var(--brand-seafoam);
+}
+
+@media (max-width: 900px) {
+  .pickupOverlay {
+    grid-template-columns: 1fr;
+  }
+
+  .pickupScrim {
+    display: none;
+  }
+
+  .pickupSheet {
+    border-left: 0;
+  }
+}

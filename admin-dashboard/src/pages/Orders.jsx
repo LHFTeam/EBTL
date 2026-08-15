@@ -11,11 +11,13 @@ import {
   Phone,
   Play,
   RefreshCw,
+  ScanLine,
   Search,
   User,
   X
 } from 'lucide-react';
 import { api } from '../api/client.js';
+import PickupScanner from '../components/PickupScanner.jsx';
 import { money } from '../utils/format.js';
 
 const AUTO_REFRESH_MS = 12000;
@@ -137,7 +139,16 @@ function itemHasAllergyIndicator(item) {
 function statusAction(order) {
   if (order.status === 'confirmed') return { status: 'preparing', label: 'Start Preparing', icon: Play };
   if (order.status === 'preparing') return { status: 'ready', label: 'Ready for Pickup', icon: Check };
-  if (order.status === 'ready') return { status: 'completed', label: 'Mark Picked Up', icon: PackageCheck };
+
+  if (order.status === 'ready') {
+    // A cart pickup is released by scanning the customer's code — the backend
+    // refuses `completed` for one of these, so there is no button that could
+    // do it. A delivery still leaves on the runner's word.
+    return order.fulfillment_type === 'pickup_at_cart'
+      ? { scan: true, status: 'completed', label: 'Scan to Hand Over', icon: ScanLine }
+      : { status: 'completed', label: 'Mark Handed Over', icon: PackageCheck };
+  }
+
   return null;
 }
 
@@ -202,7 +213,7 @@ function OrderItemRow({ item, onOpenRecipe }) {
   </button>;
 }
 
-function OrderCard({ order, selected, highlighted, now, saving, onSelect, onStatus, onOpenRecipe }) {
+function OrderCard({ order, selected, highlighted, now, saving, onSelect, onStatus, onScan, onOpenRecipe }) {
   const action = statusAction(order);
   const ActionIcon = action?.icon;
 
@@ -245,7 +256,8 @@ function OrderCard({ order, selected, highlighted, now, saving, onSelect, onStat
         disabled={saving === order.id}
         onClick={(event) => {
           event.stopPropagation();
-          onStatus(order, action.status);
+          if (action.scan) onScan(order);
+          else onStatus(order, action.status);
         }}
       >
         {saving === order.id ? <RefreshCw size={18} className="spinIcon" /> : <ActionIcon size={18} />}
@@ -255,7 +267,7 @@ function OrderCard({ order, selected, highlighted, now, saving, onSelect, onStat
   </article>;
 }
 
-function OrderDetail({ order, now, saving, onStatus, onOpenRecipe }) {
+function OrderDetail({ order, now, saving, onStatus, onScan, onOpenRecipe }) {
   if (!order) {
     return <aside className="orderDetailPane emptyState">
       <ChefHat size={38} />
@@ -315,7 +327,7 @@ function OrderDetail({ order, now, saving, onStatus, onOpenRecipe }) {
         className={`primary detailActionButton action-${action.status}`}
         type="button"
         disabled={saving === order.id}
-        onClick={() => onStatus(order, action.status)}
+        onClick={() => (action.scan ? onScan(order) : onStatus(order, action.status))}
       >
         {saving === order.id ? <RefreshCw size={20} className="spinIcon" /> : <ActionIcon size={20} />}
         {action.label}
@@ -419,6 +431,7 @@ export default function Orders({ selectedLocationId, selectedLocation, locationL
   const [savingOrderId, setSavingOrderId] = useState('');
   const [toast, setToast] = useState(null);
   const [recipePayload, setRecipePayload] = useState(null);
+  const [scanningOrder, setScanningOrder] = useState(null);
   const [highlightedOrderIds, setHighlightedOrderIds] = useState(new Set());
   const [newOrdersNotice, setNewOrdersNotice] = useState(false);
   const knownOrderIdsRef = useRef(new Set());
@@ -503,6 +516,17 @@ export default function Orders({ selectedLocationId, selectedLocation, locationL
       setSavingOrderId('');
       savingRef.current = false;
     }
+  }
+
+  async function handleHandedOver({ order_number, method, logged }) {
+    setScanningOrder(null);
+    setToast({
+      type: 'success',
+      message: logged
+        ? `Order ${order_number} handed over${method === 'override' ? ' by override' : ''}.`
+        : `Order ${order_number} handed over, but the handoff log did not save. Tell a supervisor.`
+    });
+    await loadOrders({ silent: true });
   }
 
   const filteredOrders = useMemo(() => {
@@ -610,6 +634,7 @@ export default function Orders({ selectedLocationId, selectedLocation, locationL
             saving={savingOrderId}
             onSelect={() => setSelectedOrderId(order.id)}
             onStatus={updateOrderStatus}
+            onScan={setScanningOrder}
             onOpenRecipe={openRecipe}
           />)}
         </div>
@@ -620,10 +645,17 @@ export default function Orders({ selectedLocationId, selectedLocation, locationL
         now={now}
         saving={savingOrderId}
         onStatus={updateOrderStatus}
+        onScan={setScanningOrder}
         onOpenRecipe={openRecipe}
       />
     </div>
 
     <RecipeSheet payload={recipePayload} onClose={() => setRecipePayload(null)} />
+
+    {scanningOrder && <PickupScanner
+      order={scanningOrder}
+      onClose={() => setScanningOrder(null)}
+      onHandedOver={handleHandedOver}
+    />}
   </div>;
 }
