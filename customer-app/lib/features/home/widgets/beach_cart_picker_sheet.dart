@@ -82,6 +82,13 @@ class _BeachCartPickerSheetState extends State<_BeachCartPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // Sorted once per build rather than inside the builder, which ran it again
+    // for every row it drew.
+    final locations = LocationService.sortedByDistance(
+      widget.serviceAreas,
+      distances,
+    );
+
     return SafeArea(
       top: false,
       child: ConstrainedBox(
@@ -172,16 +179,9 @@ class _BeachCartPickerSheetState extends State<_BeachCartPickerSheet> {
                   : ListView.separated(
                       shrinkWrap: true,
                       padding: const EdgeInsets.fromLTRB(22, 14, 22, 26),
-                      itemCount: LocationService.sortedByDistance(
-                        widget.serviceAreas,
-                        distances,
-                      ).length,
+                      itemCount: locations.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
-                        final locations = LocationService.sortedByDistance(
-                          widget.serviceAreas,
-                          distances,
-                        );
                         final location = locations[index];
 
                         return _BeachCartOption(

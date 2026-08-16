@@ -6,9 +6,25 @@ String formatMoney(double value, String currency) {
   return '$currency $amount';
 }
 
+/// How far away a beach cart is, for the picker's rows — "350 m away" close in,
+/// "2.4 km away" further out, "250 km away" once the decimal stops meaning
+/// anything.
+///
+/// The precision drops as the distance grows because a phone fix does not carry
+/// enough accuracy to justify the last digit: metres round to the nearest 10,
+/// and past 100 km the tenth of a kilometre is noise on a number the customer
+/// is only reading as "not near me".
 String formatDistance(double meters) {
-  if (meters < 1000) return '${meters.round()} m away';
-  return '${(meters / 1000).toStringAsFixed(1)} km away';
+  if (meters < 1000) {
+    // Rounding can reach 1000, which belongs on the kilometre branch below
+    // rather than reading as "1000 m away".
+    final roundedMeters = (meters / 10).round() * 10;
+    if (roundedMeters < 1000) return '$roundedMeters m away';
+  }
+
+  final km = meters / 1000;
+  if (km < 100) return '${km.toStringAsFixed(1)} km away';
+  return '${km.round()} km away';
 }
 
 /// Formats an optional price, falling back to the bare [currency] label when
