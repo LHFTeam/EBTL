@@ -222,6 +222,28 @@ jobs:
             echo "::warning::Provisioning profile grants aps-environment '$aps', not 'production'. Use an App Store distribution profile, or push will not work in TestFlight."
           fi
 
+          # Every other entitlement the Release build asks for has to be granted
+          # by the profile too. Xcode only notices four minutes into the archive,
+          # and names the capability without saying that the fix is in the
+          # developer portal rather than the repo — so check it here instead.
+          # aps-environment is handled above, where the value matters and not
+          # just the key.
+          # A plain string, not an array: this step runs under `set -u`, and the
+          # bash 3.2 that macOS ships treats an empty array as unbound.
+          missing=""
+          while IFS= read -r key; do
+            [ -n "$key" ] || continue
+            if [ "$key" != "aps-environment" ] \
+              && ! /usr/libexec/PlistBuddy -c "Print :Entitlements:$key" "$decoded" > /dev/null 2>&1; then
+              missing="$missing $key"
+            fi
+          done <<< "$(plutil -convert json -o - ios/Runner/RunnerRelease.entitlements | ruby -rjson -e 'puts JSON.parse(STDIN.read).keys')"
+
+          if [ -n "$missing" ]; then
+            echo "::error::Provisioning profile '$name' does not grant:$missing. These are requested by ios/Runner/RunnerRelease.entitlements, and the archive cannot be signed without them. Enable the matching capabilities on App ID $BUNDLE_ID at developer.apple.com → Certificates, Identifiers & Profiles → Identifiers, regenerate the App Store profile (editing an App ID invalidates its profiles), and update the IOS_PROVISIONING_PROFILE_BASE64 secret."
+            exit 1
+          fi
+
           # Xcode 16 reads profiles from UserData; older tooling reads the
           # legacy path. Install to both so either resolves the profile.
           for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" \
