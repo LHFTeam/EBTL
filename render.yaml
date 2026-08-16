@@ -53,6 +53,22 @@ services:
         value: ebtl://payment-return
       - key: GEIDEA_APPLE_PAY_MERCHANT_ID
         sync: false
+      # --- Social sign-in (customer app; see SOCIAL_LOGIN_SETUP.md) ---
+      # Each provider is independently optional: a blank block rejects that
+      # provider's tokens with a 503 rather than breaking the endpoint. Note the
+      # app always shows the Facebook button, so leaving these unset ships a
+      # button that fails — finish the Meta setup before customers see a build.
+      - key: FACEBOOK_APP_ID
+        value: "1611789933929380"
+      # Server-only. Builds the app access token that Meta's /debug_token needs.
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+      # Comma-separated: every OAuth client that may appear in a Google
+      # id_token's `aud` — web/server, iOS, Android.
+      - key: GOOGLE_CLIENT_IDS
+        sync: false
+      - key: APPLE_BUNDLE_IDS
+        value: wtf.ebtl.app
       # --- Push notifications (optional; disabled by default) ---
       - key: PUSH_NOTIFICATIONS_ENABLED
         value: "false"
