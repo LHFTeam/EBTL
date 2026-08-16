@@ -45,16 +45,20 @@ function columnsOf(table) {
 }
 
 // `.from('x')` and its `.select('…')` are separated by a newline and indentation
-// in this file, and occasionally by nothing at all. Take the first select that
-// follows a from within a short window, which is how the chains are written.
+// in this file, and occasionally by nothing at all. The select has to be the one
+// belonging to *this* chain: stop at the next `.from(`, or a query that never
+// selects will borrow the select of the query after it and be judged against the
+// wrong table.
 function selectsFor(table) {
   const found = [];
   const from = new RegExp(`\\.from\\('${table}'\\)`, 'g');
   let match;
 
   while ((match = from.exec(routeSource)) !== null) {
-    const window = routeSource.slice(match.index, match.index + 600);
-    const select = window.match(/\.select\(\s*'([^']*)'/);
+    const rest = routeSource.slice(match.index + match[0].length);
+    const nextFrom = rest.search(/\.from\(\s*'/);
+    const chain = nextFrom === -1 ? rest : rest.slice(0, nextFrom);
+    const select = chain.match(/^\s*\.select\(\s*'([^']*)'/);
     if (select) found.push(select[1]);
   }
 
