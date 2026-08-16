@@ -6589,9 +6589,12 @@ customerRouter.get('/customer/orders/:orderId', async (req, res) => {
     error: 'Order not found.'
   });
 
+  // The joined product carries the artwork the app draws each line with; the
+  // snapshot columns on order_items hold only the name and price at the time
+  // of the order.
   const items = await supabase
     .from('order_items')
-    .select('*')
+    .select('*, products(id,slug,image_url)')
     .eq('order_id', order.data.id)
     .order('created_at');
 
@@ -6667,7 +6670,10 @@ customerRouter.get('/customer/orders/:orderId', async (req, res) => {
         currency: CURRENCY
       }
     },
-    items: items.data || [],
+    items: (items.data || []).map(({ products, ...item }) => ({
+      ...item,
+      image_url: products?.image_url || null
+    })),
     payment: payment.data ? createCheckoutPaymentPayload({
       order: order.data,
       payment: payment.data
