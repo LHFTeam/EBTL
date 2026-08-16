@@ -1185,6 +1185,10 @@ function compatibilityPayload(rows = []) {
     }));
 }
 
+// Both visibility flags are read as "on unless the column says otherwise", so a
+// tag row saved before the columns existed keeps appearing everywhere it used
+// to. tag_details always carries every tag on the product — the product page
+// shows all of them — and show_on_product_card is what the card filters on.
 function publicProductTag(tag) {
   if (!tag) return null;
 
@@ -1192,7 +1196,9 @@ function publicProductTag(tag) {
     id: tag.id,
     name: tag.name,
     color_hex: tag.color_hex,
-    display_order: tag.display_order || 0
+    display_order: tag.display_order || 0,
+    show_in_filters: tag.show_in_filters !== false,
+    show_on_product_card: tag.show_on_product_card !== false
   };
 }
 
@@ -3909,7 +3915,12 @@ customerRouter.get('/customer/cocktail-finder/options', async (_req, res) => {
     });
   }
 
-  const productTagOptions = (productTags.data || []).map(publicProductTag);
+  // Only tags an admin marked as filters reach the finder's filter list; the
+  // rest still badge cards and show on the product page, they just are not
+  // something to filter by.
+  const productTagOptions = (productTags.data || [])
+    .map(publicProductTag)
+    .filter((tag) => tag.show_in_filters);
 
   res.json({
     liquorTypes: (liquorTypes.data || []).map(publicLiquorType),

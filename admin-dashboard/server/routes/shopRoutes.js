@@ -32,7 +32,9 @@ const productTagPayloadSchema = z.object({
   name: z.string().trim().min(1).max(40),
   color_hex: hexColor,
   display_order: z.coerce.number().int().optional(),
-  is_active: z.boolean().optional()
+  is_active: z.boolean().optional(),
+  show_in_filters: z.boolean().optional(),
+  show_on_product_card: z.boolean().optional()
 });
 
 const productTagPatchSchema = productTagPayloadSchema.partial();

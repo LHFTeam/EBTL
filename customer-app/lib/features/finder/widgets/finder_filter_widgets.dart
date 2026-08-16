@@ -131,7 +131,7 @@ class ProductTagFilterSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tags = sortProductTags(productTags);
+    final tags = filterProductTags(productTags);
     if (tags.isEmpty) return const SizedBox.shrink();
 
     return Padding(

@@ -15,7 +15,9 @@ const blankProductTag = {
   name: '',
   color_hex: '#1F6F68',
   display_order: 0,
-  is_active: true
+  is_active: true,
+  show_in_filters: true,
+  show_on_product_card: true
 };
 
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
@@ -89,7 +91,11 @@ export default function Shop() {
       name: tag.name || '',
       color_hex: tag.color_hex || '#1F6F68',
       display_order: tag.display_order ?? 0,
-      is_active: !!tag.is_active
+      is_active: !!tag.is_active,
+      // Both default on for a tag saved before the columns existed, which is
+      // where it already appears.
+      show_in_filters: tag.show_in_filters !== false,
+      show_on_product_card: tag.show_on_product_card !== false
     }])));
   }, [productTags]);
 
@@ -234,7 +240,9 @@ export default function Shop() {
           name: newTag.name,
           color_hex: newTag.color_hex,
           display_order: newTag.display_order,
-          is_active: toBool(newTag.is_active)
+          is_active: toBool(newTag.is_active),
+          show_in_filters: toBool(newTag.show_in_filters),
+          show_on_product_card: toBool(newTag.show_on_product_card)
         })
       });
 
@@ -262,7 +270,9 @@ export default function Shop() {
           name: draft.name,
           color_hex: draft.color_hex,
           display_order: draft.display_order,
-          is_active: toBool(draft.is_active)
+          is_active: toBool(draft.is_active),
+          show_in_filters: toBool(draft.show_in_filters),
+          show_on_product_card: toBool(draft.show_on_product_card)
         })
       });
     }, 'Product tag updated.');
@@ -408,6 +418,22 @@ export default function Shop() {
           />
           <span>Active</span>
         </label>
+        <label className="checkboxField" title="Offer this tag as a filter in the app's cocktail finder.">
+          <input
+            type="checkbox"
+            checked={toBool(newTag.show_in_filters)}
+            onChange={(e) => setNewTag({ ...newTag, show_in_filters: e.target.checked })}
+          />
+          <span>Show in filters</span>
+        </label>
+        <label className="checkboxField" title="Badge this tag on product cards. The product page shows it either way.">
+          <input
+            type="checkbox"
+            checked={toBool(newTag.show_on_product_card)}
+            onChange={(e) => setNewTag({ ...newTag, show_on_product_card: e.target.checked })}
+          />
+          <span>Show on product card</span>
+        </label>
         <button className="primary">Add tag</button>
       </form>
 
@@ -438,6 +464,22 @@ export default function Shop() {
                 onChange={(e) => patchTagEdit(tag.id, { is_active: e.target.checked })}
               />
               <span>Active</span>
+            </label>
+            <label className="checkboxField" title="Offer this tag as a filter in the app's cocktail finder.">
+              <input
+                type="checkbox"
+                checked={toBool(draft.show_in_filters)}
+                onChange={(e) => patchTagEdit(tag.id, { show_in_filters: e.target.checked })}
+              />
+              <span>Show in filters</span>
+            </label>
+            <label className="checkboxField" title="Badge this tag on product cards. The product page shows it either way.">
+              <input
+                type="checkbox"
+                checked={toBool(draft.show_on_product_card)}
+                onChange={(e) => patchTagEdit(tag.id, { show_on_product_card: e.target.checked })}
+              />
+              <span>Show on product card</span>
             </label>
             <span className="tagChip" style={{ '--tag-color': draft.color_hex || '#1F6F68' }}>{draft.name || 'Tag preview'}</span>
             <div className="inlineActions">

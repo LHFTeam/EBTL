@@ -44,16 +44,11 @@ ledger version: it was saved as `20260810120000_…` before the ledger assigned
 `20260810132333`. Renaming it would break nothing, but the mapping above is what
 makes the pair readable until then.
 
-Seven of them were recorded with no file in the repo and were backfilled from
-the ledger's stored statements. They carry a header saying so. The four older
-files predate that and keep their original `YYYYMMDD_name` names; new files use
-the full ledger version, because three migrations share 2026-07-24 and a date
-alone cannot order or name them.
-
-`product_tag_visibility` is the most recent of the backfilled seven — applied
-outside this repo, reconstructed afterwards. Its two columns are live but
-nothing in either app reads them yet, so setting either to false currently
-changes nothing; its header says so.
+Six of them were recorded with no file in the repo and were backfilled
+from the ledger's stored statements. They carry a header saying so. The four
+older files predate that and keep their original `YYYYMMDD_name` names; new
+files use the full ledger version, because three migrations share 2026-07-24 and
+a date alone cannot order or name them.
 
 To check the two are still in step:
 

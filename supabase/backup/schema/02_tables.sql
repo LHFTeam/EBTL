@@ -117,6 +117,12 @@ CREATE TABLE IF NOT EXISTS public.customer_credit_ledger (
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS public.customer_favorite_liquor_types (
+    customer_id uuid NOT NULL,
+    liquor_type_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS public.customer_favorite_products (
     customer_id uuid NOT NULL,
     product_id uuid NOT NULL,
@@ -170,6 +176,14 @@ CREATE TABLE IF NOT EXISTS public.customer_push_tokens (
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS public.customer_top_liquor_types (
+    customer_id uuid NOT NULL,
+    liquor_type_id uuid NOT NULL,
+    order_count integer DEFAULT 0 NOT NULL,
+    rank integer DEFAULT 1 NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS public.customers (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     auth_user_id uuid,
@@ -210,10 +224,52 @@ CREATE TABLE IF NOT EXISTS public.employees (
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS public.golden_hour_modes (
+    mode text NOT NULL,
+    is_active boolean DEFAULT false NOT NULL,
+    start_time time without time zone NOT NULL,
+    end_time time without time zone NOT NULL,
+    title text,
+    subtitle text,
+    product_id uuid,
+    image_url text,
+    image_caption text,
+    spirit_pill_scheme text DEFAULT 'sand'::text NOT NULL,
+    pills jsonb DEFAULT '[]'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.home_hero_banners (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    image_url text NOT NULL,
+    headline text,
+    body text,
+    deep_link text,
+    display_order integer NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.home_hero_settings (
+    id boolean DEFAULT true NOT NULL,
+    rotation_seconds integer DEFAULT 5 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.ingredient_categories (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS public.ingredients (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     name text NOT NULL,
-    category text,
     base_unit text NOT NULL,
     purchase_unit_name text,
     purchase_unit_size numeric(12,3),
@@ -227,7 +283,9 @@ CREATE TABLE IF NOT EXISTS public.ingredients (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     icon_key text,
-    name_ar text
+    name_ar text,
+    category_id uuid,
+    is_searchable boolean DEFAULT true NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS public.inventory_balances (
@@ -466,7 +524,9 @@ CREATE TABLE IF NOT EXISTS public.product_tags (
     display_order integer DEFAULT 0 NOT NULL,
     is_active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    show_in_filters boolean DEFAULT true NOT NULL,
+    show_on_product_card boolean DEFAULT true NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS public.product_variants (
@@ -607,6 +667,29 @@ CREATE TABLE IF NOT EXISTS public.shop_settings (
     banner_image_url text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.spotlight_banner_categories (
+    banner_id uuid NOT NULL,
+    category_id uuid NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.spotlight_banner_products (
+    banner_id uuid NOT NULL,
+    product_id uuid NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.spotlight_banners (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    image_url text NOT NULL,
+    title text NOT NULL,
+    subtitle text,
+    display_order integer NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    content_type text DEFAULT 'products'::text NOT NULL,
+    markdown_body text
 );
 
 CREATE TABLE IF NOT EXISTS public.stock_movements (

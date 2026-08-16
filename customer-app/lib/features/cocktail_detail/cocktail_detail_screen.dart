@@ -489,6 +489,8 @@ class CocktailDetailHero extends StatelessWidget {
               child: Container(height: 66, color: EbtlColors.cream),
             ),
           ),
+          // The page badges every tag on the cocktail, including the ones kept
+          // off its card.
           if (cocktail.tagDetails.isNotEmpty)
             Positioned(
               left: 22,

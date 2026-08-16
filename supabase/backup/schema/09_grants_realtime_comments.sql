@@ -63,16 +63,35 @@ END $$;
 -- ---------------------------------------------------------------------------
 
 COMMENT ON TABLE public.customer_credit_ledger IS 'Append-only store-credit wallet. Positive delta = credit earned, negative = credit spent. Balance = sum(delta_amount) per customer.';
+COMMENT ON TABLE public.customer_favorite_liquor_types IS 'Spirits a customer marked as a favorite on their profile. Curated by hand — compare customer_top_liquor_types, which the backend computes.';
+COMMENT ON TABLE public.customer_top_liquor_types IS 'The spirits a customer orders most, recomputed in full on every order confirmation (server/lib/customerSpirits.js). Never written by hand.';
+COMMENT ON TABLE public.golden_hour_modes IS 'The four time-of-day variants of the customer app''s launch modal ("Golden Hour"). Exactly four rows, seeded and edited from Marketing → Golden Hour; never created or deleted through the API.';
+COMMENT ON TABLE public.home_hero_banners IS 'CMS-driven slides for the customer app home hero carousel. Only image_url and display_order are required; the app falls back to its bundled slides when no active row exists.';
+COMMENT ON TABLE public.home_hero_settings IS 'Singleton config for the customer app home hero carousel.';
 COMMENT ON TABLE public.location_opening_hours IS 'Weekly opening hours for beach carts. day_of_week follows JavaScript getDay(): 0=Sunday, 1=Monday, ... 6=Saturday.';
 COMMENT ON TABLE public.order_number_counters IS 'Private per-day counter backing orders.order_number. Numbering starts at 100 and resets each Africa/Cairo business date.';
 COMMENT ON TABLE public.referral_settings IS 'Single-row referral program configuration. Backs the admin Referrals page and checkout/reward enforcement.';
 COMMENT ON TABLE public.referrals IS 'One row per attributed referral. status: pending (attributed) -> rewarded (referee''s first qualifying paid order granted the referrer credit). void = disqualified.';
 COMMENT ON TABLE public.shop_settings IS 'Global customer app shop-screen settings. Keep exactly one row with id=true.';
+COMMENT ON TABLE public.spotlight_banner_categories IS 'Whole categories picked for a Spotlight banner, resolved to active products at request time.';
+COMMENT ON TABLE public.spotlight_banner_products IS 'Loose products picked for a Spotlight banner. Unioned with the products of spotlight_banner_categories to build the banner sheet.';
+COMMENT ON TABLE public.spotlight_banners IS 'CMS-driven banners for the customer app home "The Spotlight" rail. Tapping one opens a sheet titled `title` over a grid of the products selected in spotlight_banner_products and spotlight_banner_categories.';
 
+COMMENT ON COLUMN public.customer_top_liquor_types.order_count IS 'How many of the customer''s placed orders contain at least one cocktail using this spirit. Counted once per order, not per cocktail.';
+COMMENT ON COLUMN public.customer_top_liquor_types.rank IS 'Which of the two kept places this spirit holds: 1 = most-ordered count, 2 = second-most. Ties share a rank, so a rank may hold several rows and the table may hold more than two per customer.';
 COMMENT ON COLUMN public.customers.referral_attributed_at IS 'When this customer was attributed to a referrer (first successful code apply).';
 COMMENT ON COLUMN public.customers.referral_code IS 'The customer''s own shareable referral code (e.g. EBTL-XXXXX). Lazily generated.';
 COMMENT ON COLUMN public.customers.referred_by_customer_id IS 'The customer who referred this customer, if they applied a referral code.';
+COMMENT ON COLUMN public.golden_hour_modes.end_time IS 'Exclusive end of the window this mode covers, in Africa/Cairo.';
+COMMENT ON COLUMN public.golden_hour_modes.pills IS 'Pills shown after the leading spirit pill, in order: [{"label": "…", "scheme": "…"}]. Up to four; the array length is the count.';
+COMMENT ON COLUMN public.golden_hour_modes.product_id IS 'The cocktail the modal pitches, and the one its Add to Cart adds. Required before a mode can be switched on; nulled rather than blocking if the product is ever deleted, which switches the mode off on its next read.';
+COMMENT ON COLUMN public.golden_hour_modes.spirit_pill_scheme IS 'Colour scheme of the leading pill only. Its text is always "Your <liquor type>", derived from the chosen cocktail rather than stored.';
+COMMENT ON COLUMN public.golden_hour_modes.start_time IS 'Inclusive start of the window this mode covers, in Africa/Cairo. May be later than end_time, which means the window wraps past midnight.';
+COMMENT ON COLUMN public.home_hero_banners.deep_link IS 'Optional in-app destination for a tap: finder | explore | cart | orders | cocktail/<slug> | category/<category id>. Null makes the slide non-tappable.';
+COMMENT ON COLUMN public.home_hero_banners.display_order IS 'Ascending carousel position. Required — marketing always chooses where a slide sits.';
+COMMENT ON COLUMN public.home_hero_settings.rotation_seconds IS 'How long each slide dwells before the carousel advances itself. The app falls back to 5 when this cannot be read.';
 COMMENT ON COLUMN public.ingredients.icon_key IS 'Customer-app ingredient icon key. Flutter maps this key to a bundled local SVG/vector icon. Example: lime, grapefruit, syrup, salt, mint, mixer.';
+COMMENT ON COLUMN public.ingredients.is_searchable IS 'Whether the customer app search bar may surface this ingredient: as its own result row, and as a term its products match on. Off hides it from search only — recipes, the cocktail ingredient list, and inventory are unaffected.';
 COMMENT ON COLUMN public.ingredients.name_ar IS 'Arabic display name (optional); falls back to name when null. Used by the KDS.';
 COMMENT ON COLUMN public.locations.banner_image_url IS 'Public WebP banner image URL for customer app location/cart cards.';
 COMMENT ON COLUMN public.locations.name_ar IS 'Arabic display name (optional); falls back to name when null. Used by the KDS.';
@@ -83,6 +102,8 @@ COMMENT ON COLUMN public.orders.preparing_at IS 'When the order first moved to s
 COMMENT ON COLUMN public.orders.ready_at IS 'When the order first moved to status = ready.';
 COMMENT ON COLUMN public.orders.referral_id IS 'The referral this order fulfilled the referee side of (earned the referee a first-order discount).';
 COMMENT ON COLUMN public.product_categories.image_url IS 'Public WebP image URL for the customer app shop category row.';
+COMMENT ON COLUMN public.product_tags.show_in_filters IS 'Whether the cocktail finder offers this tag as a filter chip. Off keeps it out of the filter list only — products still carry the tag, and it still shows on the product page.';
+COMMENT ON COLUMN public.product_tags.show_on_product_card IS 'Whether this tag is badged on product and cocktail cards. Off hides the badge; the product detail page shows the tag regardless.';
 COMMENT ON COLUMN public.product_variants.name_ar IS 'Arabic display name (optional); falls back to name when null. Used by the KDS.';
 COMMENT ON COLUMN public.products.description IS 'Full customer-facing product/cocktail description. Store Markdown text, not raw HTML.';
 COMMENT ON COLUMN public.products.name_ar IS 'Arabic display name (optional); falls back to name when null. Used by the KDS.';
@@ -99,6 +120,11 @@ COMMENT ON COLUMN public.referral_settings.referrer_reward_amount IS 'Store cred
 COMMENT ON COLUMN public.referral_settings.reward_cap_per_referrer IS 'Max number of rewarded referrals a single referrer may earn. NULL = unlimited.';
 COMMENT ON COLUMN public.referrals.qualifying_order_id IS 'The referee order that unlocked the referrer reward (idempotency guard).';
 COMMENT ON COLUMN public.shop_settings.banner_image_url IS 'Public WebP banner image URL for the customer app shop screen. Text/CTA stay static in the app.';
+COMMENT ON COLUMN public.spotlight_banners.content_type IS 'Which sheet tapping this banner opens: ''products'' (the curated grid from spotlight_banner_products/spotlight_banner_categories, the original and default behaviour) or ''markdown'' (markdown_body rendered as a slide).';
+COMMENT ON COLUMN public.spotlight_banners.display_order IS 'Ascending position in the Spotlight rail. Required — marketing always chooses where a banner sits.';
+COMMENT ON COLUMN public.spotlight_banners.markdown_body IS 'Markdown copy for a content_type = ''markdown'' banner''s slide. Supports headings (its first heading takes the place of the sheet title), images, and ordered/unordered lists. Unused and ignored when content_type = ''products''.';
+COMMENT ON COLUMN public.spotlight_banners.subtitle IS 'Optional line under the sheet title.';
+COMMENT ON COLUMN public.spotlight_banners.title IS 'Heading of the sheet the banner opens. Required — a sheet with no title has no heading to show.';
 
 -- ---------------------------------------------------------------------------
 -- Demand forecasting module (server/forecast/), migration 20260807171440.
