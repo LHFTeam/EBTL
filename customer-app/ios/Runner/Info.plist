@@ -49,6 +49,8 @@
 	     is what this string describes. -->
 	<key>NSCameraUsageDescription</key>
 	<string>Scan your payment card with the camera at checkout instead of typing the number in.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>EBTL uses your location to set the beach cart nearest to you, so prices and availability match where you are.</string>
 	<!-- Required before ATTrackingManager will show the tracking prompt: without
 	     this string the request is refused and the advertising identifier stays
 	     zeroed. Asked once after the first frame — see

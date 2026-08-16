@@ -122,6 +122,9 @@ dependencies:
   # SHA-256 for the sign-in nonce. Every provider gets the digest, the backend
   # gets the raw value, and a token minted for another app cannot be replayed.
   crypto: ^3.0.7
+  # Foreground GPS permission + distance calculation used to select and sort
+  # the beach cart nearest to the customer.
+  geolocator: ^14.0.3
 
 dev_dependencies:
   flutter_test:

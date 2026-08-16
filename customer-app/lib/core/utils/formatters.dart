@@ -6,6 +6,11 @@ String formatMoney(double value, String currency) {
   return '$currency $amount';
 }
 
+String formatDistance(double meters) {
+  if (meters < 1000) return '${meters.round()} m away';
+  return '${(meters / 1000).toStringAsFixed(1)} km away';
+}
+
 /// Formats an optional price, falling back to the bare [currency] label when
 /// no price is available (used by product/cocktail `priceLabel` getters).
 String formatOptionalPrice(double? price, String currency) {
