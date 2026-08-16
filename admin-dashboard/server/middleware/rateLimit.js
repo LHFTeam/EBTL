@@ -66,7 +66,10 @@ export const pickupAttemptLimiter = rateLimit({
 // `/cart/items`). The Geidea callback lives at /api/payments/... and never
 // reaches here, so it is not rate limited.
 export function customerRateLimiter(req, res, next) {
-  if (req.method === 'POST' && req.path === '/session') {
+  // Social sign-in mints a session the same way /session does, and is the one
+  // endpoint where a wrong answer is worth brute-forcing, so it shares the
+  // tighter limit rather than the general write one.
+  if (req.method === 'POST' && (req.path === '/session' || req.path === '/auth/social')) {
     return sessionLimiter(req, res, next);
   }
 

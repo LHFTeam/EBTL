@@ -211,6 +211,24 @@ class AnalyticsService {
     );
   }
 
+  /// A customer attached a social identity to their account.
+  ///
+  /// [method] is the provider name (`facebook`, `google`, `apple`). No customer
+  /// or provider identifier is sent — analytics here stays pseudonymous.
+  static void logLogin({required String method}) {
+    final cleanMethod = method.trim();
+    if (cleanMethod.isEmpty) return;
+
+    ClarityService.recordEvent('login');
+    _sendFirebase((analytics) => analytics.logLogin(loginMethod: cleanMethod));
+    _sendMeta(
+      (events) => events.logEvent(
+        name: 'login',
+        parameters: {'method': cleanMethod},
+      ),
+    );
+  }
+
   static void logLocationSelected(String locationId) {
     final cleanId = locationId.trim();
     if (cleanId.isEmpty) return;

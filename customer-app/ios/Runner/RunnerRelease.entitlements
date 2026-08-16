@@ -13,5 +13,12 @@
 	     token as FIRMessagingAPNSTokenTypeProd in any non-DEBUG build. -->
 	<key>aps-environment</key>
 	<string>production</string>
+	<!-- Sign in with Apple, matching Runner.entitlements. Guideline 4.8 makes
+	     this mandatory alongside the Facebook and Google buttons, and a Release
+	     archive missing it is rejected at upload. -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>

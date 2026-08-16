@@ -597,6 +597,39 @@ class ApiService {
     return CustomerProfileResponse.fromJson(json);
   }
 
+  /// Links a social identity to the customer this device is already acting as,
+  /// and returns whoever the backend resolved that to be.
+  ///
+  /// The response carries a `session` object, so [_request] swaps the stored
+  /// token on the way through — a customer signing in on a new device is moved
+  /// onto their existing customer row by that swap, and the anonymous row this
+  /// install started with is left behind.
+  static Future<CustomerProfile> signInWithSocialProvider({
+    required String provider,
+    required String token,
+    required String tokenKind,
+    required String nonce,
+    String? fullName,
+  }) async {
+    await ensureSession();
+
+    final json = await _request(
+      method: 'POST',
+      path: '/api/customer/auth/social',
+      body: {
+        'provider': provider,
+        'token': token,
+        'token_kind': tokenKind,
+        'nonce': nonce,
+        if (fullName != null && fullName.trim().isNotEmpty)
+          'full_name': fullName.trim(),
+      },
+      attachToken: true,
+    );
+
+    return CustomerProfile.fromJson(asMap(json['customer']));
+  }
+
   static Future<ReferralHub> fetchReferralHub() async {
     await ensureSession();
 

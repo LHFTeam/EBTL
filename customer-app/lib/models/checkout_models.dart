@@ -542,10 +542,18 @@ class PlaceOrderResponse {
   final CheckoutPayment payment;
   final String nextScreen;
 
+  /// The lines the order was written with, as the backend stored them.
+  ///
+  /// Only place-order carries these — the payment-status poll a gateway order
+  /// finishes through does not — so confirmation has to hold on to the copy
+  /// from here rather than re-reading it later.
+  final List<PlacedOrderItem> items;
+
   const PlaceOrderResponse({
     required this.order,
     required this.payment,
     required this.nextScreen,
+    required this.items,
   });
 
   factory PlaceOrderResponse.fromJson(Map<String, dynamic> json) {
@@ -553,8 +561,61 @@ class PlaceOrderResponse {
       order: CheckoutOrder.fromJson(asMap(json['order'])),
       payment: CheckoutPayment.fromJson(asMap(json['payment'])),
       nextScreen: readString(json['nextScreen'] ?? json['next_screen']),
+      items: readMapList(json['items']).map(PlacedOrderItem.fromJson).toList(),
     );
   }
+}
+
+/// One line of a placed order.
+///
+/// These come straight off the inserted `order_items` rows, so the field names
+/// are the stored snapshots rather than the `checkout` payload's shorter ones —
+/// the price the customer paid, not today's price.
+class PlacedOrderItem {
+  final String id;
+  final String productName;
+  final String? variantName;
+  final int quantity;
+  final double unitPriceIncVat;
+  final double lineTotal;
+  final String? customizationSummary;
+
+  const PlacedOrderItem({
+    required this.id,
+    required this.productName,
+    required this.variantName,
+    required this.quantity,
+    required this.unitPriceIncVat,
+    required this.lineTotal,
+    required this.customizationSummary,
+  });
+
+  factory PlacedOrderItem.fromJson(Map<String, dynamic> json) {
+    return PlacedOrderItem(
+      id: readString(json['id']),
+      productName: readString(
+        json['product_name_snapshot'] ?? json['product_name'],
+        fallback: 'Item',
+      ),
+      variantName: nullableString(
+        json['variant_name_snapshot'] ?? json['variant_name'],
+      ),
+      quantity: readInt(json['quantity']),
+      unitPriceIncVat:
+          readDouble(
+            json['unit_price_inc_vat_snapshot'] ?? json['unit_price_inc_vat'],
+          ) ??
+          0,
+      lineTotal: readDouble(json['line_total']) ?? 0,
+      customizationSummary: nullableString(json['customization_summary']),
+    );
+  }
+
+  bool get hasVariant => (variantName ?? '').trim().isNotEmpty;
+  bool get hasCustomization =>
+      (customizationSummary ?? '').trim().isNotEmpty;
+
+  String lineTotalLabel(String currency) => formatMoney(lineTotal, currency);
 }
 
 class CheckoutOrder {
@@ -564,8 +625,17 @@ class CheckoutOrder {
   final String paymentStatus;
   final String fulfillmentType;
   final String? createdAt;
+
+  /// When the cart expects to have this order ready, in UTC. Null on orders the
+  /// customer did not schedule — those are made as soon as the cart can.
+  final String? requestedFulfillmentAt;
   final String? customerPhone;
   final String? address;
+
+  /// The beach cart the order was placed against, as the backend resolved it.
+  /// Confirmation prefers this over the location the checkout screen was drawn
+  /// with, since this one is what the order actually recorded.
+  final CheckoutLocation? location;
   final CheckoutSummary totals;
   final bool hasTotals;
   final CheckoutPromotion? promotion;
@@ -577,8 +647,10 @@ class CheckoutOrder {
     required this.paymentStatus,
     required this.fulfillmentType,
     required this.createdAt,
+    required this.requestedFulfillmentAt,
     required this.customerPhone,
     required this.address,
+    required this.location,
     required this.totals,
     required this.hasTotals,
     required this.promotion,
@@ -587,6 +659,7 @@ class CheckoutOrder {
   factory CheckoutOrder.fromJson(Map<String, dynamic> json) {
     final promotionMap = asMap(json['promotion']);
     final totalsMap = asMap(json['totals']);
+    final locationMap = asMap(json['location']);
 
     return CheckoutOrder(
       id: readString(json['id']),
@@ -595,8 +668,12 @@ class CheckoutOrder {
       paymentStatus: readString(json['payment_status']),
       fulfillmentType: readString(json['fulfillment_type']),
       createdAt: nullableString(json['created_at']),
+      requestedFulfillmentAt: nullableString(json['requested_fulfillment_at']),
       customerPhone: nullableString(json['customer_phone']),
       address: nullableString(json['address']),
+      location: locationMap.isEmpty
+          ? null
+          : CheckoutLocation.fromJson(locationMap),
       totals: CheckoutSummary.fromJson(totalsMap),
       hasTotals: totalsMap.isNotEmpty,
       promotion: promotionMap.isEmpty
@@ -604,6 +681,8 @@ class CheckoutOrder {
           : CheckoutPromotion.fromJson(promotionMap),
     );
   }
+
+  bool get isDelivery => fulfillmentType == FulfillmentTypes.deliveryToUnit;
 
   /// Matches [PaymentStatusResponse.isPaid]: demo orders come back already
   /// settled from place-order, gateway orders only reach this through polling.

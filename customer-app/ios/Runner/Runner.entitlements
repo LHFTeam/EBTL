@@ -7,5 +7,13 @@
 	     environment that TestFlight and App Store builds need. -->
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- Sign in with Apple. Required by App Store guideline 4.8 because the app
+	     also offers Facebook and Google sign-in; without the entitlement the
+	     authorisation sheet fails at runtime with error 1000. Must stay in step
+	     with RunnerRelease.entitlements. -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>
