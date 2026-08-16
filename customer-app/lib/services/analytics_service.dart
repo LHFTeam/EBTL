@@ -211,7 +211,10 @@ class AnalyticsService {
     );
   }
 
-  static void logLocationSelected(String locationId) {
+  static void logLocationSelected(
+    String locationId, {
+    String method = 'manual',
+  }) {
     final cleanId = locationId.trim();
     if (cleanId.isEmpty) return;
 
@@ -219,7 +222,7 @@ class AnalyticsService {
     _sendFirebase(
       (analytics) => analytics.logEvent(
         name: 'select_location',
-        parameters: {'location_id': cleanId},
+        parameters: {'location_id': cleanId, 'method': method},
       ),
     );
     _sendMeta(
