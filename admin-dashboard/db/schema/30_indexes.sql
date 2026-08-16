@@ -59,6 +59,10 @@ CREATE INDEX idx_locations_delivery_fee ON public.locations USING btree (deliver
 CREATE INDEX idx_locations_type_active ON public.locations USING btree (type, is_active);
 CREATE UNIQUE INDEX idx_locations_type_lower_name_unique ON public.locations USING btree (type, lower(name));
 CREATE INDEX idx_loyalty_transactions_customer ON public.loyalty_transactions USING btree (customer_id, created_at DESC);
+CREATE INDEX idx_order_handoffs_location_created ON public.order_handoffs USING btree (location_id, created_at DESC);
+CREATE INDEX idx_order_handoffs_method_created ON public.order_handoffs USING btree (method, created_at DESC);
+CREATE INDEX idx_order_handoffs_order ON public.order_handoffs USING btree (order_id, created_at DESC);
+CREATE UNIQUE INDEX idx_order_handoffs_token_nonce ON public.order_handoffs USING btree (token_nonce) WHERE (token_nonce IS NOT NULL);
 CREATE INDEX idx_order_item_additions_order_item ON public.order_item_additions USING btree (order_item_id);
 CREATE INDEX idx_order_item_additions_product ON public.order_item_additions USING btree (addon_product_id);
 CREATE INDEX idx_order_item_inventory_ingredient ON public.order_item_inventory_components USING btree (ingredient_id);

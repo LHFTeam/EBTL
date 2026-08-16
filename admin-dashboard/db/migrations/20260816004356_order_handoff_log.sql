@@ -1,10 +1,9 @@
 -- EBTL: Scan to Collect — the handoff log behind QR-gated order pickup
 --
--- NOT YET APPLIED. Unlike every other file in this directory, this migration is
--- a proposal: it has no ledger entry yet. Apply it through the Supabase
--- dashboard (or `apply_migration`), then rename this file to the version the
--- ledger assigns, add the row to ../migrations/README.md, and refresh
--- ../schema/ with ../tools/dump_schema.sql. It is idempotent and safe to re-run.
+-- The Postgres schema is managed in Supabase and is NOT otherwise tracked in
+-- this repo (see AGENTS.md). This file is the record of a migration already
+-- applied to the live project (`apply_migration`, ledger version
+-- 20260816004356). It is idempotent and safe to re-run.
 --
 -- Why: until now the last hop of a cart order — `ready` → `completed` — was a
 -- button on the cart-operations screen. Anyone with the orders area could tap
