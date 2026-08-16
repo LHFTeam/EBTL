@@ -37,20 +37,28 @@ empty.
 |---|---|
 | Enum types | 11 |
 | Tables | 78 |
-| Columns | 713 |
+| Columns | 716 |
 | Primary key / unique constraints | 108 (78 + 30) |
 | Check constraints | 135 |
 | Foreign keys | 122 |
-| Indexes | 104 (the non-constraint ones; `03_constraints.sql` creates the rest) |
+| Indexes | 107 (the non-constraint ones; `03_constraints.sql` creates the rest) |
 | Functions | 14 in `public`, 1 in `private` |
 | Views | 8 |
 | Triggers | 41 |
 | RLS policies | 135, across 78 RLS-enabled tables |
-| Table / column comments | 68 |
+| Table / column comments | 71 |
 
 These totals are the whole bundle, and every one of them was measured on
 2026-08-15 by restoring `schema/` into an empty Postgres 17 and counting the
 result against the live catalogs, object by object. They agree.
+
+Three rows of that table moved on 2026-08-16 for the `customer_social_identities`
+migration (`customers.facebook_user_id` / `google_user_id` / `apple_user_id`,
+their three partial unique indexes, and their three column comments): columns
+713 → 716, indexes 104 → 107, comments 68 → 71. Those three were counted from
+`schema/` directly rather than by repeating the full restore-and-compare, so
+they are as trustworthy as the files but the *rest* of the table still rests on
+the 2026-08-15 measurement.
 
 The demand-forecasting module (migration `20260807171440_forecast_module`, 16
 `forecast_*` tables) is still appended to each file as a labelled block rather

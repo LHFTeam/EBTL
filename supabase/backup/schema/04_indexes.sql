@@ -31,6 +31,9 @@ CREATE INDEX IF NOT EXISTS idx_customer_payment_methods_customer ON public.custo
 CREATE INDEX IF NOT EXISTS idx_customer_payment_methods_default ON public.customer_payment_methods USING btree (customer_id, is_default) WHERE (is_default = true);
 CREATE INDEX IF NOT EXISTS idx_customer_push_tokens_customer_active ON public.customer_push_tokens USING btree (customer_id, is_active, last_registered_at DESC);
 CREATE INDEX IF NOT EXISTS idx_customer_push_tokens_token_hash ON public.customer_push_tokens USING btree (token_hash);
+CREATE UNIQUE INDEX IF NOT EXISTS customers_apple_user_id_uidx ON public.customers USING btree (apple_user_id) WHERE (apple_user_id IS NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS customers_facebook_user_id_uidx ON public.customers USING btree (facebook_user_id) WHERE (facebook_user_id IS NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS customers_google_user_id_uidx ON public.customers USING btree (google_user_id) WHERE (google_user_id IS NOT NULL);
 CREATE UNIQUE INDEX IF NOT EXISTS customers_referral_code_lower_uidx ON public.customers USING btree (lower(referral_code)) WHERE (referral_code IS NOT NULL);
 CREATE INDEX IF NOT EXISTS customers_referred_by_customer_idx ON public.customers USING btree (referred_by_customer_id) WHERE (referred_by_customer_id IS NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_customers_auth_user_id ON public.customers USING btree (auth_user_id);
