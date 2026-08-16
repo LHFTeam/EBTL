@@ -792,7 +792,9 @@ CREATE TABLE IF NOT EXISTS public.product_tags (
     display_order integer DEFAULT 0 NOT NULL,
     is_active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    show_in_filters boolean DEFAULT true NOT NULL,
+    show_on_product_card boolean DEFAULT true NOT NULL
 );
 ALTER TABLE public.product_tags ENABLE ROW LEVEL SECURITY;
 

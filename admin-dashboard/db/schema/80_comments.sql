@@ -43,6 +43,8 @@ COMMENT ON COLUMN public.orders.preparing_at IS 'When the order first moved to s
 COMMENT ON COLUMN public.orders.ready_at IS 'When the order first moved to status = ready.';
 COMMENT ON COLUMN public.orders.referral_id IS 'The referral this order fulfilled the referee side of (earned the referee a first-order discount).';
 COMMENT ON COLUMN public.product_categories.image_url IS 'Public WebP image URL for the customer app shop category row.';
+COMMENT ON COLUMN public.product_tags.show_in_filters IS 'Whether the cocktail finder offers this tag as a filter chip. Off keeps it out of the filter list only — products still carry the tag, and it still shows on the product page.';
+COMMENT ON COLUMN public.product_tags.show_on_product_card IS 'Whether this tag is badged on product and cocktail cards. Off hides the badge; the product detail page shows the tag regardless.';
 COMMENT ON COLUMN public.product_variants.name_ar IS 'Arabic display name (optional); falls back to name when null. Used by the KDS.';
 COMMENT ON COLUMN public.products.description IS 'Full customer-facing product/cocktail description. Store Markdown text, not raw HTML.';
 COMMENT ON COLUMN public.products.name_ar IS 'Arabic display name (optional); falls back to name when null. Used by the KDS.';

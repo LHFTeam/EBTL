@@ -10,8 +10,7 @@ be read alongside the changes that produced it.
 ## Ledger mapping
 
 Supabase records what it has applied in `supabase_migrations.schema_migrations`.
-Twenty-one of the twenty-two entries have a file; the exception is called out
-under [Known gap](#known-gap) below.
+All twenty-two entries have a file:
 
 | Ledger version | Name | File |
 | --- | --- | --- |
@@ -35,7 +34,7 @@ under [Known gap](#known-gap) below.
 | 20260810132333 | normalize_ingredient_categories | `20260810120000_normalize_ingredient_categories.sql` |
 | 20260810174101 | cascade_ingredient_delete | `20260810174101_cascade_ingredient_delete.sql` |
 | 20260810221934 | ingredient_search_visibility | `20260810221934_ingredient_search_visibility.sql` |
-| 20260815202608 | product_tag_visibility | **none — see Known gap** |
+| 20260815202608 | product_tag_visibility | `20260815202608_product_tag_visibility.sql` |
 | 20260816004356 | order_handoff_log | `20260816004356_order_handoff_log.sql` |
 
 ## Notes on the applied set
@@ -45,25 +44,22 @@ ledger version: it was saved as `20260810120000_…` before the ledger assigned
 `20260810132333`. Renaming it would break nothing, but the mapping above is what
 makes the pair readable until then.
 
-Six of them were recorded with no file in the repo and were backfilled
-from the ledger's stored statements. They carry a header saying so. The four
-older files predate that and keep their original `YYYYMMDD_name` names; new
-files use the full ledger version, because three migrations share 2026-07-24 and
-a date alone cannot order or name them.
+Seven of them were recorded with no file in the repo and were backfilled from
+the ledger's stored statements. They carry a header saying so. The four older
+files predate that and keep their original `YYYYMMDD_name` names; new files use
+the full ledger version, because three migrations share 2026-07-24 and a date
+alone cannot order or name them.
+
+`product_tag_visibility` is the most recent of the backfilled seven — applied
+outside this repo, reconstructed afterwards. Its two columns are live but
+nothing in either app reads them yet, so setting either to false currently
+changes nothing; its header says so.
 
 To check the two are still in step:
 
 ```sql
 select version, name from supabase_migrations.schema_migrations order by version;
 ```
-
-## Known gap
-
-`20260815202608 product_tag_visibility` is in the live ledger but has **no file
-here**. It was applied outside this repo, so the mapping above is one row short
-of complete. Backfill it the way the six earlier ones were — read its statements
-out of `supabase_migrations.schema_migrations` and save them under that version
-with a header saying so.
 
 ## Adding one
 
