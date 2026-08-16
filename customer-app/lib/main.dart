@@ -50,6 +50,13 @@ Future<void> main() async {
   await CrashReportingService.initialize();
   await AnalyticsService.initialize();
   runApp(ClarityService.wrap(const EbtlApp()));
+
+  // Apple's tracking prompt only appears once the app is on screen, so it is
+  // asked after the first frame rather than during startup — and never
+  // awaited, so a customer sitting on the dialog does not hold up the app.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    AnalyticsService.resolveTrackingAuthorization();
+  });
 }
 
 /*

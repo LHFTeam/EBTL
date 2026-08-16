@@ -77,6 +77,10 @@ jobs:
           channel: stable
       - run: flutter pub get
       - run: flutter analyze
+      # The unit and widget tests under customer-app/test. Pure Dart against
+      # fakes — no device, emulator, backend or secrets — so they run in the
+      # same job as the analyzer rather than needing one of their own.
+      - run: flutter test
 
   customer-app-android:
     name: customer-app android build

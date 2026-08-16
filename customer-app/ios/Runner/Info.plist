@@ -49,6 +49,15 @@
 	     is what this string describes. -->
 	<key>NSCameraUsageDescription</key>
 	<string>Scan your payment card with the camera at checkout instead of typing the number in.</string>
+	<!-- Required before ATTrackingManager will show the tracking prompt: without
+	     this string the request is refused and the advertising identifier stays
+	     zeroed. Asked once after the first frame — see
+	     lib/services/app_tracking_service.dart — so Meta App Events can
+	     attribute installs and purchases to the campaign that produced them.
+	     FacebookAdvertiserIDCollectionEnabled above stays false so the SDK
+	     collects nothing until that prompt has been allowed. -->
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Lets EBTL see which ads bring people to the app, so we show you offers worth your time instead of ones that aren't.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
