@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/ebtl_colors.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../models/common_models.dart';
+import '../../../services/location_service.dart';
 
 /// Beach-cart picker for the Home context header. The chip no longer sits on a
 /// rail of location cards, so the choice moved into this sheet.
@@ -12,6 +14,8 @@ Future<ServiceLocation?> showBeachCartPickerSheet({
   required BuildContext context,
   required List<ServiceLocation> serviceAreas,
   required String? selectedLocationId,
+  Map<String, double> distanceMetersById = const {},
+  Future<Map<String, double>> Function()? onUseMyLocation,
 }) {
   return showModalBottomSheet<ServiceLocation>(
     context: context,
@@ -24,19 +28,51 @@ Future<ServiceLocation?> showBeachCartPickerSheet({
       return _BeachCartPickerSheet(
         serviceAreas: serviceAreas,
         selectedLocationId: selectedLocationId,
+        distanceMetersById: distanceMetersById,
+        onUseMyLocation: onUseMyLocation,
       );
     },
   );
 }
 
-class _BeachCartPickerSheet extends StatelessWidget {
+class _BeachCartPickerSheet extends StatefulWidget {
   final List<ServiceLocation> serviceAreas;
   final String? selectedLocationId;
+  final Map<String, double> distanceMetersById;
+  final Future<Map<String, double>> Function()? onUseMyLocation;
 
   const _BeachCartPickerSheet({
     required this.serviceAreas,
     required this.selectedLocationId,
+    required this.distanceMetersById,
+    required this.onUseMyLocation,
   });
+
+  @override
+  State<_BeachCartPickerSheet> createState() => _BeachCartPickerSheetState();
+}
+
+class _BeachCartPickerSheetState extends State<_BeachCartPickerSheet> {
+  late Map<String, double> distances = widget.distanceMetersById;
+  bool locating = false;
+  bool locationUnavailable = false;
+
+  Future<void> useMyLocation() async {
+    final callback = widget.onUseMyLocation;
+    if (callback == null || locating) return;
+    setState(() {
+      locating = true;
+      locationUnavailable = false;
+    });
+
+    final refreshed = await callback();
+    if (!mounted) return;
+    setState(() {
+      locating = false;
+      distances = refreshed;
+      locationUnavailable = refreshed.isEmpty;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -83,11 +119,37 @@ class _BeachCartPickerSheet extends StatelessWidget {
                       color: EbtlColors.muted,
                     ),
                   ),
+                  const SizedBox(height: 4),
+                  if (locationUnavailable)
+                    Text(
+                      'Location is off. Turn it on in Settings to sort by distance.',
+                      style: GoogleFonts.manrope(
+                        fontSize: 12,
+                        height: 1.35,
+                        fontWeight: FontWeight.w500,
+                        color: EbtlColors.muted,
+                      ),
+                    )
+                  else
+                    TextButton.icon(
+                      onPressed: locating ? null : useMyLocation,
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      icon: locating
+                          ? const SizedBox.square(
+                              dimension: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.my_location_rounded, size: 17),
+                      label: const Text('Use my location'),
+                    ),
                 ],
               ),
             ),
             Flexible(
-              child: serviceAreas.isEmpty
+              child: widget.serviceAreas.isEmpty
                   ? Padding(
                       padding: const EdgeInsets.fromLTRB(22, 22, 22, 26),
                       child: Text(
@@ -104,18 +166,25 @@ class _BeachCartPickerSheet extends StatelessWidget {
                   : ListView.separated(
                       shrinkWrap: true,
                       padding: const EdgeInsets.fromLTRB(22, 14, 22, 26),
-                      itemCount: serviceAreas.length,
+                      itemCount: LocationService.sortedByDistance(
+                        widget.serviceAreas,
+                        distances,
+                      ).length,
                       separatorBuilder: (_, _) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
-                        final location = serviceAreas[index];
+                        final locations = LocationService.sortedByDistance(
+                          widget.serviceAreas,
+                          distances,
+                        );
+                        final location = locations[index];
 
                         return _BeachCartOption(
                           location: location,
-                          selected: location.id == selectedLocationId,
+                          selected: location.id == widget.selectedLocationId,
+                          distanceMeters: distances[location.id],
                           onTap: () =>
-                              Navigator.of(context).pop<ServiceLocation>(
-                                location,
-                              ),
+                              Navigator.of(context)
+                                  .pop<ServiceLocation>(location),
                         );
                       },
                     ),
@@ -130,11 +199,13 @@ class _BeachCartPickerSheet extends StatelessWidget {
 class _BeachCartOption extends StatelessWidget {
   final ServiceLocation location;
   final bool selected;
+  final double? distanceMeters;
   final VoidCallback onTap;
 
   const _BeachCartOption({
     required this.location,
     required this.selected,
+    required this.distanceMeters,
     required this.onTap,
   });
 
@@ -200,6 +271,18 @@ class _BeachCartOption extends StatelessWidget {
                           color: EbtlColors.muted,
                         ),
                       ),
+                      if (distanceMeters != null) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          formatDistance(distanceMeters!),
+                          style: GoogleFonts.manrope(
+                            fontSize: 11.5,
+                            height: 1.2,
+                            fontWeight: FontWeight.w500,
+                            color: EbtlColors.muted,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
