@@ -1,0 +1,8 @@
+-- EBTL data backup: public.ingredient_categories
+SET session_replication_role = replica;
+
+INSERT INTO public.ingredient_categories (id, name, is_active, created_at, updated_at)
+SELECT (r->>0)::uuid, (r->>1)::text, (r->>2)::boolean, (r->>3)::timestamp with time zone, (r->>4)::timestamp with time zone
+FROM jsonb_array_elements($json$[["11f252d2-5019-4ac8-bef7-710d6242c658", "Juice", "true", "2026-08-10 13:23:33.92862+00", "2026-08-10 13:23:33.92862+00"], ["54002344-0dd8-4527-81bb-9c44d616c70c", "Mixer", "true", "2026-08-10 13:23:33.92862+00", "2026-08-10 13:23:33.92862+00"], ["76191214-d752-400b-800b-be5f0bda3420", "General", "true", "2026-08-10 13:23:33.92862+00", "2026-08-10 13:23:33.92862+00"], ["77bbfd0e-87be-4d31-8e11-a893a7d83128", "Garnish", "true", "2026-08-10 13:23:33.92862+00", "2026-08-10 13:23:33.92862+00"], ["f85fe8fc-e14e-488d-b902-218583602f39", "Fruit", "true", "2026-08-10 13:23:33.92862+00", "2026-08-10 13:23:33.92862+00"], ["950aaf0b-e05f-4713-8b01-569f5ef5951b", "Essential", "true", "2026-08-10 13:23:33.92862+00", "2026-08-10 13:23:33.92862+00"], ["8d28a021-6946-46ae-a6ba-6eb5cbbd0e2a", "Customer Supplied Liquor", "true", "2026-08-10 13:23:33.92862+00", "2026-08-10 13:23:33.92862+00"], ["66a1894b-f520-4040-8cbf-424732af8f5c", "Snack", "true", "2026-08-10 13:23:33.92862+00", "2026-08-10 13:23:33.92862+00"], ["c9f11fbf-a45d-4231-87da-09bc931fa244", "Syrup", "true", "2026-08-10 13:23:33.92862+00", "2026-08-10 13:23:33.92862+00"], ["3dc46b14-83b0-48e7-b5e5-0379a40de272", "Nuts", "true", "2026-08-10 13:23:33.92862+00", "2026-08-10 13:23:33.92862+00"]]$json$::jsonb) AS r;
+
+RESET session_replication_role;

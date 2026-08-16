@@ -222,11 +222,20 @@ class ProductTag {
   final String colorHex;
   final int displayOrder;
 
+  /// Whether the finder offers this tag as a filter chip.
+  final bool showInFilters;
+
+  /// Whether cards badge this tag. A product page shows every tag on the
+  /// product either way, so this only decides the badge.
+  final bool showOnProductCard;
+
   const ProductTag({
     required this.id,
     required this.name,
     required this.colorHex,
     required this.displayOrder,
+    this.showInFilters = true,
+    this.showOnProductCard = true,
   });
 
   factory ProductTag.fromJson(Map<String, dynamic> json) {
@@ -235,6 +244,10 @@ class ProductTag {
       name: readString(json['name'], fallback: 'Tag'),
       colorHex: readString(json['color_hex'], fallback: '#1F6F68'),
       displayOrder: readInt(json['display_order']),
+      // An API that predates the flags sends neither, and the tag appears in
+      // both places the way it did before.
+      showInFilters: readBool(json['show_in_filters'], fallback: true),
+      showOnProductCard: readBool(json['show_on_product_card'], fallback: true),
     );
   }
 }

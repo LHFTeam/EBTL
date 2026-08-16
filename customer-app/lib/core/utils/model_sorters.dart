@@ -24,6 +24,24 @@ List<ProductTag> sortProductTags(List<ProductTag> productTags) {
   return sortByOrderThenName(productTags, (t) => t.displayOrder, (t) => t.name);
 }
 
+/// The tags a card badges: the ones an admin marked as card tags, in display
+/// order. A product's detail page lists every tag it carries instead, so a tag
+/// left off the card is hidden there and nowhere else.
+List<ProductTag> cardProductTags(List<ProductTag> productTags) {
+  return sortProductTags(
+    productTags.where((tag) => tag.showOnProductCard).toList(),
+  );
+}
+
+/// The tags the finder offers as filter chips. The API already leaves the rest
+/// out of the finder options; this keeps the flag authoritative on the client
+/// for a tag that reaches the list by any other route.
+List<ProductTag> filterProductTags(List<ProductTag> productTags) {
+  return sortProductTags(
+    productTags.where((tag) => tag.showInFilters).toList(),
+  );
+}
+
 /// Hero banners sort on `display_order` alone — the tie-break is the id rather
 /// than a name, since a slide need not carry any text at all.
 List<HomeHeroBanner> sortHeroBanners(List<HomeHeroBanner> banners) {

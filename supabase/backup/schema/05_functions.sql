@@ -417,3 +417,59 @@ AS $function$
       return next changed_order;
     end;
     $function$;
+
+CREATE OR REPLACE FUNCTION public.delete_ingredient_cascade(p_ingredient_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_name         text;
+  v_product_name text;
+  v_product_type text;
+begin
+  select name into v_name from ingredients where id = p_ingredient_id;
+  if v_name is null then
+    return jsonb_build_object('status', 'not_found');
+  end if;
+
+  -- The one hard stop. An ingredient sitting in any recipe version blocks the
+  -- delete, including older versions the product no longer serves, because the
+  -- foreign key does not distinguish between them either.
+  select p.name, p.product_type
+    into v_product_name, v_product_type
+  from recipe_items ri
+  join recipes r on r.id = ri.recipe_id
+  join products p on p.id = r.product_id
+  where ri.ingredient_id = p_ingredient_id
+  order by p.name
+  limit 1;
+
+  if v_product_name is not null then
+    return jsonb_build_object(
+      'status',       'in_recipe',
+      'product_name', v_product_name,
+      'product_type', v_product_type
+    );
+  end if;
+
+  -- Inventory state and operational history: all meaningless once the
+  -- ingredient is gone. order_item_removed_ingredients is deliberately absent —
+  -- its foreign key is ON DELETE SET NULL beside a name snapshot, so that row
+  -- survives the delete and still reads correctly.
+  delete from stock_movements                 where ingredient_id = p_ingredient_id;
+  delete from inventory_balances              where ingredient_id = p_ingredient_id;
+  delete from stock_transfer_items            where ingredient_id = p_ingredient_id;
+  delete from purchase_order_items            where ingredient_id = p_ingredient_id;
+  delete from order_item_inventory_components where ingredient_id = p_ingredient_id;
+  delete from cart_item_removed_ingredients   where ingredient_id = p_ingredient_id;
+
+  -- Every other reference keeps its NO ACTION foreign key, so a table this
+  -- function does not know about raises here and rolls the whole delete back
+  -- rather than leaving the ingredient half-removed.
+  delete from ingredients where id = p_ingredient_id;
+
+  return jsonb_build_object('status', 'deleted', 'id', p_ingredient_id, 'name', v_name);
+end;
+$function$;

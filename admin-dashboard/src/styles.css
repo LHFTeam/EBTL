@@ -1433,7 +1433,7 @@ textarea {
 }
 
 .tagAdminForm {
-  grid-template-columns: minmax(180px, 2fr) 80px minmax(120px, 1fr) auto auto;
+  grid-template-columns: minmax(180px, 2fr) 80px minmax(120px, 1fr) auto auto auto auto;
   align-items: center;
 }
 
@@ -1445,7 +1445,7 @@ textarea {
 
 .tagAdminRow {
   display: grid;
-  grid-template-columns: minmax(180px, 2fr) 80px minmax(100px, 1fr) auto minmax(150px, 1fr) auto;
+  grid-template-columns: minmax(180px, 2fr) 80px minmax(100px, 1fr) auto auto auto minmax(150px, 1fr) auto;
   gap: 10px;
   align-items: center;
   padding: 12px;

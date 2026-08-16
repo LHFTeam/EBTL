@@ -101,7 +101,7 @@ class CocktailCardShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final productTags = cocktail.sortedTagDetails;
+    final productTags = cocktail.cardTagDetails;
     final subtitle = cocktail.cardSubtitle;
     final orderable = cocktail.availability.isOrderable;
 
@@ -118,11 +118,13 @@ class CocktailCardShell extends StatelessWidget {
             top: 8,
             left: 8,
             right: 8,
+            // Every card tag on the cocktail is badged — a product may carry
+            // several, and which of them reach the card is the admin's call
+            // through the tag's own "show on product card" flag.
             child: Wrap(
               spacing: 5,
               runSpacing: 5,
               children: productTags
-                  .take(showUsing ? 2 : 1)
                   .map((tag) => ProductTagBadge(tag: tag))
                   .toList(),
             ),
