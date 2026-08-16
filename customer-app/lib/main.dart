@@ -534,6 +534,14 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   /// Whether GPS has had its one chance to name the beach cart this launch.
   bool _autoLocationHandled = false;
 
+  /// Whether the customer has chosen a beach cart by hand this launch.
+  ///
+  /// A fix can take several seconds to arrive, and the picker is reachable that
+  /// whole time. A deliberate pick made while GPS was still resolving outranks
+  /// the one it would have made, so the auto-select stands down rather than
+  /// moving the customer off the cart they just chose.
+  bool _locationChosenManually = false;
+
   /// A location switch that landed while app data was already loading. The
   /// active request cannot include the new cart, so exactly one full reload is
   /// queued for its `finally` block instead of polling the loading flag.
@@ -767,8 +775,17 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     );
     setState(() => beachCartDistances = distances);
 
+    // The distances above are worth keeping either way — they are what sorts
+    // and labels the picker — but the cart itself is now the customer's to
+    // name, so nothing below runs.
+    if (_locationChosenManually) return;
+
     final nearest = LocationService.nearestWithin(data.serviceAreas, distances);
-    if (nearest == null || nearest.id == data.selectedLocationId) return;
+
+    // Read the selection as it stands now rather than from [data], which is the
+    // payload captured when this resolve was kicked off and may be several
+    // seconds stale.
+    if (nearest == null || nearest.id == appData?.selectedLocationId) return;
     await selectLocation(nearest, automatic: true);
   }
 
@@ -790,6 +807,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     ServiceLocation location, {
     bool automatic = false,
   }) async {
+    if (!automatic) _locationChosenManually = true;
+
     await ApiService.saveSelectedLocation(location);
     AnalyticsService.logLocationSelected(
       location.id,

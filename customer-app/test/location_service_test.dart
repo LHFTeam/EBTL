@@ -60,8 +60,20 @@ void main() {
   });
 
   test('formatDistance formats metre and kilometre boundaries', () {
-    expect(formatDistance(999), '999 m away');
     expect(formatDistance(1000), '1.0 km away');
     expect(formatDistance(2449), '2.4 km away');
+  });
+
+  test('formatDistance rounds metres to the nearest ten', () {
+    expect(formatDistance(346), '350 m away');
+    expect(formatDistance(354), '350 m away');
+
+    // Rounding up out of metres reads as kilometres rather than "1000 m away".
+    expect(formatDistance(999), '1.0 km away');
+  });
+
+  test('formatDistance drops the decimal past 100 km', () {
+    expect(formatDistance(99940), '99.9 km away');
+    expect(formatDistance(247300), '247 km away');
   });
 }
