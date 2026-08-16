@@ -74,9 +74,19 @@ const STRINGS = {
 
   // Ticket
   'ticket.ariaAdvance': {
-    en: '{order} - {stage}. Press to advance.',
-    ar: '{order} - {stage}. اضغط للمتابعة.'
+    en: '{order} - {stage}. Swipe the handle, or press Enter, to {action}.',
+    ar: '{order} - {stage}. اسحب المقبض أو اضغط Enter لـ{action}.'
   },
+
+  // Swipe-to-advance action (the label inside the slider track)
+  'swipe.preparing': { en: 'Slide to start', ar: 'اسحب للبدء' },
+  'swipe.ready': { en: 'Slide when ready', ar: 'اسحب عند الجهوزية' },
+  'swipe.completed': { en: 'Slide to complete', ar: 'اسحب للإنهاء' },
+  'swipe.scan': { en: 'Slide to scan code', ar: 'اسحب لمسح الكود' },
+  'swipe.action.preparing': { en: 'start preparing', ar: 'بدء التحضير' },
+  'swipe.action.ready': { en: 'mark ready', ar: 'تعليم كجاهز' },
+  'swipe.action.completed': { en: 'complete the order', ar: 'إنهاء الطلب' },
+  'swipe.action.scan': { en: 'scan the pickup code', ar: 'مسح كود الاستلام' },
   'ticket.allergen': { en: 'ALLERGEN', ar: 'مسبب حساسية' },
   'ticket.note': { en: 'NOTE', ar: 'ملاحظة' },
   'ticket.done': { en: 'Done', ar: 'تم' },
@@ -101,6 +111,106 @@ const STRINGS = {
   'recipe.prepNotes': { en: 'Preparation notes', ar: 'ملاحظات التحضير' },
   'recipe.addedExtras': { en: 'Added extras', ar: 'إضافات' },
   'recipe.orderNote': { en: 'Order note', ar: 'ملاحظة الطلب' },
+
+  // Pickup handoff sheet (scan the customer's code, check the bag, release)
+  'pickup.eyebrow': { en: 'Hand over', ar: 'تسليم' },
+  'pickup.scanTitle': { en: 'Scan the customer’s code', ar: 'امسح كود العميل' },
+  'pickup.scanSubtitle': {
+    en: '{order} is ready. Point the camera at the code on the customer’s phone.',
+    ar: '{order} جاهز. وجّه الكاميرا نحو الكود على هاتف العميل.'
+  },
+  'pickup.reviewTitle': { en: 'Check the bag', ar: 'راجع الطلب' },
+  'pickup.reviewSubtitle': {
+    en: 'Match these items to what you are about to hand over.',
+    ar: 'طابق هذه الأصناف مع ما ستسلّمه.'
+  },
+  'pickup.closeAria': { en: 'Close the handover sheet', ar: 'إغلاق لوحة التسليم' },
+  'pickup.cameraUnavailable': { en: 'Camera unavailable', ar: 'الكاميرا غير متاحة' },
+  'pickup.cameraBlocked': {
+    en: 'Camera access was blocked. Allow it in the browser, or type the code.',
+    ar: 'تم حظر الوصول إلى الكاميرا. اسمح به في المتصفح أو أدخل الكود يدويًا.'
+  },
+  'pickup.cameraMissing': {
+    en: 'No camera on this screen. Type the code instead.',
+    ar: 'لا توجد كاميرا على هذه الشاشة. أدخل الكود يدويًا.'
+  },
+  'pickup.cameraFailed': {
+    en: 'Could not start the camera. Type the code instead.',
+    ar: 'تعذّر تشغيل الكاميرا. أدخل الكود يدويًا.'
+  },
+  'pickup.checking': { en: 'Checking...', ar: 'جارٍ التحقق...' },
+  'pickup.typeInstead': { en: 'Can’t scan - type the code', ar: 'تعذّر المسح - أدخل الكود' },
+  'pickup.backToScanning': { en: 'Back to scanning', ar: 'العودة للمسح' },
+  'pickup.manualHint': {
+    en: 'The six digits under the code on the customer’s screen. They expire with it, so ask for a fresh one if it has been sitting a while.',
+    ar: 'الأرقام الستة أسفل الكود على شاشة العميل. تنتهي صلاحيتها مع الكود، فاطلب كودًا جديدًا إذا مضى وقت.'
+  },
+  'pickup.orderNumberLabel': { en: 'Order number', ar: 'رقم الطلب' },
+  'pickup.shortCodeLabel': { en: 'Six-digit code', ar: 'الكود المكوّن من ٦ أرقام' },
+  'pickup.checkCode': { en: 'Check code', ar: 'تحقق من الكود' },
+  'pickup.confirm': { en: 'Confirm handover', ar: 'تأكيد التسليم' },
+  'pickup.scanAnother': { en: 'Scan another', ar: 'مسح كود آخر' },
+  'pickup.methodScanned': { en: 'Scanned', ar: 'ممسوح' },
+  'pickup.methodTyped': { en: 'Typed code', ar: 'كود مُدخل' },
+  'pickup.itemCount': { en: '{count} items', ar: '{count} أصناف' },
+  'pickup.differentOrder': {
+    en: 'This code belongs to a different order from the ticket you opened. Hand over the one below.',
+    ar: 'هذا الكود يخص طلبًا مختلفًا عن التذكرة التي فتحتها. سلّم الطلب الظاهر أدناه.'
+  },
+  'pickup.noCode': {
+    en: 'No code at all? A supervisor releases the order from the dashboard - prep accounts cannot override.',
+    ar: 'لا يوجد كود؟ يقوم المشرف بتسليم الطلب من لوحة التحكم - حسابات التحضير لا تملك صلاحية التجاوز.'
+  },
+  'pickup.handedOver': { en: '{order} handed over.', ar: 'تم تسليم {order}.' },
+  'pickup.handedOverUnlogged': {
+    en: '{order} handed over, but the handoff log did not save. Tell a supervisor.',
+    ar: 'تم تسليم {order} لكن لم يُحفظ سجل التسليم. أبلغ المشرف.'
+  },
+
+  // Pickup problems, keyed by the `code` the handoff routes answer with. Codes
+  // without an entry here fall back to the server's own (English) message.
+  'pickupError.expired': {
+    en: 'That code has expired. Ask the customer to refresh their screen, then scan again.',
+    ar: 'انتهت صلاحية هذا الكود. اطلب من العميل تحديث الشاشة ثم امسح مرة أخرى.'
+  },
+  'pickupError.unrecognized': {
+    en: 'That is not an EBTL pickup code.',
+    ar: 'هذا ليس كود استلام من EBTL.'
+  },
+  'pickupError.unknown_order': {
+    en: 'No order with that number is waiting at this cart.',
+    ar: 'لا يوجد طلب بهذا الرقم في انتظار الاستلام من هذه العربة.'
+  },
+  'pickupError.code_mismatch': {
+    en: 'Those digits do not match a current code. Ask the customer to refresh their screen.',
+    ar: 'هذه الأرقام لا تطابق كودًا حاليًا. اطلب من العميل تحديث الشاشة.'
+  },
+  'pickupError.already_collected': {
+    en: 'That order has already been collected.',
+    ar: 'تم استلام هذا الطلب بالفعل.'
+  },
+  'pickupError.not_ready': {
+    en: 'That order is not ready yet.',
+    ar: 'هذا الطلب ليس جاهزًا بعد.'
+  },
+  'pickupError.unpaid': { en: 'That order is not paid for yet.', ar: 'لم يتم دفع هذا الطلب بعد.' },
+  'pickupError.wrong_location': {
+    en: 'That order belongs to another cart.',
+    ar: 'هذا الطلب يخص عربة أخرى.'
+  },
+  'pickupError.not_pickup': {
+    en: 'That order is a delivery, not a cart pickup.',
+    ar: 'هذا الطلب توصيل وليس استلامًا من العربة.'
+  },
+  'pickupError.rate_limited': {
+    en: 'Too many failed attempts. Wait a moment, then try again.',
+    ar: 'محاولات فاشلة كثيرة. انتظر قليلًا ثم حاول مرة أخرى.'
+  },
+  'pickupError.failed': { en: 'Could not check that code.', ar: 'تعذّر التحقق من هذا الكود.' },
+  'pickupError.confirmFailed': {
+    en: 'Could not release that order.',
+    ar: 'تعذّر تسليم هذا الطلب.'
+  },
 
   // Header / filters / counts
   'header.fulfillment': { en: 'Fulfillment', ar: 'التجهيز' },
@@ -194,6 +304,13 @@ export function t(key, lang, params) {
   }
 
   return template;
+}
+
+// Whether the catalog carries a key at all. `t` falls back to the key itself,
+// which is fine for a missing label but wrong for a server-sent error code: an
+// unmapped code should show what the server actually said, not `pickupError.x`.
+export function hasString(key) {
+  return Object.hasOwn(STRINGS, key);
 }
 
 export function allergenLabel(token, lang) {
