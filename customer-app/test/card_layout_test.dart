@@ -28,6 +28,7 @@ import 'package:ebtl_customer_app/features/shop/widgets/shop_product_widgets.dar
 import 'package:ebtl_customer_app/core/theme/home_screen_visuals.dart';
 import 'package:ebtl_customer_app/models/cart_models.dart';
 import 'package:ebtl_customer_app/models/cocktail_models.dart';
+import 'package:ebtl_customer_app/models/profile_models.dart';
 import 'package:ebtl_customer_app/shared/widgets/cocktail_card_widgets.dart';
 import 'package:ebtl_customer_app/models/recently_viewed.dart';
 import 'package:ebtl_customer_app/models/shop_models.dart';
@@ -321,6 +322,79 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  // The "Order It Again" rail has a hand-set height, so the card it carries
+  // has to keep fitting inside it. Every line on the card sets an explicit
+  // height multiplier and the thumbnail is a fixed box, so the card measures
+  // the same here as it does in the app despite the test font.
+  group('order-again card', () {
+    final order = ProfileOrder.fromJson({
+      'id': 'o1',
+      'order_number': 'EBTL-1042',
+      'status': 'completed',
+      'payment_status': 'paid',
+      'fulfillment_type': 'pickup_at_cart',
+      // The longest "ordered ..." label the rail ever draws.
+      'created_at': DateTime.now()
+          .subtract(const Duration(days: 330))
+          .toIso8601String(),
+      'total_amount': 1250.0,
+      'currency': 'EGP',
+      'item_count': 2,
+      'total_quantity': 3,
+      'primary_item': {'name': 'Classic Mojito Beach Kit', 'quantity': 2},
+    });
+
+    Widget card() => HomeOrderAgainCard(
+      order: order,
+      onTap: () {},
+      onAddAgain: () {},
+      isAdding: false,
+    );
+
+    testWidgets('lays out to the height the rail is sized from', (
+      tester,
+    ) async {
+      phone(tester);
+
+      await tester.pumpWidget(
+        wrap(
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [card()],
+          ),
+        ),
+      );
+
+      expect(
+        tester.getSize(find.byType(HomeOrderAgainCard)).height,
+        lessThanOrEqualTo(
+          // The rail reserves 4pt under its cards.
+          HomeScreenVisuals.orderAgainRailHeight - 4,
+        ),
+      );
+    });
+
+    testWidgets('fits its rail', (tester) async {
+      phone(tester);
+
+      await tester.pumpWidget(
+        wrap(
+          SizedBox(
+            height: HomeScreenVisuals.orderAgainRailHeight,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(22, 0, 22, 4),
+              children: [card()],
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text(order.orderedAgoLabel), findsOneWidget);
+    });
+  });
+
   testWidgets('beach cart card fits a status split over two lines', (
     tester,
   ) async {
@@ -383,10 +457,11 @@ void main() {
       final fullHeight = await pumpLine(tester, _fullCartItem);
       expect(tester.takeException(), isNull);
 
-      // A line with nothing extra to say still sits on the thumbnail's own
-      // height: 86 thumbnail + 7pt padding + 1pt border on each side. The
-      // ordinary card keeps exactly the layout it has always had.
-      expect(plainHeight, 102);
+      // A line with nothing extra to say sits on the thumbnail's own height:
+      // 64 thumbnail + 7pt padding + 1pt border on each side. The thumbnail is
+      // sized to the text beside it, so the card has no band of empty white
+      // between the name and the quantity row.
+      expect(plainHeight, 80);
       expect(fullHeight, greaterThan(plainHeight));
     });
   });

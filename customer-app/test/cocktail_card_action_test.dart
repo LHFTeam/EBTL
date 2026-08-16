@@ -11,7 +11,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:ebtl_customer_app/features/shop/widgets/shop_product_widgets.dart';
 import 'package:ebtl_customer_app/models/cocktail_models.dart';
+import 'package:ebtl_customer_app/models/shop_models.dart';
 import 'package:ebtl_customer_app/shared/widgets/cocktail_card_widgets.dart';
 
 final _cocktail = Cocktail.fromCustomerJson({
@@ -95,5 +97,42 @@ void main() {
 
     expect(find.byIcon(Icons.favorite_border), findsOneWidget);
     expect(find.byIcon(Icons.add), findsNothing);
+  });
+
+  // The shop grid draws its whole catalog with the cocktail shell, so the
+  // "works with" line — including the "any bottle" fallback an empty
+  // compatibility list draws — has to be held back for everything that is not
+  // made with a bottle the customer brings.
+  group('the compatibility line on a shop card', () {
+    Future<void> pumpProduct(WidgetTester tester, String productType) {
+      return tester.pumpWidget(
+        wrap(
+          ShopCatalogCard(
+            product: ShopProduct.fromJson({
+              'id': 'p1',
+              'slug': 'item',
+              'name': 'Catalog item',
+              'product_type': productType,
+              'price': {'starting_price_inc_vat': 120.0, 'currency': 'EGP'},
+            }),
+            isAdding: false,
+            onTap: () {},
+            onAdd: () {},
+          ),
+        ),
+      );
+    }
+
+    testWidgets('is drawn for a cocktail', (tester) async {
+      await pumpProduct(tester, 'cocktail');
+
+      expect(find.textContaining('Works with'), findsOneWidget);
+    });
+
+    testWidgets('is left off anything else', (tester) async {
+      await pumpProduct(tester, 'merchandise');
+
+      expect(find.textContaining('Works with'), findsNothing);
+    });
   });
 }

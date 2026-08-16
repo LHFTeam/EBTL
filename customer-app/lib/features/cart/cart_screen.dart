@@ -844,7 +844,10 @@ class CartItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const double thumbnailSize = 86;
+    // Sized to the text beside it. An 86pt thumbnail left the row taller than
+    // the name, description and quantity/price line stacked up to, and the
+    // Spacer between them turned the difference into a band of empty card.
+    const double thumbnailSize = 64;
 
     final shortDescription = item.product.shortDescription?.trim() ?? '';
     final hasShortDescription = shortDescription.isNotEmpty;

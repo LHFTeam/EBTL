@@ -61,6 +61,37 @@ void main() {
     });
   });
 
+  group('OrderDetailItem', () {
+    // The line's artwork comes from the product the backend joins onto the
+    // order item; without it the page draws the local placeholder asset for
+    // every cocktail it lists.
+    test('draws the artwork the order line was answered with', () {
+      final item = OrderDetailItem.fromJson({
+        'id': 'oi_1',
+        'product_name_snapshot': 'Classic Mojito',
+        'quantity': 2,
+        'unit_price_inc_vat_snapshot': 320.0,
+        'image_url': 'https://cdn.example.com/mojito.jpg',
+      });
+
+      expect(item.imageUrl, 'https://cdn.example.com/mojito.jpg');
+      expect(item.imageAsset, 'assets/images/mojito.jpg');
+    });
+
+    test('falls back to the local asset when the product carries no image', () {
+      final item = OrderDetailItem.fromJson({
+        'id': 'oi_2',
+        'product_name_snapshot': 'Beach Towel',
+        'quantity': 1,
+        'unit_price_inc_vat_snapshot': 120.0,
+        'image_url': null,
+      });
+
+      expect(item.imageUrl, isNull);
+      expect(item.imageAsset, 'assets/images/cocktail_placeholder.jpg');
+    });
+  });
+
   group('beachCartStatusLines', () {
     test('splits the state from the hours', () {
       expect(beachCartStatusLines('Open now · Closes at 11:00 PM'), [

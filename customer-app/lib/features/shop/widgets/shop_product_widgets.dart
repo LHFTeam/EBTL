@@ -13,8 +13,9 @@ import '../../../shared/widgets/product_tag_widgets.dart';
 ///
 /// The two grids show the same catalog, so they use the same card: the shell
 /// from [CocktailGridCard], fed through the [Cocktail.fromShopProduct] bridge.
-/// The one difference is the corner action — the Finder's heart marks a
-/// favorite, while here it is the plus that adds the product to the cart.
+/// The corner action differs — the Finder's heart marks a favorite, while here
+/// it is the plus that adds the product to the cart — and the shop also shows
+/// products that are not cocktails, which carry no compatibility line.
 class ShopCatalogCard extends StatelessWidget {
   final ShopProduct product;
   final bool isAdding;
@@ -33,6 +34,10 @@ class ShopCatalogCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return CocktailGridCard(
       cocktail: Cocktail.fromShopProduct(product),
+      // A shop product that is not a cocktail is not made with a bottle, so it
+      // carries no "works with" line — not even the "any bottle" fallback an
+      // empty compatibility list would otherwise draw.
+      showUsing: product.isCocktail,
       onTap: onTap,
       onAdd: onAdd,
       isAdding: isAdding,
