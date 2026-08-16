@@ -95,7 +95,7 @@ dependencies:
   # Crashlytics and is disabled automatically in debug builds.
   firebase_analytics: ^12.4.5
   # Native Meta App Events for campaign attribution and conversion audiences.
-  # Uses the same Meta Developer App that will support Facebook Login later.
+  # Uses the same Meta Developer App as Facebook Login below.
   facebook_app_events: ^0.30.3
   # Crash + uncaught-error reporting. Inert unless Firebase config is present at
   # build time (see lib/services/crash_reporting_service.dart).
@@ -109,6 +109,19 @@ dependencies:
   # until it is allowed the IDFA reads back as zeros and Meta App Events
   # attribute to nothing — see lib/services/app_tracking_service.dart.
   app_tracking_transparency: ^2.0.7
+  # Social sign-in, offered once — on the order confirmation screen — so an
+  # anonymous customer can keep their orders, spirits and referral credit
+  # across devices. See lib/services/social_auth_service.dart.
+  # Facebook reuses the Meta Developer App already configured for App Events;
+  # Apple ships alongside it because App Store guideline 4.8 requires an
+  # equivalent privacy-preserving option once a social service authenticates
+  # the primary account.
+  flutter_facebook_auth: ^7.2.0
+  google_sign_in: ^7.2.0
+  sign_in_with_apple: ^8.1.0
+  # SHA-256 for the sign-in nonce. Every provider gets the digest, the backend
+  # gets the raw value, and a token minted for another app cannot be replayed.
+  crypto: ^3.0.7
   # Foreground GPS permission + distance calculation used to select and sort
   # the beach cart nearest to the customer.
   geolocator: ^14.0.3
@@ -131,3 +144,4 @@ flutter:
     - assets/animations/ebtl_loader.webp
     - assets/images/onboarding/
     - assets/images/order_confirmation/
+    - assets/images/social/

@@ -43,6 +43,33 @@ class CustomerProfileUpdateResponse {
   }
 }
 
+/// The outcome of linking a social identity to this device's customer.
+///
+/// [isNewCustomer] is the backend's answer to a question the app cannot work
+/// out for itself: whether this person has ever had an EBTL account before.
+/// Every branch of the linking returns an identical-looking profile, so without
+/// this flag a first registration is indistinguishable from a returning
+/// sign-in — and only the first is a conversion worth reporting.
+class SocialSignInResult {
+  final CustomerProfile profile;
+  final bool isNewCustomer;
+
+  const SocialSignInResult({
+    required this.profile,
+    required this.isNewCustomer,
+  });
+
+  factory SocialSignInResult.fromJson(Map<String, dynamic> json) {
+    return SocialSignInResult(
+      profile: CustomerProfile.fromJson(asMap(json['customer'])),
+      // An older backend that does not send the flag is treated as a sign-in
+      // rather than a registration: under-reporting conversions is the safer
+      // way to be wrong.
+      isNewCustomer: readBool(json['is_new_customer']),
+    );
+  }
+}
+
 class CustomerProfile {
   final String id;
   final String? fullName;

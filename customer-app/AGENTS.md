@@ -9,8 +9,27 @@ Guidance for AI coding agents (and new contributors) working in this repository.
 (service location), browse cocktails and shop products, filter cocktails by
 the liquor bottle they already own (the "Cocktail Finder"), customize a kit
 (remove recipe items, add extras), add to cart, and check out with pickup or
-delivery. There is **no customer login**: an anonymous session token is
-created by the backend and stored on-device. Prices are in EGP.
+delivery. Prices are in EGP.
+
+**Nothing in the app requires a login.** The backend mints an anonymous
+`customers` row on first launch and the token lives in secure storage; every
+screen works from that alone. Sign-in exists, but it is **optional, offered from
+exactly one place, and gates nothing**: a card on the order confirmation screen
+(`features/checkout/order_confirmed_screen.dart` →
+`features/auth/social_sign_in_card.dart`) attaches a Facebook, Google or Apple
+identity to that anonymous row so the customer's orders, spirits and referral
+credit survive a reinstall or a new phone. Asking after the order rather than
+before it is deliberate — an account wall in front of checkout is the single
+most-cited fixable cause of abandonment — so **do not move this prompt earlier,
+add a second one, or make any flow depend on being signed in** without being
+asked to. Vendor SDKs stay behind `services/social_auth_service.dart`; the token
+is exchanged at `POST /api/customer/auth/social`, whose response carries a
+`session` object that `ApiService` swaps in automatically.
+
+Google's button is hidden unless the build supplies
+`--dart-define=GOOGLE_SERVER_CLIENT_ID` (and `GOOGLE_IOS_CLIENT_ID` on iOS, plus
+the reversed-client-ID URL scheme in `Info.plist`), the same
+inert-unless-configured rule Firebase and Clarity follow. Apple's is iOS-only.
 
 The app is a thin client over the **customer API** of a separate backend
 (`ebtl-admin-dashboard`, hosted on Render):

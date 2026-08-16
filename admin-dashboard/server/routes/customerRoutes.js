@@ -40,6 +40,7 @@ import {
   buildReferralHub
 } from '../lib/referrals.js';
 import { closePaymentWindow, UNPAID_PAYMENT_STATUSES } from '../lib/pendingOrderCleanup.js';
+import { SocialAuthError, SOCIAL_PROVIDERS, verifySocialToken } from '../lib/socialAuth.js';
 import {
   TOP_SPIRIT_PLACES,
   addCustomerFavoriteSpirit,
@@ -1992,6 +1993,83 @@ async function findCustomerFromRequest(req) {
   return customer.data;
 }
 
+// Attaches a verified social identity to a customer row, and answers the
+// question the whole sign-in exists to answer: which customer is this?
+//
+// Order matters. The provider's own subject ID is the only identifier that
+// survives a customer changing their email, so it is tried first. Email is the
+// fallback that lets somebody who ordered anonymously months ago, then signed in
+// with a different provider today, land on the row that already holds their
+// orders. Only when neither matches does the identity attach to the anonymous
+// row this device is already acting as.
+//
+// When the match is a *different* row than the caller's, the session moves to
+// it and the anonymous row this install started with is simply left behind.
+// That is the intended trade at the point this is called — the confirmation
+// screen, where the cart is already converted and nothing is in flight.
+//
+// Returns `{ customer, isNewCustomer }`. `isNewCustomer` answers "is this the
+// first time this person has had an EBTL account", which is the question
+// analytics and ad attribution are asking — so only a provider-ID match counts
+// as a returning customer. Somebody matched on email has ordered here before but
+// has never had an account until now, and that is a registration.
+//
+// `db` exists only so the branch logic can be tested without a database; the
+// route never passes it.
+export async function linkSocialIdentity({ identity, currentCustomer, fullName, db = supabase }) {
+  const column = `${identity.provider}_user_id`;
+
+  const byProvider = await db
+    .from('customers')
+    .select('*')
+    .eq(column, identity.providerUserId)
+    .maybeSingle();
+
+  if (byProvider.error) throw byProvider.error;
+  if (byProvider.data) return { customer: byProvider.data, isNewCustomer: false };
+
+  if (identity.email) {
+    const byEmail = await db
+      .from('customers')
+      .select('*')
+      .eq('email', identity.email)
+      .maybeSingle();
+
+    if (byEmail.error) throw byEmail.error;
+
+    if (byEmail.data) {
+      const stamped = await db
+        .from('customers')
+        .update({ [column]: identity.providerUserId })
+        .eq('id', byEmail.data.id)
+        .select()
+        .single();
+
+      if (stamped.error) throw stamped.error;
+      return { customer: stamped.data, isNewCustomer: true };
+    }
+  }
+
+  // Nothing on file: this anonymous customer becomes the account. Only fill
+  // what is still blank — a customer who typed their own name at checkout meant
+  // that one, not the one their Facebook profile happens to carry.
+  const patch = { [column]: identity.providerUserId };
+  const resolvedName = identity.fullName || fullName;
+
+  if (!currentCustomer.full_name && resolvedName) patch.full_name = resolvedName;
+  if (!currentCustomer.email && identity.email) patch.email = identity.email;
+
+  const linked = await db
+    .from('customers')
+    .update(patch)
+    .eq('id', currentCustomer.id)
+    .select()
+    .single();
+
+  if (linked.error) throw linked.error;
+  return { customer: linked.data, isNewCustomer: true };
+}
+
 async function ensureCustomer(req, res) {
   const existing = await findCustomerFromRequest(req);
 
@@ -3594,6 +3672,85 @@ customerRouter.post('/customer/session', async (req, res) => {
   res.json({
     session: sessionPayload(ensured.customer.id, ensured.token),
     customer: ensured.customer
+  });
+});
+
+// The customer app's one sign-in endpoint, offered from the order confirmation
+// screen. It never gates anything: a customer who ignores it keeps the anonymous
+// session they already had.
+customerRouter.post('/customer/auth/social', async (req, res) => {
+  const parsed = z.object({
+    provider: z.enum(SOCIAL_PROVIDERS),
+    token: z.string().min(1),
+    token_kind: z.enum(['classic', 'limited', 'id_token']).default('id_token'),
+    nonce: z.string().min(1).optional(),
+    full_name: z.string().trim().min(1).max(120).optional()
+  }).safeParse(req.body);
+
+  if (!parsed.success) return res.status(400).json({
+    error: 'Invalid sign-in request.',
+    details: parsed.error.issues.map((issue) => ({
+      path: issue.path.join('.'),
+      message: issue.message
+    }))
+  });
+
+  let identity;
+
+  try {
+    identity = await verifySocialToken({
+      provider: parsed.data.provider,
+      token: parsed.data.token,
+      tokenKind: parsed.data.token_kind,
+      nonce: parsed.data.nonce
+    });
+  } catch (error) {
+    if (error instanceof SocialAuthError) {
+      return res.status(error.status).json({ error: error.message });
+    }
+
+    console.error('verifySocialToken failed', { provider: parsed.data.provider, error });
+    return res.status(502).json({ error: 'Could not reach the sign-in provider. Please try again.' });
+  }
+
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  let linked;
+
+  try {
+    linked = await linkSocialIdentity({
+      identity,
+      currentCustomer: ensured.customer,
+      fullName: parsed.data.full_name
+    });
+  } catch (error) {
+    // The provider identity columns are added to Supabase by hand, so a
+    // deployment can reach this endpoint before the schema has them. Say so,
+    // rather than returning a Postgres error the customer cannot act on.
+    if (error?.code === '42703') {
+      console.error('Social sign-in columns are missing from public.customers', error);
+      return res.status(503).json({ error: 'Sign-in is not available yet. Please try again later.' });
+    }
+
+    if (error?.code === '23505') {
+      return res.status(409).json({
+        error: 'Another EBTL account already uses that email address.'
+      });
+    }
+
+    console.error('linkSocialIdentity failed', { provider: identity.provider, error });
+    return res.status(400).json({ error: 'Could not complete sign-in. Please try again.' });
+  }
+
+  const { customer, isNewCustomer } = linked;
+
+  res.json({
+    session: sessionPayload(customer.id, setCustomerToken(res, customer.id)),
+    customer: customerProfilePayload(customer),
+    // Lets the app log a registration rather than a sign-in. It cannot work
+    // this out for itself — every branch above returns an identical customer.
+    is_new_customer: isNewCustomer
   });
 });
 

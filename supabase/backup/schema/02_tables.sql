@@ -197,7 +197,10 @@ CREATE TABLE IF NOT EXISTS public.customers (
     gender text,
     referral_code text,
     referred_by_customer_id uuid,
-    referral_attributed_at timestamp with time zone
+    referral_attributed_at timestamp with time zone,
+    facebook_user_id text,
+    google_user_id text,
+    apple_user_id text
 );
 
 CREATE TABLE IF NOT EXISTS public.employee_credentials (

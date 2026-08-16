@@ -204,13 +204,22 @@ storefront whose policy requires an explicit choice or withdrawal mechanism.
 
 The Meta Pixel ID is only for the landing page. Native Android/iOS App Events
 use Meta Developer App ID `1611789933929380`; its Client Token is embedded in
-the required Android and iOS native client configuration. The App Secret and
-the previously supplied User Access Token are not used or stored.
+the required Android and iOS native client configuration. The previously
+supplied User Access Token is not used or stored.
 
-Use this same Meta Developer App for Facebook Login later. Keep the existing
-Android package and iOS bundle ID (`wtf.ebtl.app`) attached to that Meta app;
-the `fb1611789933929380` URL scheme is already registered for that future
-login flow.
+Facebook Login (the optional sign-in on the customer app's order confirmation
+screen) runs on this same Meta Developer App, through the `fb1611789933929380`
+URL scheme. Keep the Android package and iOS bundle ID (`wtf.ebtl.app`)
+attached to it. Two things it needs that App Events did not:
+
+- **The App Secret**, set as `FACEBOOK_APP_SECRET` in the backend environment.
+  It is used only server-side, to build the app access token that Meta's
+  `/debug_token` requires when verifying a classic login. It must never reach a
+  client.
+- **A data-deletion URL**, which Meta requires before Facebook Login passes App
+  Review. `admin-dashboard/public/data-deletion.html` is that page — register
+  `https://<backend host>/data-deletion.html` as the Data Deletion Instructions
+  URL in the Meta dashboard.
 
 ## Validation checklist
 

@@ -33,6 +33,32 @@ export const LANDING_TRACKING = {
   gtmContainerId: process.env.GTM_CONTAINER_ID || 'GTM-WN6DZGBS'
 };
 
+function listFromEnv(name, fallback = []) {
+  const raw = String(process.env[name] || '').trim();
+  if (!raw) return fallback;
+
+  return raw.split(',').map((entry) => entry.trim()).filter(Boolean);
+}
+
+// Social sign-in for the customer app (POST /api/customer/auth/social).
+//
+// Each provider is independently optional: an unset app ID or client ID means
+// that provider's tokens are rejected, not that the endpoint breaks. The client
+// hides the buttons it has no configuration for, so an unconfigured deployment
+// simply keeps the anonymous-session behaviour the app has always had.
+//
+// The Facebook app secret never leaves the server — it is only used to build
+// the app access token that /debug_token requires.
+export const SOCIAL_AUTH = {
+  facebookAppId: String(process.env.FACEBOOK_APP_ID || '').trim(),
+  facebookAppSecret: String(process.env.FACEBOOK_APP_SECRET || '').trim(),
+  // Every OAuth client that may appear in a Google id_token's `aud`: the iOS
+  // client, the Android client, and the web/server client.
+  googleClientIds: listFromEnv('GOOGLE_CLIENT_IDS'),
+  // Sign in with Apple issues tokens audienced to the bundle ID.
+  appleBundleIds: listFromEnv('APPLE_BUNDLE_IDS', ['wtf.ebtl.app'])
+};
+
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
 }

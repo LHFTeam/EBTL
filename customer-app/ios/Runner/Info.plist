@@ -60,6 +60,17 @@
 	     collects nothing until that prompt has been allowed. -->
 	<key>NSUserTrackingUsageDescription</key>
 	<string>Lets EBTL see which ads bring people to the app, so we show you offers worth your time instead of ones that aren't.</string>
+	<!-- Facebook Login hands off to the Facebook or Messenger app when one is
+	     installed, and iOS will not let the SDK even see whether they are there
+	     unless their schemes are declared here. Without this key every customer
+	     is pushed through the slower web fallback. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>fbapi</string>
+		<string>fb-messenger-share-api</string>
+		<string>fbauth2</string>
+		<string>fbshareextension</string>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
@@ -128,6 +139,12 @@
 				<string>fb1611789933929380</string>
 			</array>
 		</dict>
+		<!-- Google Sign-In needs a third entry here: the reversed iOS client ID
+		     (com.googleusercontent.apps.<id>) from the Google Cloud OAuth
+		     client, matching the GOOGLE_IOS_CLIENT_ID passed at build time. It
+		     is deliberately absent until that client exists — the app hides the
+		     Google button when it is unconfigured, see
+		     lib/services/social_auth_service.dart. -->
 	</array>
 </dict>
 </plist>

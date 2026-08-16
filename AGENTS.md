@@ -21,7 +21,7 @@ via `git log --follow`).
 | Directory | Stack | What it is | Deep docs |
 | --- | --- | --- | --- |
 | [`admin-dashboard/`](admin-dashboard/) | React 19 + Vite + Express (Node ≥22, ESM) | The back-office web app **and** the backend API + marketing landing page. Serves the staff dashboard (`/api/...`) **and** the customer API (`/api/customer/...`). Integrates Supabase (Postgres), Geidea payments, push notifications. | [`admin-dashboard/AGENTS.md`](admin-dashboard/AGENTS.md) |
-| [`customer-app/`](customer-app/) | Flutter (Dart 3.12, Material 3) | The customer-facing mobile app. A thin client over the customer API. No customer login — anonymous session token. | [`customer-app/AGENTS.md`](customer-app/AGENTS.md) |
+| [`customer-app/`](customer-app/) | Flutter (Dart 3.12, Material 3) | The customer-facing mobile app. A thin client over the customer API. Anonymous session token; sign-in is optional and offered once, after checkout. | [`customer-app/AGENTS.md`](customer-app/AGENTS.md) |
 
 ## How the two apps relate
 

@@ -70,8 +70,9 @@ Future<void> main() async {
 
   Important:
   - No demo fallback data.
-  - No customer login.
-  - Anonymous customer session token is stored locally.
+  - Nothing requires a login. Anonymous customer session token is stored
+    locally; social sign-in is optional, offered only from the order
+    confirmation screen, and links an identity to that same anonymous row.
   - Selected beach cart/location is stored locally.
   - location_id is sent to the backend whenever product availability is needed.
 */

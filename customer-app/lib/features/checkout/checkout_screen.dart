@@ -1,12 +1,8 @@
 import 'package:clarity_flutter/clarity_flutter.dart';
 import 'package:flutter/material.dart';
-// OverflowBoxFit is defined in the rendering layer and is not re-exported
-// through material.dart, so import just that symbol.
-import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/constants/fulfillment_types.dart';
-import '../../core/constants/order_confirmation_assets.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/theme/ebtl_colors.dart';
 import '../../core/utils/formatters.dart';
@@ -20,6 +16,7 @@ import '../../shared/widgets/brand_widgets.dart';
 import '../../shared/widgets/network_or_asset_image.dart';
 import '../../shared/widgets/detail_card.dart';
 import '../../shared/widgets/checkout_input_field.dart';
+import 'order_confirmed_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
   final String locationId;
@@ -288,7 +285,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   void openOrderConfirmed(
     CheckoutOrder order, {
+    List<PlacedOrderItem> items = const [],
     CheckoutLocation? location,
+    String? fulfillmentType,
     double? paidAmount,
     String? paidAmountCurrency,
     String? paymentStatusOverride,
@@ -322,7 +321,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       MaterialPageRoute(
         builder: (_) => OrderConfirmedScreen(
           order: order,
+          items: items,
           location: location,
+          fulfillmentTypeOverride: fulfillmentType,
           paidAmount: paidAmount,
           paidAmountCurrency: paidAmountCurrency,
           paymentStatusOverride: paymentStatusOverride,
@@ -481,7 +482,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       openOrderConfirmed(
         response.order,
+        // The payment-status poll that finished this order carries no lines, so
+        // the receipt comes from the place-order response that started it.
+        items: response.items,
         location: checkout.location,
+        fulfillmentType: checkout.fulfillment.type,
         paidAmount: status.payment.amount,
         paidAmountCurrency: status.payment.currency,
         paymentStatusOverride: status.paymentStatus,
@@ -545,7 +550,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         // These orders are paid the moment they are placed, so the backend has
         // already emptied the cart.
         widget.onCartChanged();
-        openOrderConfirmed(response.order, location: checkout.location);
+        openOrderConfirmed(
+          response.order,
+          items: response.items,
+          location: checkout.location,
+          fulfillmentType: checkout.fulfillment.type,
+        );
         return;
       }
 
@@ -1767,588 +1777,6 @@ class CheckoutWarningBox extends StatelessWidget {
                 fontWeight: FontWeight.w700,
                 color: EbtlColors.navy,
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class OrderConfirmedScreen extends StatefulWidget {
-  final CheckoutOrder order;
-  final CheckoutLocation? location;
-  final double? paidAmount;
-  final String? paidAmountCurrency;
-  final String? paymentStatusOverride;
-  final VoidCallback onDone;
-
-  const OrderConfirmedScreen({
-    super.key,
-    required this.order,
-    required this.onDone,
-    this.location,
-    this.paidAmount,
-    this.paidAmountCurrency,
-    this.paymentStatusOverride,
-  });
-
-  @override
-  State<OrderConfirmedScreen> createState() => _OrderConfirmedScreenState();
-}
-
-class _OrderConfirmedScreenState extends State<OrderConfirmedScreen> {
-  final ScrollController _scrollController = ScrollController();
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  String get paymentStatus {
-    final status = widget.paymentStatusOverride?.trim();
-    if (status != null && status.isNotEmpty) return status;
-    return widget.order.paymentStatus.trim().isEmpty
-        ? 'paid'
-        : widget.order.paymentStatus;
-  }
-
-  String get paymentStatusLabel {
-    final normalized = paymentStatus.toLowerCase().replaceAll('_', ' ');
-    if (normalized == 'paid') return 'Paid';
-    if (normalized == 'pending') return 'Pending';
-    if (normalized == 'unpaid') return 'Unpaid';
-    if (normalized == 'failed') return 'Failed';
-    if (normalized == 'refunded') return 'Refunded';
-    if (normalized.isEmpty) return 'Paid';
-    return normalized[0].toUpperCase() + normalized.substring(1);
-  }
-
-  String get pickupLocationName {
-    final locationName = widget.location?.name.trim();
-    if (locationName != null && locationName.isNotEmpty) return locationName;
-
-    final address = widget.order.address?.trim();
-    if (address != null && address.isNotEmpty) return address;
-
-    return 'your selected EBTL cart';
-  }
-
-  bool get hasTotalPaid {
-    if (widget.order.hasTotals) return true;
-    return widget.paidAmount != null;
-  }
-
-  String get totalPaidLabel {
-    if (widget.order.hasTotals) return widget.order.totals.totalLabel;
-    return formatMoney(
-      widget.paidAmount ?? 0,
-      widget.paidAmountCurrency ?? 'EGP',
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: EbtlColors.cream,
-      body: Stack(
-        children: [
-          const Positioned.fill(child: _OrderConfirmedBackground()),
-          SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final compactHeight = constraints.maxHeight < 720;
-
-                return SingleChildScrollView(
-                  controller: _scrollController,
-                  primary: false,
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: EdgeInsets.fromLTRB(
-                    28,
-                    compactHeight ? 18 : 26,
-                    28,
-                    22,
-                  ),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight:
-                          constraints.maxHeight - (compactHeight ? 40 : 48),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const _OrderConfirmationLogo(),
-                        SizedBox(height: compactHeight ? 18 : 34),
-                        OverflowBox(
-                          maxWidth: constraints.maxWidth,
-                          // The scroll view leaves height unbounded, so the
-                          // default OverflowBoxFit.max would try to size this
-                          // box to infinity and throw during layout. Defer to
-                          // the child so it takes the image's finite height
-                          // while still bleeding to full screen width.
-                          fit: OverflowBoxFit.deferToChild,
-                          child: Image.asset(
-                            OrderConfirmationAssets.headerGraphic,
-                            width: constraints.maxWidth,
-                            fit: BoxFit.fitWidth,
-                            filterQuality: FilterQuality.high,
-                          ),
-                        ),
-                        SizedBox(height: compactHeight ? 8 : 18),
-                        Text(
-                          'Order Confirmed',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.playfairDisplay(
-                            fontSize: compactHeight ? 38 : 44,
-                            height: 1.02,
-                            fontWeight: FontWeight.w800,
-                            color: EbtlColors.navy,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'Your payment went through successfully.',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.manrope(
-                            fontSize: 18,
-                            height: 1.22,
-                            fontWeight: FontWeight.w500,
-                            color: EbtlColors.navy,
-                          ),
-                        ),
-                        const SizedBox(height: 22),
-                        const Center(child: _CoralDash()),
-                        const SizedBox(height: 24),
-                        Text(
-                          'We’ll notify you when your order is ready for pickup.',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.manrope(
-                            fontSize: 15.5,
-                            height: 1.35,
-                            fontWeight: FontWeight.w500,
-                            color: EbtlColors.ink.withValues(alpha: 0.78),
-                          ),
-                        ),
-                        SizedBox(height: compactHeight ? 22 : 30),
-                        _OrderConfirmationSummaryCard(
-                          orderNumber: widget.order.orderNumber,
-                          totalPaidLabel: hasTotalPaid ? totalPaidLabel : null,
-                          paymentStatusLabel: paymentStatusLabel,
-                        ),
-                        SizedBox(height: compactHeight ? 22 : 34),
-                        Semantics(
-                          label:
-                              'Preparing your order. Pick up from $pickupLocationName. You’ll receive a notification when it’s ready.',
-                          image: true,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(24),
-                            child: Image.asset(
-                              OrderConfirmationAssets.preparingBanner,
-                              fit: BoxFit.fitWidth,
-                              filterQuality: FilterQuality.high,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 30),
-                        Text(
-                          'Tap Ok to return home.',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.manrope(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w500,
-                            color: EbtlColors.ink.withValues(alpha: 0.72),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        SizedBox(
-                          height: 58,
-                          child: ElevatedButton(
-                            onPressed: widget.onDone,
-                            style: ebtlCoralButtonStyle(
-                              radius: 30,
-                              shadowColor: Colors.transparent,
-                            ),
-                            child: Text(
-                              'Ok',
-                              style: GoogleFonts.manrope(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OrderConfirmedBackground extends StatelessWidget {
-  const _OrderConfirmedBackground();
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: EbtlColors.cream,
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            EbtlColors.cream,
-            EbtlColors.white.withValues(alpha: 0.92),
-            EbtlColors.cream,
-          ],
-          stops: const [0, 0.5, 1],
-        ),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            top: -110,
-            right: -96,
-            child: _SoftGlow(
-              size: 330,
-              color: EbtlColors.gold.withValues(alpha: 0.24),
-            ),
-          ),
-          Positioned(
-            top: 250,
-            left: -140,
-            child: _SoftGlow(
-              size: 320,
-              color: EbtlColors.blush.withValues(alpha: 0.2),
-            ),
-          ),
-          Positioned(
-            bottom: 90,
-            right: -150,
-            child: _SoftGlow(
-              size: 340,
-              color: EbtlColors.seafoam.withValues(alpha: 0.24),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SoftGlow extends StatelessWidget {
-  final double size;
-  final Color color;
-
-  const _SoftGlow({required this.size, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(colors: [color, color.withValues(alpha: 0)]),
-      ),
-    );
-  }
-}
-
-class _OrderConfirmationLogo extends StatelessWidget {
-  const _OrderConfirmationLogo();
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Transform.scale(
-        scale: 0.9,
-        alignment: Alignment.centerLeft,
-        child: const EbtlLogo(),
-      ),
-    );
-  }
-}
-
-class _CoralDash extends StatelessWidget {
-  const _CoralDash();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 34,
-      height: 2.5,
-      decoration: BoxDecoration(
-        color: EbtlColors.coral,
-        borderRadius: BorderRadius.circular(999),
-      ),
-    );
-  }
-}
-
-class _OrderConfirmationSummaryCard extends StatelessWidget {
-  final String orderNumber;
-  final String? totalPaidLabel;
-  final String paymentStatusLabel;
-
-  const _OrderConfirmationSummaryCard({
-    required this.orderNumber,
-    required this.totalPaidLabel,
-    required this.paymentStatusLabel,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final rows = <Widget>[
-      _OrderConfirmationInfoRow(
-        icon: Icons.receipt_long_outlined,
-        iconColor: EbtlColors.coral,
-        iconBackground: EbtlColors.blush.withValues(alpha: 0.32),
-        label: 'Order Number',
-        value: orderNumber,
-        valueStyle: GoogleFonts.manrope(
-          fontSize: 17,
-          fontWeight: FontWeight.w800,
-          color: EbtlColors.navy,
-        ),
-      ),
-      if (totalPaidLabel != null) ...[
-        const _OrderConfirmationDivider(),
-        _OrderConfirmationInfoRow(
-          icon: Icons.account_balance_wallet_outlined,
-          iconColor: EbtlColors.coral,
-          iconBackground: EbtlColors.blush.withValues(alpha: 0.22),
-          label: 'Total Paid',
-          trailing: _TotalPaidValue(value: totalPaidLabel!),
-        ),
-      ],
-      const _OrderConfirmationDivider(),
-      _OrderConfirmationInfoRow(
-        icon: Icons.verified_user_outlined,
-        iconColor: EbtlColors.teal,
-        iconBackground: EbtlColors.seafoam.withValues(alpha: 0.42),
-        label: 'Payment Status',
-        trailing: _PaidStatusPill(label: paymentStatusLabel),
-      ),
-    ];
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: EbtlColors.white.withValues(alpha: 0.88),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: EbtlColors.white.withValues(alpha: 0.72)),
-        boxShadow: [
-          BoxShadow(
-            color: EbtlColors.navy.withValues(alpha: 0.07),
-            blurRadius: 28,
-            offset: const Offset(0, 18),
-          ),
-          BoxShadow(
-            color: EbtlColors.gold.withValues(alpha: 0.08),
-            blurRadius: 42,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(children: rows),
-    );
-  }
-}
-
-class _OrderConfirmationInfoRow extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final Color iconBackground;
-  final String label;
-  final String? value;
-  final TextStyle? valueStyle;
-  final Widget? trailing;
-
-  const _OrderConfirmationInfoRow({
-    required this.icon,
-    required this.iconColor,
-    required this.iconBackground,
-    required this.label,
-    this.value,
-    this.valueStyle,
-    this.trailing,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return minHeightRow(
-      minHeight: 64,
-      child: Row(
-        children: [
-          Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              color: iconBackground,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: iconColor, size: 26),
-          ),
-          const SizedBox(width: 18),
-          Expanded(
-            child: Text(
-              label,
-              style: GoogleFonts.manrope(
-                fontSize: 16,
-                height: 1.15,
-                fontWeight: FontWeight.w700,
-                color: EbtlColors.navy,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          if (trailing != null)
-            trailing!
-          else
-            Flexible(
-              child: Text(
-                value ?? '',
-                textAlign: TextAlign.right,
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-                style: valueStyle,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget minHeightRow({required double minHeight, required Widget child}) {
-    return ConstrainedBox(
-      constraints: BoxConstraints(minHeight: minHeight),
-      child: Center(child: child),
-    );
-  }
-}
-
-class _TotalPaidValue extends StatelessWidget {
-  final String value;
-
-  const _TotalPaidValue({required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    final style = GoogleFonts.manrope(
-      fontSize: 17,
-      height: 1.15,
-      fontWeight: FontWeight.w800,
-      color: EbtlColors.coral,
-    );
-    final separatorIndex = value.indexOf(' ');
-
-    return Flexible(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final textPainter = TextPainter(
-            text: TextSpan(text: value, style: style),
-            maxLines: 1,
-            textDirection: TextDirection.ltr,
-          )..layout(maxWidth: constraints.maxWidth);
-
-          if (!textPainter.didExceedMaxLines) {
-            return Text(
-              value,
-              maxLines: 1,
-              textAlign: TextAlign.right,
-              style: style,
-            );
-          }
-
-          if (separatorIndex < 0) {
-            return FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerRight,
-              child: Text(value, maxLines: 1, style: style),
-            );
-          }
-
-          final currency = value.substring(0, separatorIndex);
-          final amount = value.substring(separatorIndex + 1).trimLeft();
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(currency, maxLines: 1, style: style),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(amount, maxLines: 1, style: style),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _OrderConfirmationDivider extends StatelessWidget {
-  const _OrderConfirmationDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 1,
-      margin: const EdgeInsets.symmetric(vertical: 12),
-      color: EbtlColors.border.withValues(alpha: 0.82),
-    );
-  }
-}
-
-class _PaidStatusPill extends StatelessWidget {
-  final String label;
-
-  const _PaidStatusPill({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
-      decoration: BoxDecoration(
-        color: EbtlColors.seafoam.withValues(alpha: 0.42),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: EbtlColors.teal.withValues(alpha: 0.15)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 20,
-            height: 20,
-            decoration: BoxDecoration(
-              color: EbtlColors.white.withValues(alpha: 0.55),
-              shape: BoxShape.circle,
-              border: Border.all(color: EbtlColors.teal.withValues(alpha: 0.7)),
-            ),
-            child: const Icon(
-              Icons.check_rounded,
-              size: 14,
-              color: EbtlColors.teal,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: GoogleFonts.manrope(
-              fontSize: 16,
-              height: 1,
-              fontWeight: FontWeight.w800,
-              color: EbtlColors.teal,
             ),
           ),
         ],

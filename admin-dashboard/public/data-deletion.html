@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EBTL | Delete your account and data</title>
+  <meta name="description" content="How to ask EBTL to delete the account and data linked to your Facebook, Google or Apple sign-in." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    /*
+      Meta requires a reachable data-deletion URL for any app using Facebook
+      Login, and this page is what is registered there. It is deliberately
+      standalone — no build step, no landing-page CSS — so it cannot be broken by
+      a change to the marketing site.
+    */
+    :root {
+      --navy: #0E2238;
+      --coral: #F35F4B;
+      --cream: #FFF8EE;
+      --ink: #1F2933;
+      --muted: #6F7882;
+      --border: #E8DDD1;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 48px 20px 72px;
+      background: var(--cream);
+      color: var(--ink);
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+
+    main {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .wordmark {
+      font-family: "Playfair Display", Georgia, serif;
+      font-weight: 800;
+      font-size: 26px;
+      letter-spacing: 0.04em;
+      color: var(--navy);
+      text-decoration: none;
+    }
+
+    h1 {
+      font-family: "Playfair Display", Georgia, serif;
+      font-weight: 800;
+      font-size: clamp(30px, 6vw, 42px);
+      line-height: 1.1;
+      color: var(--navy);
+      margin: 28px 0 10px;
+    }
+
+    .lede { font-size: 17px; color: var(--ink); margin: 0 0 28px; }
+
+    h2 {
+      font-size: 19px;
+      font-weight: 800;
+      color: var(--navy);
+      margin: 32px 0 8px;
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 22px 24px;
+      margin: 18px 0;
+    }
+
+    a { color: var(--coral); font-weight: 600; }
+
+    ul { padding-left: 20px; }
+    li { margin: 6px 0; }
+
+    .note { font-size: 14px; color: var(--muted); }
+
+    footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      font-size: 14px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="wordmark" href="/">EBTL</a>
+
+    <h1>Delete your account and data</h1>
+    <p class="lede">
+      If you signed in to the EBTL app with Facebook, Google or Apple, you can
+      ask us to delete that account and everything attached to it. You do not
+      need an account to use EBTL, and deleting one does not stop you ordering.
+    </p>
+
+    <div class="card">
+      <h2>How to ask</h2>
+      <p>
+        Email <a href="mailto:hello@ebtl.wtf?subject=Delete%20my%20EBTL%20account">hello@ebtl.wtf</a>
+        with the subject <strong>“Delete my EBTL account”</strong>, from the email
+        address on your account, and tell us which sign-in you used (Facebook,
+        Google or Apple).
+      </p>
+      <p class="note">
+        We confirm the request within 5 working days and complete the deletion
+        within 30 days.
+      </p>
+    </div>
+
+    <h2>What gets deleted</h2>
+    <ul>
+      <li>Your name, email address, phone number and delivery addresses.</li>
+      <li>The link between your EBTL account and your Facebook, Google or Apple ID.</li>
+      <li>Your saved spirits, favourite cocktails and referral code.</li>
+      <li>Any unused store credit and referral bonuses.</li>
+    </ul>
+
+    <h2>What we have to keep</h2>
+    <p>
+      Records of orders you have already placed and paid for are kept for the
+      period Egyptian tax and accounting law requires. They are detached from
+      your personal details, so they can no longer be traced back to you.
+    </p>
+
+    <footer>
+      EBTL — Everything But The Liquor. Questions about your data?
+      <a href="mailto:hello@ebtl.wtf">hello@ebtl.wtf</a>
+    </footer>
+  </main>
+</body>
+</html>
