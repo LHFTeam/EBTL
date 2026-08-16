@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/onboarding_assets.dart';
 import '../../core/theme/ebtl_colors.dart';
 import '../../services/analytics_service.dart';
+import 'widgets/notification_permission_page.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key, required this.onCompleted});
@@ -15,7 +16,10 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  static const _pageCount = 5;
+  /// The artwork pages, then the notification-permission primer that closes
+  /// onboarding. Derived from the asset list so adding a splash image cannot
+  /// silently push the primer off the end.
+  static final _pageCount = OnboardingAssets.all.length + 1;
 
   final PageController _pageController = PageController();
   int _currentPage = 0;
@@ -69,8 +73,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             itemCount: _pageCount,
             onPageChanged: (index) => setState(() => _currentPage = index),
             itemBuilder: (context, index) {
-              if (index == _pageCount - 1) {
-                return const _NotificationPermissionPage();
+              if (index >= OnboardingAssets.all.length) {
+                return const NotificationPermissionPage();
               }
 
               return Image.asset(
@@ -115,173 +119,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         return 'Step 2. Find cocktails you can make with your bottles.';
       case 3:
         return 'Step 3. Order and pick up. Pay and get notified when your order is ready.';
-      case 4:
-        return 'Enable notifications to know the moment your order is ready for pickup.';
       default:
         return 'EBTL onboarding screen';
     }
-  }
-}
-
-class _NotificationPermissionPage extends StatelessWidget {
-  const _NotificationPermissionPage();
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: EbtlColors.cream,
-      child: SafeArea(
-        bottom: false,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(28, 44, 28, 180),
-          child: Column(
-            children: [
-              Text(
-                'EBTL',
-                style: GoogleFonts.manrope(
-                  color: EbtlColors.navy,
-                  fontSize: 38,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 8,
-                ),
-              ),
-              const SizedBox(height: 44),
-              Container(
-                width: 116,
-                height: 116,
-                decoration: BoxDecoration(
-                  color: EbtlColors.seafoam,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: EbtlColors.white, width: 6),
-                  boxShadow: [
-                    BoxShadow(
-                      color: EbtlColors.navy.withValues(alpha: 0.12),
-                      blurRadius: 24,
-                      offset: const Offset(0, 12),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.notifications_active_rounded,
-                  color: EbtlColors.teal,
-                  size: 56,
-                ),
-              ),
-              const SizedBox(height: 34),
-              Text(
-                'Your cocktail is ready! ✨',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.manrope(
-                  color: EbtlColors.coral,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.4,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Never miss\nthe magic.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.manrope(
-                  color: EbtlColors.navy,
-                  fontSize: 40,
-                  height: 1.08,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -1.2,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Turn on notifications and we’ll let you know the moment your order is ready for pickup.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.manrope(
-                  color: EbtlColors.ink,
-                  fontSize: 17,
-                  height: 1.55,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 28),
-              const _NotificationBenefit(
-                icon: Icons.schedule_rounded,
-                title: 'Pick up at the perfect time',
-                body: 'No waiting around or checking the app.',
-              ),
-              const SizedBox(height: 14),
-              const _NotificationBenefit(
-                icon: Icons.local_bar_rounded,
-                title: 'Keep every order on your radar',
-                body: 'Get the updates that matter while you enjoy the beach.',
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NotificationBenefit extends StatelessWidget {
-  const _NotificationBenefit({
-    required this.icon,
-    required this.title,
-    required this.body,
-  });
-
-  final IconData icon;
-  final String title;
-  final String body;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: EbtlColors.white.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: EbtlColors.sand),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: const BoxDecoration(
-              color: EbtlColors.seafoam,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: EbtlColors.teal, size: 24),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.manrope(
-                    color: EbtlColors.navy,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  body,
-                  style: GoogleFonts.manrope(
-                    color: EbtlColors.muted,
-                    fontSize: 13,
-                    height: 1.35,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -347,13 +187,25 @@ class _OnboardingButton extends StatelessWidget {
                               color: EbtlColors.white,
                             ),
                           )
-                        : Text(
-                            label,
+                        : Padding(
                             key: ValueKey(label),
-                            style: GoogleFonts.manrope(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.2,
+                            // Keeps the label clear of the arrow, which is
+                            // stacked over it rather than laid out beside it.
+                            padding: const EdgeInsets.symmetric(horizontal: 38),
+                            child: FittedBox(
+                              // A long label ("Enable Notifications") shrinks
+                              // rather than running under the arrow on a narrow
+                              // phone; the short ones still draw at full size.
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                label,
+                                maxLines: 1,
+                                style: GoogleFonts.manrope(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
                             ),
                           ),
                   ),
