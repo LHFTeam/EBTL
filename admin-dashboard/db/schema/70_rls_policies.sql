@@ -97,6 +97,8 @@ CREATE POLICY "Managers can manage locations" ON public.locations AS PERMISSIVE 
 CREATE POLICY "Staff can read locations" ON public.locations AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
 CREATE POLICY "Staff can manage loyalty_accounts" ON public.loyalty_accounts AS PERMISSIVE FOR ALL TO authenticated USING (is_staff()) WITH CHECK (is_staff());
 CREATE POLICY "Staff can manage loyalty_transactions" ON public.loyalty_transactions AS PERMISSIVE FOR ALL TO authenticated USING (is_staff()) WITH CHECK (is_staff());
+CREATE POLICY "Staff can create order_handoffs" ON public.order_handoffs AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (is_staff());
+CREATE POLICY "Staff can read order_handoffs" ON public.order_handoffs AS PERMISSIVE FOR SELECT TO authenticated USING (is_staff());
 CREATE POLICY "Customers can read own order additions" ON public.order_item_additions AS PERMISSIVE FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1 FROM ((order_items oi JOIN orders o ON ((o.id = oi.order_id))) JOIN customers cu ON ((cu.id = o.customer_id))) WHERE ((oi.id = order_item_additions.order_item_id) AND (cu.auth_user_id = ( SELECT auth.uid() AS uid))))));
 CREATE POLICY "Staff can manage order additions" ON public.order_item_additions AS PERMISSIVE FOR ALL TO authenticated USING (is_staff()) WITH CHECK (is_staff());
 CREATE POLICY "Customers can read own order inventory components" ON public.order_item_inventory_components AS PERMISSIVE FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1 FROM ((order_items oi JOIN orders o ON ((o.id = oi.order_id))) JOIN customers cu ON ((cu.id = o.customer_id))) WHERE ((oi.id = order_item_inventory_components.order_item_id) AND (cu.auth_user_id = ( SELECT auth.uid() AS uid))))));

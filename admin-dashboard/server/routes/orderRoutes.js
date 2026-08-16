@@ -2,9 +2,11 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { orderStatuses, paymentStatuses } from '../config/appConfig.js';
 import { requireArea } from '../middleware/auth.js';
+import { pickupAttemptLimiter } from '../middleware/rateLimit.js';
 import { clean } from '../lib/objectUtils.js';
 import { sb } from '../lib/supabaseResponse.js';
 import { supabase } from '../lib/supabase.js';
+import { decodePickupToken, verifyPickupShortCode } from '../lib/pickupToken.js';
 import { notifyOrderReadyForPickup } from '../lib/notifications.js';
 
 export const orderRouter = Router();
@@ -547,6 +549,16 @@ orderRouter.patch('/cart-operations/orders/:id/status', requireArea('orders'), a
     });
   }
 
+  // A cart pickup is released by the customer's code, not by a button — see the
+  // pickup handoff routes below. Everything up to `ready` still moves from
+  // here, and admins keep PATCH /orders/:id as break-glass.
+  if (parsed.data.status === 'completed' && existing.fulfillment_type === 'pickup_at_cart') {
+    return res.status(409).json({
+      code: 'scan_required',
+      error: `Order ${existing.order_number || existing.id} is collected by scanning the customer's pickup code.`
+    });
+  }
+
   const updatedOrder = await supabase
     .rpc('transition_cart_order_status', {
       p_order_id: req.params.id,
@@ -574,6 +586,432 @@ orderRouter.patch('/cart-operations/orders/:id/status', requireArea('orders'), a
     order_number: data.order_number,
     status: data.status,
     updated_at: data.updated_at
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pickup handoff — the scan gate on `ready` → `completed`
+//
+// A pickup order is released by proving the customer is the one collecting it:
+// the app shows a short-lived code (lib/pickupToken.js), the attendant scans it
+// or types its six digits, reviews the bag against what comes back, and
+// confirms. `PATCH /cart-operations/orders/:id/status` no longer accepts
+// `completed` for a pickup order, so this is the only routine way through.
+//
+// Scanning and completing are two calls on purpose. The scan proves the right
+// *customer*; only a human looking in the bag proves the right *order*, and
+// collapsing them into one tap would close the order before anyone had looked.
+// ---------------------------------------------------------------------------
+
+const PICKUP_OVERRIDE_ROLES = ['supervisor', 'manager', 'admin'];
+const PICKUP_OVERRIDE_REASONS = ['dead_phone', 'no_app', 'app_error', 'staff_error', 'other'];
+
+// Answers the request and returns null, so every guard below reads as
+// `if (!x) return;` at the call site. `code` is what the scanner switches on;
+// `error` is what the attendant reads.
+function pickupProblem(res, { status, code, error, ...rest }) {
+  res.status(status).json({ ok: false, code, error, ...rest });
+  return null;
+}
+
+function staffLabelFor(user) {
+  return user?.name || user?.username || 'Unknown staff';
+}
+
+async function loadPickupOrder(orderId) {
+  return supabase
+    .from('orders')
+    .select('id,order_number,status,payment_status,fulfillment_type,location_id,customer_id,customer_notes,customer_phone_snapshot,ready_at,completed_at,customers(full_name,phone),locations(id,name,type,compound_name,beach_name,is_active)')
+    .eq('id', orderId)
+    .maybeSingle();
+}
+
+// Deliberately lighter than publicOperationalOrder: this is the "is this the
+// right bag" panel, so it carries what an attendant reads off a phone in one
+// glance and none of the recipe detail the prep screens need.
+async function pickupOrderCard(order) {
+  const items = await supabase
+    .from('order_items')
+    .select('id,product_name_snapshot,variant_name_snapshot,quantity,serving_count,customization_summary,product_image_url')
+    .eq('order_id', order.id)
+    .order('created_at', { ascending: true });
+
+  if (items.error) throw items.error;
+
+  const rows = items.data || [];
+
+  return {
+    id: order.id,
+    order_number: order.order_number,
+    status: order.status,
+    fulfillment_type: order.fulfillment_type,
+    location: compactLocation(order.locations),
+    customer: {
+      name: order.customers?.full_name || 'Walk-in Customer',
+      phone_last4: String(order.customer_phone_snapshot || order.customers?.phone || '').replace(/\D/g, '').slice(-4) || null
+    },
+    customer_notes: order.customer_notes || null,
+    ready_at: order.ready_at || null,
+    completed_at: order.completed_at || null,
+    item_count: rows.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+    items: rows.map((item) => ({
+      id: item.id,
+      product_name_snapshot: item.product_name_snapshot,
+      variant_name_snapshot: item.variant_name_snapshot,
+      quantity: item.quantity,
+      serving_count: item.serving_count,
+      customization_summary: item.customization_summary,
+      product_image_url: item.product_image_url
+    }))
+  };
+}
+
+// Who released an order, for the "already collected" message. Best effort: the
+// handoff log is young, and an order completed before this feature shipped has
+// no row.
+async function lastHandoffFor(orderId) {
+  const handoff = await supabase
+    .from('order_handoffs')
+    .select('staff_label,method,created_at')
+    .eq('order_id', orderId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return handoff.error ? null : handoff.data;
+}
+
+/**
+ * Turns whatever the attendant presented — a scanned token, or an order number
+ * plus six digits — into the order it names, or sends the error and returns
+ * null. Shared by verify and confirm so the two can never disagree about what
+ * a code means.
+ */
+async function resolvePresentedPickup({ res, body, location }) {
+  if (body.token) {
+    const decoded = decodePickupToken(body.token);
+
+    if (!decoded.ok) {
+      return pickupProblem(res, decoded.reason === 'expired'
+        ? {
+          status: 409,
+          code: 'expired',
+          error: 'That code has expired. Ask the customer to refresh their screen, then scan again.'
+        }
+        : {
+          status: 400,
+          code: 'unrecognized',
+          error: 'That is not an EBTL pickup code.'
+        });
+    }
+
+    return { orderId: decoded.order_id, nonce: decoded.nonce, method: 'qr' };
+  }
+
+  // The typed fallback. The digits alone do not name an order, so the attendant
+  // supplies the order number too, and it is looked up at their own cart only.
+  const orderNumber = String(body.order_number || '').trim().replace(/^#/, '');
+
+  const candidates = await supabase
+    .from('orders')
+    .select('id')
+    .eq('order_number', orderNumber)
+    .eq('location_id', location.id)
+    .eq('fulfillment_type', 'pickup_at_cart')
+    .in('status', ['ready', 'completed']);
+
+  if (candidates.error) {
+    return pickupProblem(res, { status: 400, code: 'lookup_failed', error: candidates.error.message });
+  }
+
+  const rows = candidates.data || [];
+
+  if (rows.length !== 1) {
+    // Order numbers reset every Cairo business date, so a stale one from
+    // yesterday finds nothing and a repeat finds two. Neither is safe to guess.
+    return pickupProblem(res, {
+      status: 404,
+      code: 'unknown_order',
+      error: rows.length
+        ? `More than one order at this cart is numbered ${orderNumber}. Scan the code instead.`
+        : `No order numbered ${orderNumber} is waiting at this cart.`
+    });
+  }
+
+  const verified = verifyPickupShortCode({ orderId: rows[0].id, shortCode: body.short_code });
+
+  if (!verified) {
+    return pickupProblem(res, {
+      status: 409,
+      code: 'code_mismatch',
+      error: 'Those digits do not match a current code for that order. Ask the customer to refresh their screen.'
+    });
+  }
+
+  return { orderId: rows[0].id, nonce: verified.nonce, method: 'short_code' };
+}
+
+/**
+ * Everything that has to be true before an order can be released, in the order
+ * an attendant would ask it. Returns the order, or sends the error and null.
+ */
+async function pickupOrderReadyForHandoff({ res, orderId, location }) {
+  const order = await loadPickupOrder(orderId);
+
+  if (order.error) {
+    return pickupProblem(res, { status: 400, code: 'lookup_failed', error: order.error.message });
+  }
+
+  if (!order.data) {
+    return pickupProblem(res, { status: 404, code: 'unknown_order', error: 'That order no longer exists.' });
+  }
+
+  if (order.data.fulfillment_type !== 'pickup_at_cart') {
+    return pickupProblem(res, {
+      status: 409,
+      code: 'not_pickup',
+      error: `Order ${order.data.order_number} is a delivery, not a cart pickup.`
+    });
+  }
+
+  if (order.data.location_id !== location.id) {
+    return pickupProblem(res, {
+      status: 409,
+      code: 'wrong_location',
+      error: `Order ${order.data.order_number} belongs to ${order.data.locations?.name || 'another cart'}.`
+    });
+  }
+
+  if (order.data.status === 'completed') {
+    const handoff = await lastHandoffFor(order.data.id);
+    return pickupProblem(res, {
+      status: 409,
+      code: 'already_collected',
+      error: handoff
+        ? `Order ${order.data.order_number} was already collected — released by ${handoff.staff_label}.`
+        : `Order ${order.data.order_number} has already been collected.`,
+      handoff: handoff || null
+    });
+  }
+
+  if (order.data.payment_status !== 'paid') {
+    return pickupProblem(res, {
+      status: 409,
+      code: 'unpaid',
+      error: `Order ${order.data.order_number} is not paid for yet.`
+    });
+  }
+
+  if (order.data.status !== 'ready') {
+    return pickupProblem(res, {
+      status: 409,
+      code: 'not_ready',
+      error: `Order ${order.data.order_number} is still ${String(order.data.status).replaceAll('_', ' ')}.`
+    });
+  }
+
+  return order.data;
+}
+
+/**
+ * Completes the order and writes the handoff row.
+ *
+ * The transition runs first: its compare-and-swap is the real guard against a
+ * double handoff, and it is the thing that must not happen twice. The log
+ * follows. If the log write fails the order is still legitimately collected —
+ * refusing at that point would leave a customer holding their kit and an
+ * attendant looking at an error — so it answers `logged: false` and says so
+ * rather than pretending either way.
+ */
+async function releasePickupOrder({ res, order, user, location, method, nonce = null, reasonCode = null }) {
+  const transitioned = await supabase
+    .rpc('transition_cart_order_status', {
+      p_order_id: order.id,
+      p_expected_status: 'ready',
+      p_next_status: 'completed'
+    })
+    .maybeSingle();
+
+  if (transitioned.error) {
+    return pickupProblem(res, { status: 400, code: 'transition_failed', error: transitioned.error.message });
+  }
+
+  if (!transitioned.data) {
+    return pickupProblem(res, {
+      status: 409,
+      code: 'already_collected',
+      error: `Order ${order.order_number} was released on another screen a moment ago.`
+    });
+  }
+
+  const logged = await supabase.from('order_handoffs').insert({
+    order_id: order.id,
+    location_id: location.id,
+    employee_id: user?.employee_id || null,
+    staff_label: staffLabelFor(user),
+    method,
+    reason_code: reasonCode,
+    token_nonce: nonce
+  });
+
+  if (logged.error) console.error('Handed over order without writing the handoff log', logged.error);
+
+  return { order: transitioned.data, logged: !logged.error };
+}
+
+const presentedPickupSchema = z.union([
+  z.object({ token: z.string().min(1).max(200) }),
+  z.object({
+    order_number: z.string().min(1).max(20),
+    short_code: z.string().min(1).max(12)
+  })
+]);
+
+orderRouter.post('/cart-operations/pickups/verify', requireArea('orders'), pickupAttemptLimiter, async (req, res) => {
+  const parsed = presentedPickupSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return pickupProblem(res, { status: 400, code: 'invalid_request', error: 'Scan a code, or enter an order number and its six digits.' });
+  }
+
+  const resolved = await resolveCartOperationLocation({ req, res });
+  if (!resolved) return;
+
+  const presented = await resolvePresentedPickup({ res, body: parsed.data, location: resolved.selectedLocation });
+  if (!presented) return;
+
+  const order = await pickupOrderReadyForHandoff({
+    res,
+    orderId: presented.orderId,
+    location: resolved.selectedLocation
+  });
+  if (!order) return;
+
+  try {
+    res.json({
+      ok: true,
+      method: presented.method,
+      order: await pickupOrderCard(order)
+    });
+  } catch (error) {
+    pickupProblem(res, { status: 400, code: 'lookup_failed', error: error.message });
+  }
+});
+
+orderRouter.post('/cart-operations/pickups/confirm', requireArea('orders'), pickupAttemptLimiter, async (req, res) => {
+  const parsed = presentedPickupSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return pickupProblem(res, { status: 400, code: 'invalid_request', error: 'Scan a code, or enter an order number and its six digits.' });
+  }
+
+  const resolved = await resolveCartOperationLocation({ req, res });
+  if (!resolved) return;
+
+  // Re-checked rather than trusted from the verify call: the code may have
+  // expired, and the order may have moved, in the seconds the attendant spent
+  // looking in the bag.
+  const presented = await resolvePresentedPickup({ res, body: parsed.data, location: resolved.selectedLocation });
+  if (!presented) return;
+
+  const order = await pickupOrderReadyForHandoff({
+    res,
+    orderId: presented.orderId,
+    location: resolved.selectedLocation
+  });
+  if (!order) return;
+
+  const released = await releasePickupOrder({
+    res,
+    order,
+    user: req.user,
+    location: resolved.selectedLocation,
+    method: presented.method,
+    nonce: presented.nonce
+  });
+  if (!released) return;
+
+  res.json({
+    ok: true,
+    method: presented.method,
+    logged: released.logged,
+    order: {
+      id: released.order.id,
+      order_number: released.order.order_number,
+      status: released.order.status,
+      completed_at: released.order.completed_at || null,
+      updated_at: released.order.updated_at
+    }
+  });
+});
+
+// The last resort: a customer who cannot produce a code at all — a dead
+// battery, or an app reinstalled since they ordered, which wipes the anonymous
+// session the order lives on. The reason is mandatory because the rate of these
+// is the number that says whether the whole process is working.
+orderRouter.post('/cart-operations/pickups/override', requireArea('orders'), pickupAttemptLimiter, async (req, res) => {
+  const parsed = z.object({
+    order_id: z.string().uuid(),
+    reason_code: z.enum(PICKUP_OVERRIDE_REASONS),
+    phone_last4: z.string().regex(/^\d{4}$/).optional()
+  }).safeParse(req.body);
+
+  if (!parsed.success) {
+    return pickupProblem(res, { status: 400, code: 'invalid_request', error: 'Pick an order and a reason for the override.' });
+  }
+
+  const resolved = await resolveCartOperationLocation({ req, res });
+  if (!resolved) return;
+
+  const isPrivileged = PICKUP_OVERRIDE_ROLES.includes(req.user?.role);
+  if (!isPrivileged && req.user?.role !== 'cart_operator') {
+    return pickupProblem(res, {
+      status: 403,
+      code: 'not_allowed',
+      error: 'Overrides are for cart operators and supervisors.'
+    });
+  }
+
+  const order = await pickupOrderReadyForHandoff({
+    res,
+    orderId: parsed.data.order_id,
+    location: resolved.selectedLocation
+  });
+  if (!order) return;
+
+  // Checking the phone is what keeps an override an identity check rather than
+  // a free pass. It is skipped only when the order has no phone to check.
+  const expectedLast4 = String(order.customer_phone_snapshot || order.customers?.phone || '').replace(/\D/g, '').slice(-4);
+
+  if (expectedLast4 && parsed.data.phone_last4 !== expectedLast4) {
+    return pickupProblem(res, {
+      status: 409,
+      code: 'phone_mismatch',
+      error: parsed.data.phone_last4
+        ? 'Those last four digits do not match the phone on this order.'
+        : 'Confirm the last four digits of the phone on this order.'
+    });
+  }
+
+  const released = await releasePickupOrder({
+    res,
+    order,
+    user: req.user,
+    location: resolved.selectedLocation,
+    method: 'override',
+    reasonCode: parsed.data.reason_code
+  });
+  if (!released) return;
+
+  res.json({
+    ok: true,
+    method: 'override',
+    logged: released.logged,
+    order: {
+      id: released.order.id,
+      order_number: released.order.order_number,
+      status: released.order.status,
+      completed_at: released.order.completed_at || null,
+      updated_at: released.order.updated_at
+    }
   });
 });
 

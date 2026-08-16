@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { Router } from 'express';
+import QRCode from 'qrcode';
 import { z } from 'zod';
 import { ACTIVE_PAYMENT_PROVIDER, isDemoPaymentMode, isProd, PAYMENT_MODE, SESSION_SECRET } from '../config/appConfig.js';
 import { clean } from '../lib/objectUtils.js';
@@ -26,6 +27,7 @@ import {
   stripeMinorUnits
 } from '../lib/stripe.js';
 import { supabase } from '../lib/supabase.js';
+import { encodePickupCode } from '../lib/pickupToken.js';
 import { loadActiveGoldenHourModal } from '../lib/goldenHour.js';
 import { publicNotification, registerCustomerPushToken } from '../lib/notifications.js';
 import {
@@ -841,6 +843,33 @@ function publicLocation(location) {
 
 function normalizeFulfillmentType(value) {
   return FULFILLMENT_TYPES.includes(value) ? value : 'pickup_at_cart';
+}
+
+function firstName(fullName) {
+  return String(fullName || '').trim().split(/\s+/)[0] || null;
+}
+
+// Drawn here rather than in the app so the encoding lives in one place, and so
+// the Flutter client needs no QR package — it already renders SVG.
+//
+// Black on white at error-correction M: the token is short enough to fit a
+// 29x29 grid, and a bigger margin and plain black are what survive a dim screen
+// in direct sun. Brand colours lose scans, so they stay off this one surface.
+async function pickupQrSvg(token) {
+  try {
+    return await QRCode.toString(token, {
+      type: 'svg',
+      errorCorrectionLevel: 'M',
+      margin: 2,
+      color: {
+        dark: '#000000',
+        light: '#ffffff'
+      }
+    });
+  } catch (error) {
+    console.error('Failed to render pickup QR', error);
+    return null;
+  }
 }
 
 function parseTimeToMinutes(value) {
@@ -6688,6 +6717,98 @@ customerRouter.get('/customer/orders/:orderId/status', async (req, res) => {
       prep_status: item.prep_status
     })),
     updated_at: order.data.updated_at
+  });
+});
+
+// The code the customer shows at the cart to collect a pickup order.
+//
+// Answers 200 with `available: false` and a reason rather than an error for an
+// order that simply has no code yet — the app polls this alongside the order
+// status, and an order moving to `completed` mid-poll is the normal end of the
+// flow, not a failure to report. Only an order that is not the caller's is a
+// 404.
+//
+// The code itself is derived, not stored (see lib/pickupToken.js), so this is a
+// read: it mints nothing and there is nothing to clean up if the customer never
+// shows it.
+customerRouter.get('/customer/orders/:orderId/pickup-code', async (req, res) => {
+  const ensured = await ensureCustomer(req, res);
+  if (!ensured) return;
+
+  const order = await supabase
+    .from('orders')
+    .select('id,order_number,status,payment_status,fulfillment_type,completed_at,locations(id,name,type,compound_name,beach_name,banner_image_url,delivery_fee)')
+    .eq('id', req.params.orderId)
+    .eq('customer_id', ensured.customer.id)
+    .maybeSingle();
+
+  if (order.error) return res.status(400).json({
+    error: order.error.message
+  });
+
+  if (!order.data) return res.status(404).json({
+    error: 'Order not found.'
+  });
+
+  const unavailable = (reason, message) => res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    pickup: {
+      available: false,
+      reason,
+      message,
+      order_id: order.data.id,
+      order_number: order.data.order_number,
+      status: order.data.status
+    }
+  });
+
+  if (order.data.fulfillment_type !== 'pickup_at_cart') {
+    return unavailable('not_pickup', 'This order is being delivered to you.');
+  }
+
+  if (order.data.status === 'completed') {
+    return unavailable('already_collected', 'This order has already been collected.');
+  }
+
+  if (['cancelled', 'refunded', 'expired'].includes(order.data.status)) {
+    return unavailable('closed', 'This order is closed.');
+  }
+
+  if (order.data.payment_status !== 'paid') {
+    return unavailable('unpaid', 'Finish paying for this order to get your pickup code.');
+  }
+
+  if (order.data.status !== 'ready') {
+    return unavailable('not_ready', 'Your pickup code appears here the moment your order is ready.');
+  }
+
+  const code = encodePickupCode({ orderId: order.data.id });
+  if (!code) return res.status(500).json({
+    error: 'Could not create a pickup code for this order.'
+  });
+
+  const qr = await pickupQrSvg(code.token);
+  if (!qr) return res.status(500).json({
+    error: 'Could not draw the pickup code for this order.'
+  });
+
+  res.json({
+    session: sessionPayload(ensured.customer.id, ensured.token),
+    pickup: {
+      available: true,
+      order_id: order.data.id,
+      order_number: order.data.order_number,
+      status: order.data.status,
+      // The attendant reads this off the screen to greet the right person, so
+      // it is the name as given, not the full one.
+      customer_first_name: firstName(ensured.customer.full_name),
+      qr_svg: qr,
+      short_code: code.short_code,
+      expires_at: code.expires_at,
+      refresh_after_ms: code.refresh_after_ms,
+      location: publicLocation(order.data.locations),
+      instructions: 'Show this to the attendant at your cart.'
+    }
   });
 });
 

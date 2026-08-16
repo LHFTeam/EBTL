@@ -92,6 +92,80 @@ class OrderDetail {
     return status.trim().toLowerCase() == 'pending_payment' &&
         unpaidStatuses.contains(paymentStatus.trim().toLowerCase());
   }
+
+  /// Whether this order has a pickup code worth asking the backend about.
+  ///
+  /// Deliveries never do, and neither does an order that is finished or has
+  /// not been paid for. Everything from `confirmed` onwards does, because the
+  /// card also says where the code will appear once the order is bagged.
+  bool get showsPickupCode {
+    const activeStatuses = {'confirmed', 'preparing', 'ready'};
+
+    return !isDelivery &&
+        paymentStatus.trim().toLowerCase() == 'paid' &&
+        activeStatuses.contains(status.trim().toLowerCase());
+  }
+}
+
+/// The code the customer shows at the cart to collect a pickup order.
+///
+/// The backend answers with `available: false` and a reason rather than an
+/// error for an order that simply has no code yet, so an order still being made
+/// and an order already collected both arrive here as ordinary responses.
+///
+/// The QR arrives drawn, as an SVG string: the encoding lives on the server so
+/// there is only one place it can go wrong, and the app needs no QR package to
+/// show it.
+class PickupCode {
+  final bool available;
+  final String? reason;
+  final String? message;
+  final String status;
+  final String? qrSvg;
+  final String? shortCode;
+  final String? customerFirstName;
+  final String? instructions;
+  final int refreshAfterMs;
+
+  const PickupCode({
+    required this.available,
+    required this.reason,
+    required this.message,
+    required this.status,
+    required this.qrSvg,
+    required this.shortCode,
+    required this.customerFirstName,
+    required this.instructions,
+    required this.refreshAfterMs,
+  });
+
+  factory PickupCode.fromJson(Map<String, dynamic> json) {
+    final pickup = asMap(json['pickup']);
+
+    return PickupCode(
+      available: readBool(pickup['available']),
+      reason: nullableString(pickup['reason']),
+      message: nullableString(pickup['message']),
+      status: readString(pickup['status']),
+      qrSvg: nullableString(pickup['qr_svg']),
+      shortCode: nullableString(pickup['short_code']),
+      customerFirstName: nullableString(pickup['customer_first_name']),
+      instructions: nullableString(pickup['instructions']),
+      // Falls back to half a minute, which is one rotation of the code.
+      refreshAfterMs: readInt(pickup['refresh_after_ms'], fallback: 30000),
+    );
+  }
+
+  /// True once the code can be shown — both halves are needed, since the QR is
+  /// what gets scanned and the digits are the fallback under it.
+  bool get isShowable =>
+      available &&
+      (qrSvg?.isNotEmpty ?? false) &&
+      (shortCode?.isNotEmpty ?? false);
+
+  /// The order is on its way but not bagged yet, which is worth saying so the
+  /// customer knows where the code will appear.
+  bool get isPending => !available && reason == 'not_ready';
 }
 
 class OrderDetailLocation {

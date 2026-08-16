@@ -594,6 +594,19 @@ CREATE TABLE IF NOT EXISTS public.loyalty_transactions (
 );
 ALTER TABLE public.loyalty_transactions ENABLE ROW LEVEL SECURITY;
 
+CREATE TABLE IF NOT EXISTS public.order_handoffs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    order_id uuid NOT NULL,
+    location_id uuid NOT NULL,
+    employee_id uuid,
+    staff_label text NOT NULL,
+    method text NOT NULL,
+    reason_code text,
+    token_nonce text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE public.order_handoffs ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS public.order_inventory_consumptions (
     order_id uuid NOT NULL,
     consumed_at timestamp with time zone DEFAULT now() NOT NULL

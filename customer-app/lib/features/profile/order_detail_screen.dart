@@ -10,6 +10,7 @@ import '../../shared/widgets/app_state_widgets.dart';
 import '../../shared/widgets/brand_widgets.dart';
 import '../../shared/widgets/detail_card.dart';
 import '../../shared/widgets/network_or_asset_image.dart';
+import 'widgets/pickup_code_card.dart';
 import 'widgets/profile_widgets.dart';
 
 class OrderDetailScreen extends StatefulWidget {
@@ -195,6 +196,19 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
     return [
       SliverToBoxAdapter(child: _OrderStatusCard(order: order)),
+      // Sits directly under the status, above everything else: once the order
+      // is ready this is the only thing on the screen the customer needs.
+      if (order.showsPickupCode)
+        SliverToBoxAdapter(
+          child: PickupCodeCard(
+            // Keyed by order so switching between two orders rebuilds the card
+            // rather than reusing one order's code under another's number.
+            key: ValueKey('pickup-${order.id}'),
+            orderId: order.id,
+            orderStatus: order.status,
+            onOrderMoved: reload,
+          ),
+        ),
       if (order.awaitsPayment)
         SliverToBoxAdapter(
           child: _PendingPaymentCard(
