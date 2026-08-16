@@ -2,6 +2,7 @@ import 'package:facebook_app_events/facebook_app_events.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/foundation.dart';
 
+import 'app_tracking_service.dart';
 import 'clarity_service.dart';
 import 'firebase_bootstrap.dart';
 
@@ -130,13 +131,37 @@ class AnalyticsService {
   static Future<void> _initializeMeta() async {
     try {
       await _meta.setAutoLogAppEventsEnabled(_shouldCollect);
-      await _meta.setAdvertiserIdCollectionEnabled(_shouldCollect);
+      // The advertising identifier stays off until App Tracking Transparency
+      // has been answered — see [resolveTrackingAuthorization]. Events still
+      // flow from the first launch; they just carry no identifier until then,
+      // which on iOS is all the SDK could read anyway.
+      await _meta.setAdvertiserIdCollectionEnabled(false);
       if (!_shouldCollect) return;
 
       await _meta.activateApp(applicationId: _metaAppId);
       _metaReady = true;
     } catch (_) {
       // Meta tracking is best-effort and must never block app startup.
+    }
+  }
+
+  /// Asks for App Tracking Transparency and, if the customer allows it, lets
+  /// Meta attach the device advertising identifier to the events it sends.
+  ///
+  /// Call once from the app shell after the first frame: iOS drops a prompt
+  /// requested before the app is on screen, and [AppTrackingService] then has
+  /// nothing to report. Off iOS this authorizes without prompting, which is
+  /// what re-enables Android's advertising ID.
+  static Future<void> resolveTrackingAuthorization() async {
+    if (!_shouldCollect) return;
+
+    final allowed = await AppTrackingService.ensureResolved();
+    if (!allowed) return;
+
+    try {
+      await _meta.setAdvertiserIdCollectionEnabled(true);
+    } catch (_) {
+      // Best-effort: events keep flowing without the identifier.
     }
   }
 

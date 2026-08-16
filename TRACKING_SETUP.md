@@ -226,9 +226,27 @@ login flow.
 - `/login`, `/dashboard`, `/admin`, and `/prep` load no GTM, Meta, GA, or
   Clarity scripts.
 
-The app does not currently request Apple's App Tracking Transparency
-permission. Native Meta events still run, but iOS advertising-ID attribution
-remains subject to the device's system permission.
+## App Tracking Transparency (iOS)
+
+The app asks for Apple's tracking permission once, after the first frame
+(`customer-app/lib/services/app_tracking_service.dart`, called from
+`AnalyticsService.resolveTrackingAuthorization`). iOS only ever shows the
+dialog once per install and answers from the stored decision afterwards.
+
+Until it is allowed, Meta's advertising-ID collection stays off — both
+statically (`FacebookAdvertiserIDCollectionEnabled` is `false` in
+`Info.plist`) and at runtime — because the IDFA reads back as zeros anyway.
+Events still flow from the first launch; they simply carry no identifier.
+Allowing the prompt turns collection on for the rest of the session and every
+session after it.
+
+Android has no such prompt: the plugin answers `notSupported` there and the
+advertising ID stays governed by the device's own ads setting, so nothing
+changes for Android attribution.
+
+Verify on a real device — the prompt does not appear on a simulator with
+tracking already restricted. Reset with **Settings → Privacy & Security →
+Tracking** (or reinstall) to see it again.
 
 ## Remaining deployment inputs
 

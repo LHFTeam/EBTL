@@ -105,6 +105,10 @@ dependencies:
   # tab left mounted in RootShell's IndexedStack, and it does not gate the
   # plain Timer the carousel runs on either.
   visibility_detector: ^0.4.0+2
+  # Apple's App Tracking Transparency prompt. iOS-only (a no-op elsewhere);
+  # until it is allowed the IDFA reads back as zeros and Meta App Events
+  # attribute to nothing — see lib/services/app_tracking_service.dart.
+  app_tracking_transparency: ^2.0.7
 
 dev_dependencies:
   flutter_test:

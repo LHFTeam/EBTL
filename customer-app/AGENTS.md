@@ -41,7 +41,9 @@ The app is a thin client over the **customer API** of a separate backend
   `home_hero_carousel.dart` about why its callback must not be a tear-off).
   Payments: `flutter_stripe` (native Payment Sheet).
   Analytics/telemetry: `clarity_flutter` (session replay), `firebase_core` +
-  `firebase_messaging` (push), `firebase_crashlytics` (crash/error reporting).
+  `firebase_messaging` (push), `firebase_crashlytics` (crash/error reporting),
+  `app_tracking_transparency` (Apple's iOS tracking prompt, which gates Meta's
+  advertising-ID collection — see `services/app_tracking_service.dart`).
   The Firebase and Clarity integrations are **inert unless configured at build
   time** (see the service classes below), so the app still builds and runs
   without any of their credentials. **Do not add further packages** (state
