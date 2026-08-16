@@ -3149,23 +3149,9 @@ textarea {
   border: 1px solid var(--kds-border);
   box-shadow: var(--kds-shadow-card);
   overflow: hidden;
-  cursor: pointer;
   text-align: start;
   animation: prepKdsTicketIn 220ms ease;
-  transition: transform 120ms ease, box-shadow 120ms ease;
-}
-
-.prepKdsTicket:hover {
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
-}
-
-.prepKdsTicket:active {
-  transform: scale(0.985);
-}
-
-.prepKdsTicket:focus-visible {
-  outline: 3px solid var(--kds-teal);
-  outline-offset: 2px;
+  transition: box-shadow 120ms ease;
 }
 
 .prepKdsTicket-saving {
@@ -3404,16 +3390,7 @@ textarea {
 }
 
 .prepKdsTicket-done {
-  cursor: default;
   opacity: 0.92;
-}
-
-.prepKdsTicket-done:hover {
-  box-shadow: var(--kds-shadow-card);
-}
-
-.prepKdsTicket-done:active {
-  transform: none;
 }
 
 /* ---- Stage banner (solid color, stage text centered) ---- */
@@ -3445,6 +3422,105 @@ textarea {
 .prepKdsTicketStage-completed {
   background: var(--kds-seafoam);
   color: var(--kds-teal);
+}
+
+/* ---- Swipe to advance ----
+   The ticket is no longer a giant button: a stage only changes when the handle
+   is dragged the length of its track. Sized for a gloved thumb on a tablet
+   clamped to the cart, and mirrored for Arabic — the slide always runs toward
+   the end of the reading direction, so "forward" survives the flip.
+   The handle's travel is set inline from the drag; everything else is here. */
+
+.prepKdsSwipe {
+  --prep-swipe-gutter: 5px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 62px;
+  padding: var(--prep-swipe-gutter);
+  overflow: hidden;
+  background: var(--kds-sand);
+  border-top: 1px solid var(--kds-border);
+  touch-action: pan-y;
+  user-select: none;
+}
+
+/* Fills in behind the handle as the slide progresses, so the track reads as a
+   commitment in flight rather than a decoration that happens to move. */
+.prepKdsSwipeFill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: calc(var(--prep-swipe-progress, 0) * 100%);
+  background: var(--prep-swipe-accent, var(--kds-teal));
+  opacity: 0.22;
+  pointer-events: none;
+}
+
+.prepKdsSwipeLabel {
+  flex: 1;
+  padding-inline: 12px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--prep-swipe-accent, var(--kds-teal));
+  /* Fades out as the handle covers the distance, so the last third of the
+     gesture is unambiguous. */
+  opacity: calc(1 - var(--prep-swipe-progress, 0) * 1.4);
+  pointer-events: none;
+}
+
+.prepKdsSwipeKnob {
+  position: absolute;
+  inset-inline-start: var(--prep-swipe-gutter);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 66px;
+  height: 52px;
+  border: 0;
+  border-radius: 13px;
+  cursor: grab;
+  color: var(--kds-white);
+  background: var(--prep-swipe-accent, var(--kds-teal));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  touch-action: none;
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.prepKdsSwipe-dragging .prepKdsSwipeKnob {
+  cursor: grabbing;
+  /* The handle must track the finger exactly; easing here would lag it. */
+  transition: none;
+}
+
+.prepKdsSwipeKnob:focus-visible {
+  outline: 3px solid var(--kds-navy);
+  outline-offset: 2px;
+}
+
+.prepKdsSwipe-locked {
+  opacity: 0.6;
+}
+
+.prepKdsSwipe-locked .prepKdsSwipeKnob {
+  cursor: default;
+}
+
+/* One accent per destination, matching the stage banner the slide leads to. */
+.prepKdsSwipe-preparing {
+  --prep-swipe-accent: #9a7420;
+}
+
+.prepKdsSwipe-ready,
+.prepKdsSwipe-completed {
+  --prep-swipe-accent: var(--kds-teal);
+}
+
+.prepKdsSwipe-scan {
+  --prep-swipe-accent: var(--kds-navy);
 }
 
 /* ---- Toast ---- */
@@ -3669,6 +3745,9 @@ textarea {
   position: absolute;
   inset: 0;
   border: 0;
+  /* It is a button so it can be clicked and labelled, which means it inherits
+     the global pill radius and dims the board through a giant rounded window. */
+  border-radius: 0;
   padding: 0;
   cursor: pointer;
   background: rgba(14, 34, 56, 0.5);
@@ -3922,6 +4001,263 @@ textarea {
   color: var(--kds-ink);
 }
 
+/* ---- Pickup handoff sheet ----
+   Shares the recipe drawer's geometry and head, so the two overlays on this
+   screen open the same way. The preview is the part that differs: a customer
+   holds their phone out at arm's length, and a letterbox strip makes that
+   harder to line up than it needs to be. */
+
+.prepKdsPickup {
+  position: relative;
+  z-index: 1;
+  width: min(520px, 100%);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px;
+  overflow-y: auto;
+  background: var(--kds-cream);
+  color: var(--kds-ink);
+  box-shadow: -18px 0 44px rgba(0, 0, 0, 0.25);
+  animation: prepKdsRecipeIn 200ms ease;
+}
+
+.prepKdsRoot[dir="rtl"] .prepKdsPickup {
+  box-shadow: 18px 0 44px rgba(0, 0, 0, 0.25);
+  animation-name: prepKdsRecipeInRtl;
+}
+
+.prepKdsPickupProblem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #fdece8;
+  color: #9e2e28;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.prepKdsPickupProblem svg {
+  flex: 0 0 auto;
+}
+
+.prepKdsPickupCamera {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--kds-navy);
+}
+
+.prepKdsPickupCamera video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.prepKdsPickupReticle {
+  position: absolute;
+  width: 58%;
+  aspect-ratio: 1;
+  border: 3px solid rgba(255, 255, 255, 0.85);
+  border-radius: 20px;
+  box-shadow: 0 0 0 2000px rgba(14, 34, 56, 0.35);
+}
+
+.prepKdsPickupCameraOff {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: var(--kds-cream);
+}
+
+.prepKdsPickupCameraOff strong {
+  font-family: var(--font-display);
+  font-size: 19px;
+}
+
+.prepKdsPickupCameraOff span {
+  max-width: 320px;
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+
+.prepKdsPickupBusy {
+  position: absolute;
+  inset-block-end: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(14, 34, 56, 0.82);
+  color: var(--kds-cream);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.prepKdsPickupSwitch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 56px;
+  padding: 0 18px;
+  border-radius: 14px;
+  cursor: pointer;
+  border: 1px solid var(--kds-border);
+  background: var(--kds-white);
+  color: var(--kds-navy);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.prepKdsPickupSwitch:hover {
+  border-color: var(--kds-teal);
+  color: var(--kds-teal);
+}
+
+.prepKdsPickupHint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--kds-muted);
+}
+
+.prepKdsPickupForm,
+.prepKdsPickupReview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.prepKdsPickupForm label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--kds-muted);
+}
+
+.prepKdsPickupForm input {
+  min-height: 56px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid var(--kds-border);
+  background: var(--kds-white);
+  color: var(--kds-ink);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.prepKdsPickupForm input:focus-visible {
+  outline: 3px solid var(--kds-teal);
+  outline-offset: 1px;
+}
+
+.prepKdsPickupDigits {
+  font-size: 30px;
+  letter-spacing: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.prepKdsPickupActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.prepKdsPickupActions button {
+  flex: 1 1 160px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 58px;
+  padding: 0 16px;
+  border-radius: 14px;
+  cursor: pointer;
+  border: 1px solid var(--kds-border);
+  background: var(--kds-white);
+  color: var(--kds-navy);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.prepKdsPickupPrimary {
+  border-color: var(--kds-teal);
+  background: var(--kds-teal);
+  color: var(--kds-cream);
+}
+
+.prepKdsPickupActions button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.prepKdsPickupReviewHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--kds-white);
+  border: 1px solid var(--kds-border);
+}
+
+.prepKdsPickupReviewHead div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.prepKdsPickupReviewHead strong {
+  font-family: var(--font-display);
+  font-size: 25px;
+  color: var(--kds-navy);
+}
+
+.prepKdsPickupReviewHead span {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--kds-muted);
+}
+
+.prepKdsPickupMethod {
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--kds-seafoam);
+  color: var(--kds-teal);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.prepKdsPickupItems {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 16px;
+  background: var(--kds-white);
+  border: 1px solid var(--kds-border);
+}
+
 /* ---- Language toggle + Arabic (RTL) ---- */
 
 .prepKdsLangToggle {
@@ -4042,7 +4378,8 @@ textarea {
     display: none;
   }
 
-  .prepKdsRecipe {
+  .prepKdsRecipe,
+  .prepKdsPickup {
     width: 100%;
   }
 }
@@ -4050,12 +4387,15 @@ textarea {
 @media (prefers-reduced-motion: reduce) {
   .prepKdsTicket,
   .prepKdsTicket-new,
-  .prepKdsRecipe {
+  .prepKdsRecipe,
+  .prepKdsPickup {
     animation: none;
   }
 
-  .prepKdsTicket:active {
-    transform: none;
+  /* The handle still has to follow the finger; only its spring back is eased,
+     and that is what is dropped here. */
+  .prepKdsSwipeKnob {
+    transition: none;
   }
 }
 

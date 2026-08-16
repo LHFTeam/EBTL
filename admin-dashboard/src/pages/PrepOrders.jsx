@@ -3,17 +3,23 @@ import {
   AlertTriangle,
   Check,
   ChefHat,
+  ChevronsLeft,
+  ChevronsRight,
   Clock3,
   LogOut,
   MapPin,
   Power,
   RefreshCw,
+  ScanLine,
   Truck,
   Wifi,
   WifiOff,
   X
 } from 'lucide-react';
 import { api } from '../api/client.js';
+import PrepPickupSheet from '../components/PrepPickupSheet.jsx';
+import SwipeToAdvance from '../components/SwipeToAdvance.jsx';
+import { useModalFocusTrap } from '../components/modalFocus.js';
 import { connectPrepOrderSocket } from '../realtime/prepOrderSocket.js';
 import {
   KdsLangContext,
@@ -216,6 +222,14 @@ function nextStatusFor(status) {
   return null;
 }
 
+// A cart pickup is released by the customer's code, never by a control on this
+// screen — `PATCH /cart-operations/orders/:id/status` refuses `completed` for
+// one. So the last slide on a pickup ticket opens the scanner instead of
+// sending a status change; a delivery order still completes straight from here.
+function needsPickupScan(order) {
+  return order.status === 'ready' && order.fulfillment_type === 'pickup_at_cart';
+}
+
 function fulfillmentLabel(order, lang) {
   if (order.fulfillment_type === 'delivery_to_unit') {
     return order.customer_address_snapshot
@@ -263,10 +277,7 @@ function TicketItem({ order, item, onOpenRecipe }) {
       <button
         className="prepKdsTicketRecipe"
         type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onOpenRecipe(order, item);
-        }}
+        onClick={() => onOpenRecipe(order, item)}
       >
         {t('button.recipe', lang)}
       </button>
@@ -274,29 +285,24 @@ function TicketItem({ order, item, onOpenRecipe }) {
   );
 }
 
-function PrepTicket({ order, now, saving, highlighted, onAdvance, onOpenRecipe }) {
+function PrepTicket({ order, now, saving, highlighted, onAdvance, onScan, onOpenRecipe }) {
   const lang = useKdsLang();
+  const dir = lang === 'ar' ? 'rtl' : 'ltr';
   const urgency = urgencyFor(order, now);
   const allergens = orderAllergens(order);
   const nextStatus = nextStatusFor(order.status);
+  const scans = needsPickupScan(order);
   const FulfillmentIcon = order.fulfillment_type === 'delivery_to_unit' ? Truck : MapPin;
   const code = orderNumber(order, lang);
   const stage = stageLabel(order.status, lang);
+  const action = scans ? 'scan' : nextStatus;
+  const SwipeIcon = scans ? ScanLine : (dir === 'rtl' ? ChevronsLeft : ChevronsRight);
 
   return (
     <article
       className={`prepKdsTicket prepKdsTicket-${urgency} prepKdsTicket-${order.status} ${highlighted ? 'prepKdsTicket-new' : ''} ${saving ? 'prepKdsTicket-saving' : ''}`}
-      role="button"
-      tabIndex={0}
-      aria-label={t('ticket.ariaAdvance', lang, { order: code, stage })}
+      aria-label={`${code} - ${stage}`}
       aria-busy={saving}
-      onClick={() => nextStatus && onAdvance(order, nextStatus)}
-      onKeyDown={(event) => {
-        if ((event.key === 'Enter' || event.key === ' ') && nextStatus) {
-          event.preventDefault();
-          onAdvance(order, nextStatus);
-        }
-      }}
     >
       <div className={`prepKdsTicketHead prepKdsTicketHead-${urgency}`}>
         <span className="prepKdsTicketCode">{code}</span>
@@ -337,6 +343,21 @@ function PrepTicket({ order, now, saving, highlighted, onAdvance, onOpenRecipe }
       <div className={`prepKdsTicketStage prepKdsTicketStage-${order.status}`}>
         {stage}
       </div>
+
+      {action && (
+        <SwipeToAdvance
+          label={t(`swipe.${action}`, lang)}
+          ariaLabel={t('ticket.ariaAdvance', lang, {
+            order: code,
+            stage,
+            action: t(`swipe.action.${action}`, lang)
+          })}
+          icon={SwipeIcon}
+          tone={action}
+          busy={saving}
+          onConfirm={() => (scans ? onScan(order) : onAdvance(order, nextStatus))}
+        />
+      )}
     </article>
   );
 }
@@ -374,71 +395,11 @@ function PrepRecipeOverlay({ payload, now, onClose }) {
   const dialogRef = useRef(null);
   const lang = useKdsLang();
 
-  useEffect(() => {
-    if (!payload) return undefined;
-
-    const previouslyFocused = document.activeElement;
-    const dialog = dialogRef.current;
-    const overlay = dialog?.parentElement;
-    const root = overlay?.parentElement;
-    const backgroundElements = root
-      ? [...root.children].filter((element) => element !== overlay)
-      : [];
-
-    for (const element of backgroundElements) {
-      element.inert = true;
-    }
-
-    const focusableSelector = [
-      'button:not([disabled])',
-      '[href]',
-      'input:not([disabled])',
-      'select:not([disabled])',
-      'textarea:not([disabled])',
-      '[tabindex]:not([tabindex="-1"])'
-    ].join(',');
-
-    dialog?.querySelector(focusableSelector)?.focus();
-
-    function onKeyDown(event) {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-
-      if (event.key !== 'Tab' || !dialog) return;
-
-      const focusable = [...dialog.querySelectorAll(focusableSelector)]
-        .filter((element) => !element.disabled && element.getAttribute('aria-hidden') !== 'true');
-      if (!focusable.length) {
-        event.preventDefault();
-        dialog.focus();
-        return;
-      }
-
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      for (const element of backgroundElements) {
-        element.inert = false;
-      }
-      if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected) {
-        previouslyFocused.focus();
-      }
-    };
-  }, [payload?.order?.id, payload?.item?.id, onClose]);
+  useModalFocusTrap(dialogRef, {
+    active: Boolean(payload),
+    onClose,
+    focusKey: `${payload?.order?.id || ''}:${payload?.item?.id || ''}`
+  });
 
   if (!payload) return null;
 
@@ -586,6 +547,7 @@ export default function PrepOrders({ user, onLogout }) {
   const [savingOrderIds, setSavingOrderIds] = useState(new Set());
   const [highlightedOrderIds, setHighlightedOrderIds] = useState(new Set());
   const [recipePayload, setRecipePayload] = useState(null);
+  const [scanningOrder, setScanningOrder] = useState(null);
   const [toast, setToast] = useState(null);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -883,6 +845,23 @@ export default function PrepOrders({ user, onLogout }) {
     return counts;
   }, [orders]);
 
+  function dropCompletedOrder(orderId) {
+    setOrders((current) => current.filter((entry) => entry.id !== orderId));
+    knownOrderIdsRef.current.delete(orderId);
+    loadCompleted();
+  }
+
+  function handleHandedOver({ order_id, order_number, logged }) {
+    const code = order_number || orderNumber(scanningOrder || {}, langRef.current);
+    setScanningOrder(null);
+    dropCompletedOrder(order_id);
+    setToast({
+      type: logged ? 'success' : 'error',
+      message: t(logged ? 'pickup.handedOver' : 'pickup.handedOverUnlogged', langRef.current, { order: code })
+    });
+    scheduleCanonicalRefresh(0);
+  }
+
   async function advanceOrder(order, status) {
     if (savingOrderIds.has(order.id)) return;
 
@@ -900,9 +879,7 @@ export default function PrepOrders({ user, onLogout }) {
       const code = orderNumber(order, langRef.current);
 
       if (status === 'completed') {
-        setOrders((current) => current.filter((entry) => entry.id !== order.id));
-        knownOrderIdsRef.current.delete(order.id);
-        loadCompleted();
+        dropCompletedOrder(order.id);
         setToast({ type: 'success', message: t('toast.completed', langRef.current, { order: code }) });
       } else {
         setOrders((current) => current.map((entry) => (
@@ -919,6 +896,14 @@ export default function PrepOrders({ user, onLogout }) {
       setLoadError('');
     } catch (error) {
       if (!mountedRef.current) return;
+
+      // The board thought this was a delivery and the server knows better —
+      // the order is collected by code. Open the scanner instead of leaving a
+      // ticket that refuses to move.
+      if (error.data?.code === 'scan_required') {
+        setScanningOrder(order);
+        return;
+      }
 
       const conflict = /already|cannot move|conflict/i.test(error.message || '');
       setToast({
@@ -1090,6 +1075,7 @@ export default function PrepOrders({ user, onLogout }) {
                     saving={savingOrderIds.has(order.id)}
                     highlighted={highlightedOrderIds.has(order.id)}
                     onAdvance={advanceOrder}
+                    onScan={setScanningOrder}
                     onOpenRecipe={openRecipe}
                   />
                 ))}
@@ -1132,6 +1118,15 @@ export default function PrepOrders({ user, onLogout }) {
         </nav>
 
         <PrepRecipeOverlay payload={recipePayload} now={now} onClose={closeRecipe} />
+
+        {scanningOrder && (
+          <PrepPickupSheet
+            order={scanningOrder}
+            lang={lang}
+            onClose={() => setScanningOrder(null)}
+            onHandedOver={handleHandedOver}
+          />
+        )}
       </div>
     </KdsLangContext.Provider>
   );

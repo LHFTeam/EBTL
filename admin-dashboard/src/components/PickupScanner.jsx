@@ -1,18 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { AlertTriangle, Camera, CameraOff, Check, Keyboard, PackageCheck, RefreshCw, ShieldAlert, X } from 'lucide-react';
-import jsQR from 'jsqr';
 import { api } from '../api/client.js';
+import { useQrScanner } from './qrScanner.js';
 
 // The handoff sheet: scan the customer's code, check the bag against what comes
-// back, release the order.
-//
-// Two decoders, because the carts run a mixed fleet. Chrome on Android has
-// BarcodeDetector built in and does the work off the main thread; Safari has
-// no such thing, so jsQR reads frames off a canvas instead. Everything after
-// the decode is identical, and both fall through to typing the code by hand
-// when the camera is refused, missing, or simply beaten by the sun.
-
-const FRAME_INTERVAL_MS = 200;
+// back, release the order. The camera and the two decoders live in
+// `qrScanner.js`, shared with the kitchen display's own handoff sheet.
 
 const OVERRIDE_REASONS = [
   { value: 'dead_phone', label: 'Phone is dead or lost' },
@@ -22,27 +15,14 @@ const OVERRIDE_REASONS = [
   { value: 'other', label: 'Something else' }
 ];
 
-async function createDetector() {
-  if (typeof window === 'undefined' || !('BarcodeDetector' in window)) return null;
-
-  try {
-    const formats = await window.BarcodeDetector.getSupportedFormats();
-    if (!formats.includes('qr_code')) return null;
-    return new window.BarcodeDetector({ formats: ['qr_code'] });
-  } catch {
-    return null;
-  }
-}
-
-function cameraProblem(error) {
-  if (error?.name === 'NotAllowedError') return 'Camera access was blocked. Allow it in the browser, or enter the code by hand.';
-  if (error?.name === 'NotFoundError') return 'No camera on this device. Enter the code by hand.';
-  return 'Could not start the camera. Enter the code by hand.';
-}
+const CAMERA_MESSAGES = {
+  blocked: 'Camera access was blocked. Allow it in the browser, or enter the code by hand.',
+  missing: 'No camera on this device. Enter the code by hand.',
+  failed: 'Could not start the camera. Enter the code by hand.'
+};
 
 export default function PickupScanner({ order, onClose, onHandedOver }) {
   const [mode, setMode] = useState('scan');
-  const [cameraError, setCameraError] = useState('');
   const [problem, setProblem] = useState(null);
   const [reviewing, setReviewing] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -51,16 +31,10 @@ export default function PickupScanner({ order, onClose, onHandedOver }) {
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const streamRef = useRef(null);
-  // Set the moment a code is accepted, so the frame loop stops reading the same
-  // code forty more times while the request is in flight.
-  const claimedRef = useRef(false);
 
-  const stopCamera = useCallback(() => {
-    for (const track of streamRef.current?.getTracks() || []) track.stop();
-    streamRef.current = null;
-  }, []);
-
+  // Answers `false` when the code did not stick, which is what tells the frame
+  // loop to keep looking. Leaving `review` is what stops the camera: the sheet
+  // is no longer scanning, so the preview has nothing to do but run hot.
   const verify = useCallback(async (presented) => {
     setBusy(true);
     setProblem(null);
@@ -72,99 +46,25 @@ export default function PickupScanner({ order, onClose, onHandedOver }) {
       });
       setReviewing({ presented, order: result.order, method: result.method });
       setMode('review');
-      stopCamera();
+      return true;
     } catch (error) {
       setProblem({
         code: error.data?.code || 'failed',
         message: error.message || 'Could not check that code.'
       });
-      claimedRef.current = false;
+      return false;
     } finally {
       setBusy(false);
     }
-  }, [stopCamera]);
+  }, []);
 
-  // The camera runs only while scanning. Leaving it live behind the review
-  // panel would keep the torch-hot preview going through every handoff.
-  useEffect(() => {
-    if (mode !== 'scan') return undefined;
-
-    let cancelled = false;
-    let timer = null;
-    claimedRef.current = false;
-
-    (async () => {
-      let stream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } },
-          audio: false
-        });
-      } catch (error) {
-        if (!cancelled) setCameraError(cameraProblem(error));
-        return;
-      }
-
-      if (cancelled) {
-        for (const track of stream.getTracks()) track.stop();
-        return;
-      }
-
-      streamRef.current = stream;
-      setCameraError('');
-
-      const video = videoRef.current;
-      if (!video) return;
-      video.srcObject = stream;
-      try {
-        await video.play();
-      } catch {
-        // Autoplay refusal leaves a paused preview; the manual path still works.
-      }
-
-      const detector = await createDetector();
-
-      const read = async () => {
-        if (cancelled || claimedRef.current) return;
-        if (!video.videoWidth) return;
-
-        let token = null;
-
-        if (detector) {
-          try {
-            const [found] = await detector.detect(video);
-            token = found?.rawValue || null;
-          } catch {
-            token = null;
-          }
-        } else {
-          const canvas = canvasRef.current;
-          if (!canvas) return;
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          const context = canvas.getContext('2d', { willReadFrequently: true });
-          context.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const frame = context.getImageData(0, 0, canvas.width, canvas.height);
-          token = jsQR(frame.data, frame.width, frame.height, { inversionAttempts: 'dontInvert' })?.data || null;
-        }
-
-        if (token && !claimedRef.current) {
-          claimedRef.current = true;
-          await verify({ token });
-        }
-      };
-
-      timer = window.setInterval(read, FRAME_INTERVAL_MS);
-    })();
-
-    return () => {
-      cancelled = true;
-      if (timer) window.clearInterval(timer);
-      stopCamera();
-    };
-  }, [mode, stopCamera, verify]);
-
-  useEffect(() => stopCamera, [stopCamera]);
+  const { cameraError } = useQrScanner({
+    active: mode === 'scan',
+    videoRef,
+    canvasRef,
+    messages: CAMERA_MESSAGES,
+    onToken: (token) => verify({ token })
+  });
 
   async function confirmHandover() {
     if (!reviewing) return;
@@ -192,7 +92,6 @@ export default function PickupScanner({ order, onClose, onHandedOver }) {
 
   async function submitManual(event) {
     event.preventDefault();
-    claimedRef.current = true;
     await verify({
       order_number: manual.order_number.trim(),
       short_code: manual.short_code.trim()
