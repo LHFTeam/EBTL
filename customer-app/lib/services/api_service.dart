@@ -604,7 +604,7 @@ class ApiService {
   /// token on the way through — a customer signing in on a new device is moved
   /// onto their existing customer row by that swap, and the anonymous row this
   /// install started with is left behind.
-  static Future<CustomerProfile> signInWithSocialProvider({
+  static Future<SocialSignInResult> signInWithSocialProvider({
     required String provider,
     required String token,
     required String tokenKind,
@@ -627,7 +627,7 @@ class ApiService {
       attachToken: true,
     );
 
-    return CustomerProfile.fromJson(asMap(json['customer']));
+    return SocialSignInResult.fromJson(json);
   }
 
   static Future<ReferralHub> fetchReferralHub() async {

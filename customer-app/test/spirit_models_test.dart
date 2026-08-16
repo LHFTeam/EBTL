@@ -157,4 +157,37 @@ void main() {
       expect(profile.spirits.topSpirits.isEmpty, isTrue);
     });
   });
+
+  group('SocialSignInResult.fromJson', () {
+    // The flag decides whether the app reports an acquisition (sign_up /
+    // CompleteRegistration) or a returning sign-in, and the profile it comes
+    // with looks identical either way — so the parsing is the only thing
+    // keeping the two apart.
+    test('a first account is reported as new', () {
+      final result = SocialSignInResult.fromJson(const {
+        'customer': {'id': 'cus_1', 'full_name': 'Beach Guest'},
+        'is_new_customer': true,
+      });
+
+      expect(result.isNewCustomer, isTrue);
+      expect(result.profile.fullName, 'Beach Guest');
+    });
+
+    test('a returning sign-in is not', () {
+      final result = SocialSignInResult.fromJson(const {
+        'customer': {'id': 'cus_1'},
+        'is_new_customer': false,
+      });
+
+      expect(result.isNewCustomer, isFalse);
+    });
+
+    test('a backend that omits the flag under-reports rather than over-reports', () {
+      final result = SocialSignInResult.fromJson(const {
+        'customer': {'id': 'cus_1'},
+      });
+
+      expect(result.isNewCustomer, isFalse);
+    });
+  });
 }

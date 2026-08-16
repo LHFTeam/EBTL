@@ -211,10 +211,14 @@ class AnalyticsService {
     );
   }
 
-  /// A customer attached a social identity to their account.
+  /// A returning customer signed in again.
   ///
   /// [method] is the provider name (`facebook`, `google`, `apple`). No customer
   /// or provider identifier is sent — analytics here stays pseudonymous.
+  ///
+  /// Pair with [logSignUp], which is the event for the *first* time somebody has
+  /// an account. Only the backend can tell the two apart; see
+  /// `SocialSignInResult.isNewCustomer`.
   static void logLogin({required String method}) {
     final cleanMethod = method.trim();
     if (cleanMethod.isEmpty) return;
@@ -226,6 +230,22 @@ class AnalyticsService {
         name: 'login',
         parameters: {'method': cleanMethod},
       ),
+    );
+  }
+
+  /// A customer has an EBTL account for the first time.
+  ///
+  /// This is the acquisition conversion: Meta's CompleteRegistration is what a
+  /// Facebook campaign optimising for new customers bids against, so logging a
+  /// registration as a plain sign-in makes those campaigns blind.
+  static void logSignUp({required String method}) {
+    final cleanMethod = method.trim();
+    if (cleanMethod.isEmpty) return;
+
+    ClarityService.recordEvent('sign_up');
+    _sendFirebase((analytics) => analytics.logSignUp(signUpMethod: cleanMethod));
+    _sendMeta(
+      (events) => events.logCompletedRegistration(registrationMethod: cleanMethod),
     );
   }
 

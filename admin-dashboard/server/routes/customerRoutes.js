@@ -2007,20 +2007,29 @@ async function findCustomerFromRequest(req) {
 // it and the anonymous row this install started with is simply left behind.
 // That is the intended trade at the point this is called — the confirmation
 // screen, where the cart is already converted and nothing is in flight.
-async function linkSocialIdentity({ identity, currentCustomer, fullName }) {
+//
+// Returns `{ customer, isNewCustomer }`. `isNewCustomer` answers "is this the
+// first time this person has had an EBTL account", which is the question
+// analytics and ad attribution are asking — so only a provider-ID match counts
+// as a returning customer. Somebody matched on email has ordered here before but
+// has never had an account until now, and that is a registration.
+//
+// `db` exists only so the branch logic can be tested without a database; the
+// route never passes it.
+export async function linkSocialIdentity({ identity, currentCustomer, fullName, db = supabase }) {
   const column = `${identity.provider}_user_id`;
 
-  const byProvider = await supabase
+  const byProvider = await db
     .from('customers')
     .select('*')
     .eq(column, identity.providerUserId)
     .maybeSingle();
 
   if (byProvider.error) throw byProvider.error;
-  if (byProvider.data) return byProvider.data;
+  if (byProvider.data) return { customer: byProvider.data, isNewCustomer: false };
 
   if (identity.email) {
-    const byEmail = await supabase
+    const byEmail = await db
       .from('customers')
       .select('*')
       .eq('email', identity.email)
@@ -2029,7 +2038,7 @@ async function linkSocialIdentity({ identity, currentCustomer, fullName }) {
     if (byEmail.error) throw byEmail.error;
 
     if (byEmail.data) {
-      const stamped = await supabase
+      const stamped = await db
         .from('customers')
         .update({ [column]: identity.providerUserId })
         .eq('id', byEmail.data.id)
@@ -2037,7 +2046,7 @@ async function linkSocialIdentity({ identity, currentCustomer, fullName }) {
         .single();
 
       if (stamped.error) throw stamped.error;
-      return stamped.data;
+      return { customer: stamped.data, isNewCustomer: true };
     }
   }
 
@@ -2050,7 +2059,7 @@ async function linkSocialIdentity({ identity, currentCustomer, fullName }) {
   if (!currentCustomer.full_name && resolvedName) patch.full_name = resolvedName;
   if (!currentCustomer.email && identity.email) patch.email = identity.email;
 
-  const linked = await supabase
+  const linked = await db
     .from('customers')
     .update(patch)
     .eq('id', currentCustomer.id)
@@ -2058,7 +2067,7 @@ async function linkSocialIdentity({ identity, currentCustomer, fullName }) {
     .single();
 
   if (linked.error) throw linked.error;
-  return linked.data;
+  return { customer: linked.data, isNewCustomer: true };
 }
 
 async function ensureCustomer(req, res) {
@@ -3707,10 +3716,10 @@ customerRouter.post('/customer/auth/social', async (req, res) => {
   const ensured = await ensureCustomer(req, res);
   if (!ensured) return;
 
-  let customer;
+  let linked;
 
   try {
-    customer = await linkSocialIdentity({
+    linked = await linkSocialIdentity({
       identity,
       currentCustomer: ensured.customer,
       fullName: parsed.data.full_name
@@ -3734,9 +3743,14 @@ customerRouter.post('/customer/auth/social', async (req, res) => {
     return res.status(400).json({ error: 'Could not complete sign-in. Please try again.' });
   }
 
+  const { customer, isNewCustomer } = linked;
+
   res.json({
     session: sessionPayload(customer.id, setCustomerToken(res, customer.id)),
-    customer: customerProfilePayload(customer)
+    customer: customerProfilePayload(customer),
+    // Lets the app log a registration rather than a sign-in. It cannot work
+    // this out for itself — every branch above returns an identical customer.
+    is_new_customer: isNewCustomer
   });
 });
 

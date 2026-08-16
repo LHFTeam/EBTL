@@ -112,7 +112,7 @@ class SocialAuthService {
       SocialProvider.apple => await _appleCredential(hashedNonce),
     };
 
-    final profile = await ApiService.signInWithSocialProvider(
+    final result = await ApiService.signInWithSocialProvider(
       provider: provider.wireName,
       token: credential.token,
       tokenKind: credential.tokenKind,
@@ -120,9 +120,15 @@ class SocialAuthService {
       fullName: credential.fullName,
     );
 
-    AnalyticsService.logLogin(method: provider.wireName);
+    // A first account and a returning sign-in are different events, and only
+    // the backend can tell which this was.
+    if (result.isNewCustomer) {
+      AnalyticsService.logSignUp(method: provider.wireName);
+    } else {
+      AnalyticsService.logLogin(method: provider.wireName);
+    }
 
-    return profile;
+    return result.profile;
   }
 
   static Future<_SocialCredential> _facebookCredential(
