@@ -42,6 +42,7 @@ import 'services/analytics_service.dart';
 import 'services/clarity_service.dart';
 import 'services/crash_reporting_service.dart';
 import 'services/push_notification_service.dart';
+import 'services/location_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -526,6 +527,17 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   /// device — see [_maybeShowGoldenHour].
   bool _goldenHourHandled = false;
 
+  /// Distances from the last device fix, keyed by beach-cart id.
+  Map<String, double> beachCartDistances = const {};
+
+  /// Whether GPS has had its one chance to name the beach cart this launch.
+  bool _autoLocationHandled = false;
+
+  /// A location switch that landed while app data was already loading. The
+  /// active request cannot include the new cart, so exactly one full reload is
+  /// queued for its `finally` block instead of polling the loading flag.
+  bool _locationReloadPending = false;
+
   /// Opens the Golden Hour card on the first load of a launch, if there is one
   /// to open, the customer already has a beach cart chosen, and this window's
   /// card has not been shown before.
@@ -612,6 +624,11 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         appDataError = null;
       });
 
+      if (!_autoLocationHandled) {
+        _autoLocationHandled = true;
+        unawaited(_resolveNearestBeachCart(data));
+      }
+
       // Awaited so the post-frame callback inside is registered before the
       // `finally` below schedules a frame — otherwise the card would wait on
       // whatever happens to paint next.
@@ -626,6 +643,10 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
       });
     } finally {
       if (mounted) setState(() => isLoadingAppData = false);
+      if (mounted && _locationReloadPending) {
+        _locationReloadPending = false;
+        unawaited(loadAppData());
+      }
     }
   }
 
@@ -734,10 +755,58 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     setState(() => searchQuery = query);
   }
 
-  Future<void> selectLocation(ServiceLocation location) async {
+  Future<void> _resolveNearestBeachCart(AppData data) async {
+    final position = await LocationService.currentPosition();
+    if (position == null || !mounted) return;
+
+    final distances = LocationService.distancesById(
+      data.serviceAreas,
+      position.latitude,
+      position.longitude,
+    );
+    setState(() => beachCartDistances = distances);
+
+    final nearest = LocationService.nearestWithin(data.serviceAreas, distances);
+    if (nearest == null || nearest.id == data.selectedLocationId) return;
+    await selectLocation(nearest, automatic: true);
+  }
+
+  Future<Map<String, double>> refreshBeachCartDistances() async {
+    final position = await LocationService.refreshPosition();
+    final data = appData;
+    if (position == null || data == null || !mounted) return const {};
+
+    final distances = LocationService.distancesById(
+      data.serviceAreas,
+      position.latitude,
+      position.longitude,
+    );
+    setState(() => beachCartDistances = distances);
+    return distances;
+  }
+
+  Future<void> selectLocation(
+    ServiceLocation location, {
+    bool automatic = false,
+  }) async {
     await ApiService.saveSelectedLocation(location);
-    AnalyticsService.logLocationSelected(location.id);
-    reloadAppData();
+    AnalyticsService.logLocationSelected(
+      location.id,
+      method: automatic ? 'auto_nearest' : 'manual',
+    );
+    if (automatic && mounted) {
+      showAppToast(
+        context,
+        type: AppToastType.info,
+        title: 'Beach cart set to ${location.name}, closest to you.',
+      );
+    }
+
+    if (isLoadingAppData) {
+      _locationReloadPending = true;
+    } else if (mounted) {
+      await loadAppData();
+    }
   }
 
   Future<void> openCocktailDetail(
@@ -855,6 +924,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
             ),
         onOpenHeroBanner: (banner) => openHeroBanner(data, banner),
         onLocationSelected: selectLocation,
+        beachCartDistances: beachCartDistances,
+        onUseMyLocation: refreshBeachCartDistances,
         onCartChanged: handleCartChanged,
       ),
       ExploreScreen(

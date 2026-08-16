@@ -86,7 +86,7 @@ Firebase Analytics, Meta App Events, and Clarity share the provider-neutral
 | --- | --- |
 | `screen_view` | Customer bottom tabs and funnel screens |
 | `tutorial_complete` | Onboarding completion |
-| `select_location` | A beach-cart location is selected |
+| `select_location` | A beach-cart location is selected; `method` distinguishes `manual` from `auto_nearest` |
 | `view_item` | Cocktail or shop-product detail is viewed |
 | `search_submitted` | Cocktail Finder search is submitted; query text is not sent |
 | `add_to_wishlist` / `remove_from_wishlist` | Favorite status changes |

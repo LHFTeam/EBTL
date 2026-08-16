@@ -109,6 +109,9 @@ dependencies:
   # until it is allowed the IDFA reads back as zeros and Meta App Events
   # attribute to nothing — see lib/services/app_tracking_service.dart.
   app_tracking_transparency: ^2.0.7
+  # Foreground GPS permission + distance calculation used to select and sort
+  # the beach cart nearest to the customer.
+  geolocator: ^14.0.3
 
 dev_dependencies:
   flutter_test:

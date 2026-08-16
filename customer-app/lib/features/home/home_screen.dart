@@ -89,6 +89,8 @@ class HomeScreen extends StatefulWidget {
   /// Follows a hero banner's deep link. Only called for banners that carry one.
   final ValueChanged<HomeHeroBanner> onOpenHeroBanner;
   final ValueChanged<ServiceLocation> onLocationSelected;
+  final Map<String, double> beachCartDistances;
+  final Future<Map<String, double>> Function() onUseMyLocation;
   final CartChangedCallback onCartChanged;
 
   const HomeScreen({
@@ -111,6 +113,8 @@ class HomeScreen extends StatefulWidget {
     required this.onOpenCocktailBySlug,
     required this.onOpenHeroBanner,
     required this.onLocationSelected,
+    required this.beachCartDistances,
+    required this.onUseMyLocation,
     required this.onCartChanged,
   });
 
@@ -312,6 +316,8 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       serviceAreas: widget.data.serviceAreas,
       selectedLocationId: widget.data.selectedLocationId,
+      distanceMetersById: widget.beachCartDistances,
+      onUseMyLocation: widget.onUseMyLocation,
     );
 
     if (location == null) return;
