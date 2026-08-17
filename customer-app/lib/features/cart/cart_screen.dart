@@ -546,71 +546,80 @@ class CartFulfillmentToggle extends StatelessWidget {
           borderRadius: BorderRadius.circular(22),
           border: Border.all(color: EbtlColors.border),
         ),
-        child: Row(
-          children: options.map((option) {
-            final disabled = option.$1 == FulfillmentTypes.deliveryToUnit;
-            final selected = !disabled && fulfillmentType == option.$1;
-            final foregroundColor = disabled
-                ? EbtlColors.muted
-                : selected
-                ? Colors.white
-                : EbtlColors.navy;
+        // The delivery option is taller than pickup — it carries the "Coming
+        // soon" chip — so a centred row left the selected pill floating with
+        // more inset above and below it than the 5 the container pads with on
+        // the sides. Stretching both tiles to the row height keeps the pill's
+        // white space uniform all around.
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: options.map((option) {
+              final disabled = option.$1 == FulfillmentTypes.deliveryToUnit;
+              final selected = !disabled && fulfillmentType == option.$1;
+              final foregroundColor = disabled
+                  ? EbtlColors.muted
+                  : selected
+                  ? Colors.white
+                  : EbtlColors.navy;
 
-            return Expanded(
-              child: GestureDetector(
-                onTap: disabled ? null : () => onChanged(option.$1),
-                child: Opacity(
-                  opacity: disabled ? 0.52 : 1,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: selected ? EbtlColors.coral : Colors.transparent,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(option.$2, color: foregroundColor),
-                        const SizedBox(height: 5),
-                        Text(
-                          FulfillmentTypes.labelFor(option.$1),
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.manrope(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w900,
-                            color: foregroundColor,
-                          ),
-                        ),
-                        if (disabled) ...[
+              return Expanded(
+                child: GestureDetector(
+                  onTap: disabled ? null : () => onChanged(option.$1),
+                  child: Opacity(
+                    opacity: disabled ? 0.52 : 1,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: selected ? EbtlColors.coral : Colors.transparent,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(option.$2, color: foregroundColor),
                           const SizedBox(height: 5),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 9,
-                              vertical: 3,
+                          Text(
+                            FulfillmentTypes.labelFor(option.$1),
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.manrope(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w900,
+                              color: foregroundColor,
                             ),
-                            decoration: BoxDecoration(
-                              color: EbtlColors.gold.withValues(alpha: 0.28),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              'Coming soon',
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.manrope(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.3,
-                                color: EbtlColors.ink,
+                          ),
+                          if (disabled) ...[
+                            const SizedBox(height: 5),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: EbtlColors.gold.withValues(alpha: 0.28),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                'Coming soon',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.manrope(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.3,
+                                  color: EbtlColors.ink,
+                                ),
                               ),
                             ),
-                          ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            );
-          }).toList(),
+              );
+            }).toList(),
+          ),
         ),
       ),
     );
