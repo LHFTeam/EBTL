@@ -595,6 +595,13 @@ class ProfileQuickLinksSection extends StatelessWidget {
   /// subtitle the backend meant to show.
   static final RegExp _unreadSubtitlePattern = RegExp(r'^\d+ unread$');
 
+  /// Links that are built but not launched yet. Addresses only exist to manage
+  /// delivery addresses, and delivery is still behind "Coming soon" in the
+  /// cart, so the tile stays hidden. Filtering here — rather than dropping the
+  /// entry from [defaultProfileQuickLinks] — also hides the tile when the
+  /// backend payload sends it, and re-enabling it is a one-line change.
+  static const Set<String> _hiddenLinkKeys = {'addresses'};
+
   ProfileQuickLink _withLiveUnreadCount(ProfileQuickLink link) {
     if (link.key != 'notifications') return link;
 
@@ -619,8 +626,13 @@ class ProfileQuickLinksSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effectiveLinks = (links.isEmpty ? defaultProfileQuickLinks : links)
+        .where((link) => !_hiddenLinkKeys.contains(link.key))
         .map(_withLiveUnreadCount)
         .toList();
+
+    // Nothing left to link to once the hidden keys are filtered out — an empty
+    // bordered card under a "Quick Links" header would just read as a bug.
+    if (effectiveLinks.isEmpty) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(22, 0, 22, 18),
