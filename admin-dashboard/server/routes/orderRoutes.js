@@ -630,9 +630,14 @@ async function loadPickupOrder(orderId) {
 // right bag" panel, so it carries what an attendant reads off a phone in one
 // glance and none of the recipe detail the prep screens need.
 async function pickupOrderCard(order) {
+  // `serving_count` and `product_image_url` are not columns on `order_items` —
+  // they are derived from the joined variant and product, the same way
+  // `enrichOrderItem` does it for the operational feed. Asking for them as
+  // columns is a 42703 from Postgres, which reaches the attendant as an
+  // untranslatable `lookup_failed` in the middle of a handover.
   const items = await supabase
     .from('order_items')
-    .select('id,product_name_snapshot,variant_name_snapshot,quantity,serving_count,customization_summary,product_image_url')
+    .select('id,product_name_snapshot,variant_name_snapshot,quantity,customization_summary,products(image_url),product_variants(serving_count)')
     .eq('order_id', order.id)
     .order('created_at', { ascending: true });
 
@@ -659,9 +664,9 @@ async function pickupOrderCard(order) {
       product_name_snapshot: item.product_name_snapshot,
       variant_name_snapshot: item.variant_name_snapshot,
       quantity: item.quantity,
-      serving_count: item.serving_count,
+      serving_count: item.product_variants?.serving_count || 1,
       customization_summary: item.customization_summary,
-      product_image_url: item.product_image_url
+      product_image_url: item.products?.image_url || null
     }))
   };
 }
