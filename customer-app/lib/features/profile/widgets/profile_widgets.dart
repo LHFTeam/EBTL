@@ -572,15 +572,55 @@ class ProfileQuickLinksSection extends StatelessWidget {
   final List<ProfileQuickLink> links;
   final ValueChanged<ProfileQuickLink> onTapLink;
 
+  /// The shell's live unread count. The profile payload carries its own
+  /// `notifications` count, but it is only as fresh as the last profile fetch —
+  /// reading the notifications marks them read while this screen stays mounted,
+  /// which would leave a stale badge on the tile until a pull-to-refresh. The
+  /// live count is what the header badge already uses, so the two agree.
+  final int unreadNotificationCount;
+
   const ProfileQuickLinksSection({
     super.key,
     required this.links,
     required this.onTapLink,
+    this.unreadNotificationCount = 0,
   });
+
+  /// Server copy for the notifications tile when nothing is unread.
+  static const String _notificationsSubtitle =
+      'Order updates and pickup alerts';
+
+  /// The "3 unread" subtitle the backend sends alongside the count. Matching it
+  /// means the fallback copy only replaces a stale unread line, never a
+  /// subtitle the backend meant to show.
+  static final RegExp _unreadSubtitlePattern = RegExp(r'^\d+ unread$');
+
+  ProfileQuickLink _withLiveUnreadCount(ProfileQuickLink link) {
+    if (link.key != 'notifications') return link;
+
+    final stale = (link.subtitle ?? '').trim();
+    final subtitle = unreadNotificationCount > 0
+        ? '$unreadNotificationCount unread'
+        : (_unreadSubtitlePattern.hasMatch(stale)
+              ? _notificationsSubtitle
+              : link.subtitle);
+
+    return ProfileQuickLink(
+      key: link.key,
+      title: link.title,
+      subtitle: subtitle,
+      endpoint: link.endpoint,
+      enabled: link.enabled,
+      placeholder: link.placeholder,
+      count: unreadNotificationCount,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final effectiveLinks = links.isEmpty ? defaultProfileQuickLinks : links;
+    final effectiveLinks = (links.isEmpty ? defaultProfileQuickLinks : links)
+        .map(_withLiveUnreadCount)
+        .toList();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(22, 0, 22, 18),
