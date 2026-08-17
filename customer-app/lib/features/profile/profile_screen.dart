@@ -233,6 +233,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: ProfileQuickLinksSection(
                     links: profile.quickLinks,
                     onTapLink: openQuickLink,
+                    unreadNotificationCount: widget.unreadNotificationCount,
                   ),
                 ),
                 SliverToBoxAdapter(

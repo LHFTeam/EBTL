@@ -186,6 +186,10 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
 
   Timer? _notificationsTimer;
   int unreadNotificationCount = 0;
+
+  /// Bumped whenever the notifications screen reports an authoritative count,
+  /// so a background poll that started earlier cannot overwrite it.
+  int _unreadCountEpoch = 0;
   String? _latestUnreadNotificationId;
   bool _notificationsBaselineSeeded = false;
   bool _isPollingNotifications = false;
@@ -276,6 +280,7 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   Future<void> _pollNotifications({required bool canNotify}) async {
     if (_isPollingNotifications) return;
     _isPollingNotifications = true;
+    final epoch = _unreadCountEpoch;
 
     try {
       final response = await ApiService.fetchCustomerNotifications(
@@ -283,6 +288,11 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
         unreadOnly: true,
       );
       if (!mounted) return;
+
+      // A poll that left before the notifications screen marked everything
+      // read carries the pre-read count; applying it would put the badge back
+      // until the next poll. The screen's count is the newer truth, so drop it.
+      if (epoch != _unreadCountEpoch) return;
 
       final CustomerNotification? latest = response.notifications.isEmpty
           ? null
@@ -325,7 +335,13 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   }
 
   void _handleUnreadCountChanged(int count) {
-    if (!mounted || count == unreadNotificationCount) return;
+    if (!mounted) return;
+
+    // Bumped even when the count is unchanged: the notifications screen has
+    // just re-read the server, so any poll still in flight is stale.
+    _unreadCountEpoch++;
+
+    if (count == unreadNotificationCount) return;
     setState(() => unreadNotificationCount = count);
   }
 
