@@ -359,19 +359,25 @@ void showAppToast(
   final entry = OverlayEntry(
     builder: (_) => _AnimatedToast(
       key: key,
-      child: AppToastCard(
-        type: type,
-        title: title,
-        message: message,
-        actionText: actionText,
-        thumbnail: thumbnail,
-        onAction: onAction == null
-            ? null
-            : () {
-                onAction();
-                handle.remove();
-              },
-        onDismiss: () => handle.remove(),
+      // The overlay sits outside the app's Material tree, so without this the
+      // card's Text widgets inherit MaterialApp's error placeholder style and
+      // render with a yellow double underline.
+      child: Material(
+        type: MaterialType.transparency,
+        child: AppToastCard(
+          type: type,
+          title: title,
+          message: message,
+          actionText: actionText,
+          thumbnail: thumbnail,
+          onAction: onAction == null
+              ? null
+              : () {
+                  onAction();
+                  handle.remove();
+                },
+          onDismiss: () => handle.remove(),
+        ),
       ),
     ),
   );
