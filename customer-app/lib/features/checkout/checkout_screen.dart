@@ -1479,12 +1479,17 @@ class CheckoutSummaryCard extends StatelessWidget {
                   label: 'Subtotal',
                   value: summary.subtotalLabel,
                 ),
-                const SizedBox(height: 8),
-                CheckoutSummaryLine(
-                  label: 'Delivery fee',
-                  value: summary.deliveryFeeLabel,
-                  showInfo: true,
-                ),
+                // A pickup order is never charged one, so the line would only
+                // read as a zero the customer has to reason about. The cart
+                // summary already hides it the same way.
+                if (summary.deliveryFee > 0) ...[
+                  const SizedBox(height: 8),
+                  CheckoutSummaryLine(
+                    label: 'Delivery fee',
+                    value: summary.deliveryFeeLabel,
+                    showInfo: true,
+                  ),
+                ],
                 if (summary.discountAmount > 0) ...[
                   const SizedBox(height: 8),
                   CheckoutSummaryLine(

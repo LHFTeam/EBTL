@@ -21,6 +21,15 @@ const _links = [
     count: 2,
   ),
   ProfileQuickLink(
+    key: 'favorite_spirits',
+    title: 'My Spirits',
+    subtitle: 'The bottles you keep at hand',
+    endpoint: '/api/customer/spirits',
+    enabled: true,
+    placeholder: false,
+    count: 2,
+  ),
+  ProfileQuickLink(
     key: 'notifications',
     title: 'Notifications',
     subtitle: '3 unread',
@@ -90,7 +99,39 @@ void main() {
       );
 
       expect(find.text('2'), findsOneWidget);
-      expect(find.text('Manage your delivery addresses'), findsOneWidget);
+      expect(find.text('The bottles you keep at hand'), findsOneWidget);
+    });
+
+    // Delivery has not launched, so the addresses tile is hidden even when the
+    // backend keeps sending it.
+    testWidgets('hides the addresses link', (tester) async {
+      await tester.pumpWidget(
+        wrap(
+          ProfileQuickLinksSection(
+            links: _links,
+            onTapLink: (_) {},
+            unreadNotificationCount: 0,
+          ),
+        ),
+      );
+
+      expect(find.text('Addresses'), findsNothing);
+      expect(find.text('Manage your delivery addresses'), findsNothing);
+    });
+
+    testWidgets('hides the addresses link in the fallback list', (tester) async {
+      await tester.pumpWidget(
+        wrap(
+          ProfileQuickLinksSection(
+            links: const [],
+            onTapLink: (_) {},
+            unreadNotificationCount: 0,
+          ),
+        ),
+      );
+
+      expect(find.text('Addresses'), findsNothing);
+      expect(find.text('My Spirits'), findsOneWidget);
     });
 
     testWidgets('keeps a non-unread subtitle when nothing is unread', (
